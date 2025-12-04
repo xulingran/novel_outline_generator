@@ -1,0 +1,36 @@
+﻿# Python cache and virtualenvs
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+*.egg
+*.egg-info/
+.eggs/
+build/
+dist/
+*.log
+
+# Environments
+.env
+.env.*
+.venv/
+venv/
+
+# IDE/editor
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+
+# Project outputs
+outputs/
+
+# Node tooling (if any)
+node_modules/
+
+# Coverage / reports
+.coverage
+htmlcov/
+

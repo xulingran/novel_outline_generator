@@ -1,0 +1,18 @@
+# 核心依赖
+openai>=1.0.0
+tiktoken>=0.5.0
+httpx>=0.24.0
+python-dotenv>=1.0.0
+
+# Gemini API 支持（可选，仅在 API_PROVIDER="gemini" 时需要）
+google-generativeai>=0.3.0
+
+# 智谱清言API 支持（可选，仅在 API_PROVIDER="zhipu" 时需要）
+zhipuai>=2.0.0
+
+
+# Web API
+fastapi>=0.115.0
+uvicorn>=0.23.0
+python-multipart>=0.0.9
+

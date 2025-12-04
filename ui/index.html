@@ -1,0 +1,619 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Novel Outline Studio</title>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg1: #0c1027;
+      --bg2: #111b3a;
+      --glass: rgba(255, 255, 255, 0.08);
+      --glass-border: rgba(255, 255, 255, 0.15);
+      --accent: #66ffe2;
+      --accent-2: #7a5bff;
+      --accent-3: #ff7fd1;
+      --text: #e9ecf4;
+      --muted: #a9b1c7;
+      --shadow: 0 20px 60px rgba(0, 0, 0, 0.35);
+      --blur: blur(16px);
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: "Space Grotesk", "Segoe UI", sans-serif;
+      color: var(--text);
+      background: radial-gradient(circle at 20% 20%, #1b1f3a, #0b0e22 40%), linear-gradient(120deg, #0d132e, #0a0d20 60%);
+      overflow-y: auto;
+      overflow-x: hidden;
+    }
+    .bg-aurora {
+      position: fixed;
+      inset: 0;
+      background: radial-gradient(800px at 20% 20%, rgba(102,255,226,0.15), transparent 45%),
+                  radial-gradient(900px at 80% 10%, rgba(122,91,255,0.18), transparent 50%),
+                  radial-gradient(700px at 60% 80%, rgba(255,127,209,0.12), transparent 50%);
+      filter: blur(30px);
+      opacity: 0.7;
+      pointer-events: none;
+      animation: drift 18s ease-in-out infinite alternate;
+    }
+    @keyframes drift {
+      from { transform: translateY(0px) scale(1); }
+      to { transform: translateY(-20px) scale(1.02); }
+    }
+    .app {
+      position: relative;
+      padding: 36px 40px 48px;
+      max-width: 1280px;
+      margin: 0 auto;
+      z-index: 1;
+    }
+    .header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 20px;
+    }
+    .title {
+      font-size: 28px;
+      font-weight: 700;
+      letter-spacing: 0.02em;
+    }
+    .pill {
+      padding: 6px 14px;
+      border-radius: 999px;
+      background: linear-gradient(135deg, rgba(102,255,226,0.2), rgba(122,91,255,0.2));
+      border: 1px solid var(--glass-border);
+      color: var(--text);
+      font-size: 13px;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: 1.2fr 0.8fr;
+      gap: 18px;
+      align-items: start;
+    }
+    .card {
+      background: var(--glass);
+      border: 1px solid var(--glass-border);
+      border-radius: 16px;
+      padding: 18px 18px 16px;
+      box-shadow: var(--shadow);
+      backdrop-filter: var(--blur);
+      position: relative;
+      overflow: hidden;
+    }
+    .card::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(135deg, rgba(255,255,255,0.06), transparent);
+      pointer-events: none;
+    }
+    .card h3 {
+      margin: 0 0 12px;
+      font-size: 18px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      letter-spacing: 0.01em;
+    }
+    .muted { color: var(--muted); font-size: 13px; }
+
+    .upload {
+      border: 1px dashed var(--glass-border);
+      padding: 14px;
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      background: rgba(255,255,255,0.02);
+      transition: border-color 0.2s ease, background 0.2s ease;
+    }
+    .upload:hover {
+      border-color: var(--accent);
+      background: rgba(255,255,255,0.04);
+    }
+    .upload input { display: none; }
+    .btn {
+      padding: 10px 16px;
+      border-radius: 12px;
+      border: none;
+      color: #0c0f1f;
+      font-weight: 600;
+      cursor: pointer;
+      background: linear-gradient(135deg, var(--accent), var(--accent-3));
+      box-shadow: 0 8px 24px rgba(102,255,226,0.25);
+      transition: transform 0.12s ease, box-shadow 0.12s ease;
+    }
+    .btn:hover { transform: translateY(-1px); box-shadow: 0 12px 30px rgba(102,255,226,0.32); }
+    .btn:active { transform: translateY(0); }
+
+    .progress {
+      position: relative;
+      height: 10px;
+      border-radius: 999px;
+      background: rgba(255,255,255,0.08);
+      overflow: hidden;
+      margin: 8px 0 6px;
+    }
+    .progress .bar {
+      height: 100%;
+      border-radius: 999px;
+      background: linear-gradient(90deg, var(--accent), var(--accent-2), var(--accent-3));
+      width: 0%;
+      transition: width 0.35s ease;
+    }
+    .progress-meta {
+      display: flex;
+      justify-content: space-between;
+      color: var(--muted);
+      font-size: 12px;
+    }
+    .progress-sub {
+      display: flex;
+      justify-content: space-between;
+      color: var(--muted);
+      font-size: 12px;
+      margin-top: 4px;
+    }
+
+    .chips {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin: 6px 0 2px;
+    }
+    .chip {
+      padding: 6px 10px;
+      border-radius: 999px;
+      background: rgba(255,255,255,0.06);
+      border: 1px solid var(--glass-border);
+      font-size: 12px;
+      color: var(--text);
+    }
+
+    .logs {
+      background: rgba(0,0,0,0.35);
+      border: 1px solid var(--glass-border);
+      border-radius: 12px;
+      padding: 12px;
+      height: 260px;
+      overflow: auto;
+      font-family: "JetBrains Mono", Consolas, monospace;
+      font-size: 12px;
+      color: #d2d8f0;
+      line-height: 1.4;
+      box-shadow: inset 0 0 0 1px rgba(255,255,255,0.02);
+    }
+    .log-line {
+      margin-bottom: 6px;
+      display: flex;
+      gap: 8px;
+    }
+    .log-time { color: #7ddac8; white-space: nowrap; }
+    .log-text { flex: 1; }
+
+    .badge {
+      padding: 4px 8px;
+      border-radius: 8px;
+      background: rgba(255,255,255,0.08);
+      border: 1px solid var(--glass-border);
+      font-size: 12px;
+      color: var(--text);
+      display: inline-block;
+      margin-left: 6px;
+    }
+
+    .timeline {
+      margin-top: 10px;
+      border-left: 2px solid rgba(255,255,255,0.12);
+      padding-left: 14px;
+      display: grid;
+      gap: 8px;
+    }
+    .step {
+      position: relative;
+      padding-left: 6px;
+    }
+    .step::before {
+      content: "";
+      position: absolute;
+      left: -17px; top: 6px;
+      width: 10px; height: 10px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, var(--accent), var(--accent-2));
+      box-shadow: 0 0 0 4px rgba(102,255,226,0.15);
+    }
+    .step-title { font-weight: 600; font-size: 13px; }
+    .step-desc { color: var(--muted); font-size: 12px; margin-top: 2px; }
+
+    .collapse-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      cursor: pointer;
+      user-select: none;
+      padding: 6px 0;
+    }
+    .collapse-icon {
+      font-size: 14px;
+      color: var(--muted);
+      transition: transform 0.2s ease;
+    }
+    .collapsed .collapse-icon {
+      transform: rotate(-90deg);
+    }
+    .collapse-body {
+      max-height: 0;
+      overflow: hidden;
+      transition: max-height 0.25s ease, opacity 0.25s ease;
+      opacity: 0;
+    }
+    .collapsed .collapse-body {
+      max-height: 0;
+      opacity: 0;
+    }
+    .expanded .collapse-body {
+      max-height: none;
+      opacity: 1;
+      overflow: visible;
+    }
+  </style>
+</head>
+<body>
+  <div class="bg-aurora"></div>
+  <div class="app">
+    <div class="header">
+      <div class="title">文本大纲生成器</div>
+    </div>
+
+    <div class="grid">
+      <div class="card">
+        <h3>📂 文件选择 <span class="badge" id="fileStatus">未选择</span></h3>
+        <label class="upload">
+          <input type="file" id="fileInput" accept=".txt,.md,.text">
+          <div>
+            <div style="font-weight:600;">拖拽或点击选择小说文件</div>
+            <div class="muted">支持 txt / md / text，最大 100MB</div>
+          </div>
+        </label>
+        <div style="display:flex;gap:10px;margin-top:14px;">
+          <button class="btn" id="runBtn">开始处理</button>
+          <button class="btn" id="estimateBtn" style="background:linear-gradient(135deg,#7a5bff,#ff7fd1);">预测 Token</button>
+        </div>
+        <div class="chips" id="metaChips"></div>
+        <div class="timeline" id="steps">
+          <div class="step"><div class="step-title">等待文件</div><div class="step-desc">选择文件后可开始处理</div></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>⏳ 进度</h3>
+        <div class="progress"><div class="bar" id="progressBar"></div></div>
+        <div class="progress-meta"><span id="progressText">0%</span><span id="statusText">就绪</span></div>
+        <div class="progress-sub"><span id="chunkText">块: 0 / 0</span><span id="etaText">预计剩余: --</span></div>
+        <h3 style="margin-top:18px;">🧠 模型信息</h3>
+        <div class="chips" id="modelChips">
+          <span class="chip">Provider: --</span>
+          <span class="chip">Model: --</span>
+          <span class="chip">并发: --</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="card" style="margin-top:16px;">
+      <h3>📜 运行日志</h3>
+      <div class="logs" id="logBox"></div>
+    </div>
+
+    <div class="card" style="margin-top:16px;">
+      <div class="collapse-header" id="envToggle">
+        <h3 style="margin:0; display:flex; align-items:center; gap:8px;">⚙️ 配置 (.env)</h3>
+        <span class="collapse-icon">▼</span>
+      </div>
+      <div class="muted">在此直接修改配置，保存后后端自动更新 .env</div>
+      <div class="collapse-body" id="envSection">
+        <div id="envForm" style="display:grid;grid-template-columns:repeat(2, minmax(0, 1fr));gap:12px;margin-top:12px;"></div>
+        <div style="display:flex;gap:10px;margin-top:12px;">
+          <button class="btn" id="saveEnvBtn">保存配置</button>
+          <button class="btn" style="background:linear-gradient(135deg,#7a5bff,#ff7fd1);" id="reloadEnvBtn">刷新</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const API_BASE = 'http://localhost:8000';
+    const fileInput = document.getElementById('fileInput');
+    const fileStatus = document.getElementById('fileStatus');
+    const metaChips = document.getElementById('metaChips');
+    const progressBar = document.getElementById('progressBar');
+    const progressText = document.getElementById('progressText');
+    const statusText = document.getElementById('statusText');
+    const etaText = document.getElementById('etaText');
+    const chunkText = document.getElementById('chunkText');
+    const logBox = document.getElementById('logBox');
+    const steps = document.getElementById('steps');
+    const modelChips = document.getElementById('modelChips');
+
+    const envForm = document.getElementById('envForm');
+    const saveEnvBtn = document.getElementById('saveEnvBtn');
+    const reloadEnvBtn = document.getElementById('reloadEnvBtn');
+    const envToggle = document.getElementById('envToggle');
+    const envSection = document.getElementById('envSection');
+    const estimateBtn = document.getElementById('estimateBtn');
+
+    let progressTimer = null;
+    let serverFilePath = '';
+    let currentJobId = null;
+    let envExpanded = false;
+    let lastLogIndex = 0;
+
+    const mockModelInfo = {
+      provider: 'Zhipu',
+      model: 'GLM-4-Long',
+      parallel: '5',
+    };
+
+    function setModelInfo(info) {
+      modelChips.innerHTML = `
+        <span class="chip">Provider: ${info.provider || '--'}</span>
+        <span class="chip">Model: ${info.model || '--'}</span>
+        <span class="chip">并发: ${info.parallel || '--'}</span>
+      `;
+    }
+
+    function addLog(text) {
+      const line = document.createElement('div');
+      line.className = 'log-line';
+      const time = new Date().toLocaleTimeString();
+      line.innerHTML = `<span class="log-time">${time}</span><span class="log-text">${text}</span>`;
+      logBox.appendChild(line);
+      logBox.scrollTop = logBox.scrollHeight;
+    }
+
+    function setSteps(list) {
+      steps.innerHTML = '';
+      list.forEach(item => {
+        const el = document.createElement('div');
+        el.className = 'step';
+        el.innerHTML = `<div class="step-title">${item.title}</div><div class="step-desc">${item.desc}</div>`;
+        steps.appendChild(el);
+      });
+    }
+
+    fileInput.addEventListener('change', async () => {
+      const file = fileInput.files[0];
+      if (!file) return;
+      fileStatus.textContent = file.name;
+      metaChips.innerHTML = `
+        <span class="chip">大小: ${(file.size/1024/1024).toFixed(2)} MB</span>
+        <span class="chip">类型: ${file.type || 'text/plain'}</span>
+      `;
+      addLog(`上传文件: ${file.name}...`);
+
+      const form = new FormData();
+      form.append('file', file);
+      try {
+        const res = await fetch(API_BASE + '/upload', { method: 'POST', body: form });
+        if (!res.ok) throw new Error(await res.text());
+        const data = await res.json();
+        serverFilePath = data.file_path;
+        addLog(`上传完成，服务器路径: ${serverFilePath}`);
+        setSteps([
+          { title: '已上传', desc: file.name },
+          { title: '准备处理', desc: '点击开始处理' },
+        ]);
+      } catch (e) {
+        addLog('上传失败: ' + e);
+      }
+    });
+
+    async function startJob() {
+      if (!serverFilePath) {
+        addLog('请先上传文件');
+        return;
+      }
+      addLog('开始处理...');
+      statusText.textContent = '处理中';
+      try {
+        const res = await fetch(API_BASE + '/process', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ file_path: serverFilePath, resume: true })
+        });
+        if (!res.ok) throw new Error(await res.text());
+        const data = await res.json();
+        pollJob(data.job_id);
+      } catch (e) {
+        addLog('启动失败: ' + e);
+      }
+    }
+
+    async function pollJob(jobId) {
+      setSteps([{ title: '后台运行', desc: '正在处理...' }]);
+      lastLogIndex = 0;
+      const timer = setInterval(async () => {
+        const res = await fetch(API_BASE + '/jobs/' + jobId);
+        if (!res.ok) return;
+        const job = await res.json();
+        const pct = Math.round((job.progress || 0) * 100);
+        progressBar.style.width = pct + '%';
+        progressText.textContent = pct + '%';
+        const phaseMap = { loading: '读取中', processing: '处理中', merging: '合并中', saving: '保存中', completed: '完成', failed: '失败' };
+        const phaseText = job.result && job.result.phase ? (phaseMap[job.result.phase] || job.result.phase) : '处理中';
+        statusText.textContent = job.status === 'success' ? '完成' : (job.status === 'error' ? '错误' : phaseText);
+
+        const summary = job.result?.chunk_count || job.result?.total_chunks || 0;
+        const done = job.result?.completed_chunks ?? Math.round(summary * (job.progress || 0));
+        const failed = job.result?.failed_chunks || 0;
+        const finished = Math.min(done + failed, summary);
+        chunkText.textContent = failed ? `块: ${finished} / ${summary}（失败 ${failed}）` : `块: ${finished} / ${summary}`;
+
+        if (typeof job.result?.eta_seconds === 'number') {
+          const minutes = Math.max(0, Math.ceil(job.result.eta_seconds / 60));
+          etaText.textContent = `预计剩余: ${minutes} 分钟`;
+        } else {
+          etaText.textContent = '预计剩余: --';
+        }
+
+        if (job.logs && job.logs.length > lastLogIndex) {
+          job.logs.slice(lastLogIndex).forEach(addLog);
+          lastLogIndex = job.logs.length;
+        }
+
+        if (job.status === 'success' || job.status === 'error') {
+          clearInterval(timer);
+          progressBar.style.width = '100%';
+          progressText.textContent = '100%';
+          chunkText.textContent = `块: ${summary} / ${summary}`;
+          addLog(job.status === 'success' ? '处理完成 ✅' : ('错误: ' + job.message));
+          setSteps([{ title: job.status === 'success' ? '完成' : '失败', desc: job.message || '已结束' }]);
+        }
+      }, 2000);
+    }
+
+    document.getElementById('runBtn').addEventListener('click', () => startJob());
+
+    // env form
+    const envFields = [
+      'API_PROVIDER','OPENAI_API_KEY','OPENAI_MODEL','OPENAI_API_BASE',
+      'GEMINI_API_KEY','GEMINI_MODEL',
+      'ZHIPU_API_KEY','ZHIPU_MODEL','ZHIPU_API_BASE',
+      'MODEL_MAX_TOKENS','TARGET_TOKENS_PER_CHUNK','PARALLEL_LIMIT','MAX_RETRY','LOG_EVERY',
+      'OUTLINE_PROMPT_TEMPLATE'
+    ];
+    const multilineFields = new Set(['OUTLINE_PROMPT_TEMPLATE']);
+
+    function renderEnvForm(values) {
+      envForm.innerHTML = '';
+      envFields.forEach(key => {
+        const isMultiline = multilineFields.has(key);
+        const val = values[key] || '';
+        const displayValue = isMultiline ? val.replace(/\\n/g, '\n') : val;
+        const wrap = document.createElement('div');
+        if (isMultiline) {
+          wrap.style.gridColumn = 'span 2';
+        }
+
+        const label = document.createElement('label');
+        label.style.fontSize = '12px';
+        label.style.color = 'var(--muted)';
+        label.textContent = key;
+
+        const field = isMultiline ? document.createElement('textarea') : document.createElement('input');
+        field.dataset.key = key;
+        field.value = displayValue;
+        field.style.width = '100%';
+        field.style.padding = '8px 10px';
+        field.style.borderRadius = '10px';
+        field.style.border = '1px solid var(--glass-border)';
+        field.style.background = 'rgba(255,255,255,0.05)';
+        field.style.color = 'var(--text)';
+        field.style.outline = 'none';
+        if (isMultiline) {
+          field.rows = 14;
+          field.style.resize = 'vertical';
+          field.style.whiteSpace = 'pre-wrap';
+        }
+
+        wrap.appendChild(label);
+        wrap.appendChild(field);
+        envForm.appendChild(wrap);
+      });
+    }
+
+    async function loadEnv() {
+      try {
+        const res = await fetch(API_BASE + '/env');
+        const data = await res.json();
+        renderEnvForm(data.env || {});
+        addLog('已加载 .env 配置');
+        // 同步模型信息
+        const env = data.env || {};
+        setModelInfo({
+          provider: env.API_PROVIDER,
+          model: env.OPENAI_MODEL || env.GEMINI_MODEL || env.ZHIPU_MODEL,
+          parallel: env.PARALLEL_LIMIT
+        });
+      } catch (e) {
+        addLog('加载 .env 失败: ' + e);
+      }
+    }
+
+    async function saveEnv() {
+      const inputs = envForm.querySelectorAll('[data-key]');
+      const updates = {};
+      inputs.forEach(inp => {
+        const key = inp.dataset.key;
+        let value = inp.value;
+        if (multilineFields.has(key)) {
+          value = value.replace(/\r?\n/g, '\\n');
+        }
+        updates[key] = value;
+      });
+      try {
+        const res = await fetch(API_BASE + '/env', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ updates })
+        });
+        if (!res.ok) throw new Error(await res.text());
+        addLog('配置已保存到 .env');
+      } catch (e) {
+        addLog('保存失败: ' + e);
+      }
+    }
+
+    saveEnvBtn.addEventListener('click', saveEnv);
+    reloadEnvBtn.addEventListener('click', loadEnv);
+
+    // 折叠/展开 env 配置
+    envToggle.addEventListener('click', () => {
+      envExpanded = !envExpanded;
+      const card = envToggle.closest('.card');
+      if (envExpanded) {
+        card.classList.add('expanded');
+        card.classList.remove('collapsed');
+      } else {
+        card.classList.add('collapsed');
+        card.classList.remove('expanded');
+      }
+    });
+    // 默认折叠
+    (function initCollapse() {
+      const card = envToggle.closest('.card');
+      card.classList.add('collapsed');
+    })();
+
+    // 预测 Token
+    estimateBtn.addEventListener('click', async () => {
+      if (!serverFilePath) {
+        addLog('请先上传文件');
+        return;
+      }
+      addLog('请求预测 Token...');
+      try {
+        const res = await fetch(API_BASE + '/estimate?file_path=' + encodeURIComponent(serverFilePath));
+        if (!res.ok) throw new Error(await res.text());
+        const data = await res.json();
+        addLog(`Token 预测: 总计 ${data.total_estimated} | 原始 ${data.total_tokens} | 分块 ${data.chunk_tokens} | 响应估算 ${data.chunk_responses} | 合并估算 ${data.merge_tokens}`);
+        chunkText.textContent = `块: 0 / ${data.chunk_count}`;
+      } catch (e) {
+        addLog('预测失败: ' + e);
+      }
+    });
+
+    setModelInfo(mockModelInfo);
+    addLog('就绪。选择文件并开始处理。');
+    loadEnv();
+  </script>
+</body>
+</html>
