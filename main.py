@@ -7,11 +7,10 @@ import logging
 import webbrowser
 from pathlib import Path
 
-# 配置日志
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
+# 导入日志配置（统一在utils.py中配置）
+from utils import setup_logging
+setup_logging()
+
 logger = logging.getLogger(__name__)
 
 # 导入服务层
@@ -224,11 +223,13 @@ class NovelOutlineApp:
             return False
 
         # 检查进度是否匹配
-        from models.processing_state import ProgressData
-        chunks_hash = ProgressData.calculate_chunks_hash([])  # 需要实际chunks
-
-        if not self.progress_service.is_progress_valid(progress_data, file_path, [], chunks_hash):
+        # 注意：这里需要先读取文件并分割才能计算chunks_hash
+        # 为了避免重复读取，如果进度数据中的文件路径和当前文件路径不一致，直接返回False
+        if progress_data.txt_file != file_path:
             return False
+
+        # 简单的文件路径匹配检查，详细的hash验证在process_novel中进行
+        return True
 
         # 显示进度信息
         summary = self.progress_service.get_progress_summary(progress_data)

@@ -10,6 +10,7 @@ FastAPI 后端接口：
 """
 import asyncio
 import uuid
+import time
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Dict, Any, List
@@ -92,6 +93,7 @@ class Job:
     progress: float = 0.0
     result: Dict[str, Any] = field(default_factory=dict)
     logs: List[str] = field(default_factory=list)
+    created_at: float = field(default_factory=time.time)
 
     def log(self, text: str) -> None:
         """Append a log line and keep list size bounded."""
@@ -102,6 +104,38 @@ class Job:
 
 
 JOBS: Dict[str, Job] = {}
+# 最大保留的job数量，防止内存泄漏
+MAX_JOBS = 100
+
+
+def cleanup_old_jobs():
+    """清理旧的已完成或失败的job，保留最近MAX_JOBS个"""
+    if len(JOBS) <= MAX_JOBS:
+        return
+    
+    # 按状态分组：优先保留运行中的job
+    running_jobs = {k: v for k, v in JOBS.items() if v.status == "running"}
+    completed_jobs = {k: v for k, v in JOBS.items() if v.status in ("success", "error")}
+    
+    # 清理已完成或失败的job，按创建时间排序，保留最新的
+    if len(completed_jobs) > MAX_JOBS - len(running_jobs):
+        sorted_completed = sorted(
+            completed_jobs.items(),
+            key=lambda x: x[1].created_at,
+            reverse=True
+        )
+        to_keep = max(0, MAX_JOBS - len(running_jobs))
+        for job_id, _ in sorted_completed[to_keep:]:
+            del JOBS[job_id]
+    
+    # 如果仍然超过限制（运行中的job太多），清理最旧的运行中job
+    if len(JOBS) > MAX_JOBS:
+        sorted_all = sorted(JOBS.items(), key=lambda x: x[1].created_at)
+        to_remove = len(JOBS) - MAX_JOBS
+        for job_id, _ in sorted_all[:to_remove]:
+            # 只清理已完成或失败的job，不清理运行中的
+            if JOBS[job_id].status in ("success", "error"):
+                del JOBS[job_id]
 
 def cleanup_uploads() -> int:
     """删除上传目录中的内容，保留目录本身"""
@@ -209,6 +243,9 @@ async def start_process(req: ProcessRequest):
         raise HTTPException(status_code=400, detail="file_path 不能为空")
     if not Path(req.file_path).exists():
         raise HTTPException(status_code=404, detail="文件不存在")
+
+    # 清理旧job
+    cleanup_old_jobs()
 
     job_id = str(uuid.uuid4())
     job = Job(id=job_id)

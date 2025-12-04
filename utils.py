@@ -11,15 +11,29 @@ from typing import Any, Dict, Optional, Union, List
 import logging
 from datetime import datetime
 
-# 配置日志
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.FileHandler('novel_outline.log', encoding='utf-8'),
-        logging.StreamHandler()
-    ]
-)
+# 日志配置函数
+_logging_configured = False
+
+def setup_logging(level=logging.INFO, log_file='novel_outline.log'):
+    """统一配置日志系统，避免重复配置"""
+    global _logging_configured
+    if _logging_configured:
+        return
+    
+    logging.basicConfig(
+        level=level,
+        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+        handlers=[
+            logging.FileHandler(log_file, encoding='utf-8'),
+            logging.StreamHandler()
+        ],
+        force=True  # 强制重新配置，即使已经配置过
+    )
+    _logging_configured = True
+
+# 自动配置日志（首次导入时）
+setup_logging()
+
 logger = logging.getLogger(__name__)
 
 
@@ -74,7 +88,8 @@ def atomic_write_json(file_path: Union[str, Path],
         # 清理临时文件
         try:
             os.unlink(temp_path)
-        except:
+        except (OSError, FileNotFoundError):
+            # 忽略清理临时文件时的错误
             pass
         logger.error(f"写入文件失败: {file_path}, 错误: {e}")
         raise
@@ -127,7 +142,8 @@ def atomic_write_text(file_path: Union[str, Path],
         # 清理临时文件
         try:
             os.unlink(temp_path)
-        except:
+        except (OSError, FileNotFoundError):
+            # 忽略清理临时文件时的错误
             pass
         logger.error(f"写入文件失败: {file_path}, 错误: {e}")
         raise
