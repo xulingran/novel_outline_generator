@@ -109,33 +109,27 @@ MAX_JOBS = 100
 
 
 def cleanup_old_jobs():
-    """清理旧的已完成或失败的job，保留最近MAX_JOBS个"""
+    """清理旧的 job 记录，确保 JOBS 不会无限增长"""
     if len(JOBS) <= MAX_JOBS:
         return
-    
-    # 按状态分组：优先保留运行中的job
-    running_jobs = {k: v for k, v in JOBS.items() if v.status == "running"}
-    completed_jobs = {k: v for k, v in JOBS.items() if v.status in ("success", "error")}
-    
-    # 清理已完成或失败的job，按创建时间排序，保留最新的
-    if len(completed_jobs) > MAX_JOBS - len(running_jobs):
-        sorted_completed = sorted(
-            completed_jobs.items(),
-            key=lambda x: x[1].created_at,
-            reverse=True
+
+    # 优先清理已结束的任务，其次未开始的，最后才是仍在运行的
+    over_limit = len(JOBS) - MAX_JOBS
+
+    def _by_age(statuses):
+        return sorted(
+            ((job_id, job) for job_id, job in JOBS.items() if job.status in statuses),
+            key=lambda x: x[1].created_at
         )
-        to_keep = max(0, MAX_JOBS - len(running_jobs))
-        for job_id, _ in sorted_completed[to_keep:]:
+
+    for statuses in (("success", "error"), ("pending",), ("running",)):
+        if over_limit <= 0:
+            break
+        for job_id, _ in _by_age(statuses):
+            if over_limit <= 0:
+                break
             del JOBS[job_id]
-    
-    # 如果仍然超过限制（运行中的job太多），清理最旧的运行中job
-    if len(JOBS) > MAX_JOBS:
-        sorted_all = sorted(JOBS.items(), key=lambda x: x[1].created_at)
-        to_remove = len(JOBS) - MAX_JOBS
-        for job_id, _ in sorted_all[:to_remove]:
-            # 只清理已完成或失败的job，不清理运行中的
-            if JOBS[job_id].status in ("success", "error"):
-                del JOBS[job_id]
+            over_limit -= 1
 
 def cleanup_uploads() -> int:
     """删除上传目录中的内容，保留目录本身"""

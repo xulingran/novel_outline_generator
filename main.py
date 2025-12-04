@@ -229,7 +229,6 @@ class NovelOutlineApp:
             return False
 
         # 简单的文件路径匹配检查，详细的hash验证在process_novel中进行
-        return True
 
         # 显示进度信息
         summary = self.progress_service.get_progress_summary(progress_data)
