@@ -26,15 +26,13 @@ python -Xutf8 create_env.py
 ```python
 python -Xutf8 main.py
 ```
-#### 按提示选择处理新文件，输入 txt/md 路径
+按提示选择2，处理新文件，输入 txt/md 路径
 
 ### Web UI
-```python
-uvicorn web_api:app --reload --port 8000
-```
-浏览器自动打开 ui/index.html
-#### Web 界面支持上传、进度日志、Token 预估。
-#### 支持在webui编辑 .env 与提示词模板。
+在`main.py`中选择1使用webui
+浏览器自动打开` ui/index.html`
+**Web 界面支持上传、进度日志、Token 预估。**
+**支持在webui编辑 .env 与提示词模板。**
 
 ## 目录结构
 ```
@@ -47,7 +45,5 @@ uvicorn web_api:app --reload --port 8000
 - outputs/：输出目录（已在 .gitignore）。
 ```
 
-## 注意事项
-- 处理完成后默认清理 chunk_outlines、processing_metadata 与 uploads。
 ## 许可证
 本项目采用 MIT License，详见 LICENSE 文件。
