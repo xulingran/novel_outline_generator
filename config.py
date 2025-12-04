@@ -188,27 +188,53 @@ def get_encodings() -> List[str]:
 
 
 # 向后兼容的常量（已弃用，建议使用配置函数）
+# 注意：API_KEY等需要在首次访问时验证的常量，会延迟到实际使用时才验证
+# 如果需要在导入时避免验证，请直接使用配置函数
 TXT_FILE = get_txt_file()
 OUTPUT_DIR = get_output_dir()
 PROGRESS_FILE = get_progress_file()
 ENCODINGS = get_encodings()
 
-API_PROVIDER = get_api_config().provider
-API_KEY = get_api_config().api_key
-API_BASE = get_api_config().base_url
-MODEL_NAME = get_api_config().model_name
+# API相关配置 - 延迟验证，避免在导入时抛出异常
+# 只有在实际使用时才会调用api_key属性（会触发验证）
+try:
+    _api_cfg = get_api_config()
+    API_PROVIDER = _api_cfg.provider
+    # 不在这里验证api_key，避免导入时异常
+    # API_KEY 将通过 get_api_config().api_key 访问
+    API_BASE = _api_cfg.base_url
+    MODEL_NAME = _api_cfg.model_name
+    GEMINI_SAFETY_SETTINGS = _api_cfg.gemini_safety
+except Exception:
+    # 如果配置加载失败，使用默认值（向后兼容）
+    API_PROVIDER = "openai"
+    API_BASE = None
+    MODEL_NAME = "gpt-4o-mini"
+    GEMINI_SAFETY_SETTINGS = "BLOCK_NONE"
 
-MODEL_MAX_TOKENS = get_processing_config().model_max_tokens
-TARGET_TOKENS_PER_CHUNK = get_processing_config().target_tokens_per_chunk
-PARALLEL_LIMIT = get_processing_config().parallel_limit
-MAX_RETRY = get_processing_config().max_retry
-LOG_EVERY = get_processing_config().log_every
+# API_KEY延迟访问函数（向后兼容）
+def _get_api_key():
+    """获取API密钥（延迟验证）"""
+    return get_api_config().api_key
 
-USE_PROXY = get_processing_config().use_proxy
-PROXY_URL = get_processing_config().proxy_url
+# 为了向后兼容，创建一个对象模拟API_KEY属性
+class _APIKeyWrapper:
+    """API密钥包装器，延迟验证"""
+    def __str__(self):
+        return _get_api_key()
+    def __repr__(self):
+        return repr(str(self))
+API_KEY = _APIKeyWrapper()
 
-# Gemini相关
-GEMINI_SAFETY_SETTINGS = get_api_config().gemini_safety
+# 处理配置（这些不会在导入时验证）
+_processing_cfg = get_processing_config()
+MODEL_MAX_TOKENS = _processing_cfg.model_max_tokens
+TARGET_TOKENS_PER_CHUNK = _processing_cfg.target_tokens_per_chunk
+PARALLEL_LIMIT = _processing_cfg.parallel_limit
+MAX_RETRY = _processing_cfg.max_retry
+LOG_EVERY = _processing_cfg.log_every
+USE_PROXY = _processing_cfg.use_proxy
+PROXY_URL = _processing_cfg.proxy_url
 
 
 def create_env_file():

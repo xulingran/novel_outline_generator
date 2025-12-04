@@ -335,14 +335,19 @@ class ZhipuService(LLMService):
     async def _call_api(self, prompt: str, **kwargs) -> LLMResponse:
         """调用智谱API"""
         try:
-            response = self.client.chat.completions.create(
-                model=self.api_config.model_name,
-                messages=[
-                    {"role": "user", "content": prompt}
-                ],
-                temperature=0.7,
-                max_tokens=None,  # 让API自行决定
-                **kwargs
+            # 智谱AI SDK是同步的，需要在executor中运行以避免阻塞事件循环
+            loop = asyncio.get_event_loop()
+            response = await loop.run_in_executor(
+                None,
+                lambda: self.client.chat.completions.create(
+                    model=self.api_config.model_name,
+                    messages=[
+                        {"role": "user", "content": prompt}
+                    ],
+                    temperature=0.7,
+                    max_tokens=None,  # 让API自行决定
+                    **kwargs
+                )
             )
 
             return LLMResponse(

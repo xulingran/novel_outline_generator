@@ -297,7 +297,8 @@ class NovelProcessingService:
             if json_match:
                 try:
                     return json.loads(json_match.group())
-                except:
+                except (json.JSONDecodeError, ValueError, TypeError):
+                    # JSON解析失败，继续使用默认结构
                     pass
 
             # 如果无法解析，创建基础结构
