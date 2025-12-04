@@ -13,7 +13,7 @@ import uuid
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional, Set
 import os
 import shutil
 
@@ -26,6 +26,7 @@ from services.token_estimator import estimate_tokens
 
 ENV_PATH = Path(".env")
 UPLOAD_DIR = Path("outputs/uploads")
+_UPLOAD_ROOT = UPLOAD_DIR.resolve()
 ALLOWED_KEYS = {
     "API_PROVIDER",
     "OPENAI_API_KEY",
@@ -88,6 +89,7 @@ class ProcessRequest(BaseModel):
 @dataclass
 class Job:
     id: str
+    file_path: str = ""
     status: str = "pending"  # pending|running|success|error
     message: str = ""
     progress: float = 0.0
@@ -131,12 +133,42 @@ def cleanup_old_jobs():
             del JOBS[job_id]
             over_limit -= 1
 
-def cleanup_uploads() -> int:
-    """删除上传目录中的内容，保留目录本身"""
+def _resolve_upload_path(path: str) -> Optional[Path]:
+    """返回在 uploads 目录下的路径，其他情况返回 None。"""
+    try:
+        resolved = Path(path).resolve()
+    except (OSError, RuntimeError):
+        return None
+
+    if resolved == _UPLOAD_ROOT:
+        return None
+
+    try:
+        resolved.relative_to(_UPLOAD_ROOT)
+        return resolved
+    except ValueError:
+        return None
+
+
+def cleanup_uploads(protected_paths: Optional[Set[Path]] = None) -> int:
+    """删除上传目录中的内容，保留目录本身。
+
+    Args:
+        protected_paths: 需要保留的上传文件路径集合（已解析的绝对路径）
+    """
     if not UPLOAD_DIR.exists():
         return 0
+
+    keep = {p.resolve() for p in protected_paths} if protected_paths else set()
+
     cleaned = 0
     for item in UPLOAD_DIR.iterdir():
+        item_path = item.resolve()
+        if any(
+            item_path == kept_path or item_path in kept_path.parents
+            for kept_path in keep
+        ):
+            continue
         try:
             if item.is_dir():
                 shutil.rmtree(item, ignore_errors=True)
@@ -189,6 +221,7 @@ async def upload_file(file: UploadFile = File(...)):
 
 async def _run_job(job: Job, req: ProcessRequest):
     job.status = "running"
+    job.file_path = req.file_path
     job.progress = 0.0
     job.result = {}
     job.log(f"开始处理文件: {req.file_path}")
@@ -219,9 +252,23 @@ async def _run_job(job: Job, req: ProcessRequest):
         job.status = "success"
         job.log("处理完成")
         try:
-            cleaned = cleanup_uploads()
-            if cleaned:
-                job.log(f"已清理上传文件 {cleaned} 个")
+            current_upload = _resolve_upload_path(req.file_path)
+            if current_upload:
+                active_uploads: Set[Path] = set()
+                for other_job in JOBS.values():
+                    if other_job.id == job.id:
+                        continue
+                    if other_job.status not in {"pending", "running"}:
+                        continue
+                    if not other_job.file_path:
+                        continue
+                    upload_path = _resolve_upload_path(other_job.file_path)
+                    if upload_path:
+                        active_uploads.add(upload_path)
+
+                cleaned = cleanup_uploads(protected_paths=active_uploads)
+                if cleaned:
+                    job.log(f"已清理上传文件 {cleaned} 个")
         except Exception as cleanup_err:  # noqa: BLE001
             job.log(f"清理上传文件失败: {cleanup_err}")
 
@@ -242,7 +289,7 @@ async def start_process(req: ProcessRequest):
     cleanup_old_jobs()
 
     job_id = str(uuid.uuid4())
-    job = Job(id=job_id)
+    job = Job(id=job_id, file_path=req.file_path)
     JOBS[job_id] = job
 
     asyncio.create_task(_run_job(job, req))
