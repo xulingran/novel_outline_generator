@@ -17,7 +17,8 @@ if API_PROVIDER == "gemini":
     try:
         import google.generativeai as genai
         # Gemini API 通过环境变量使用代理
-        genai.configure(api_key=API_KEY)
+        api_key_value = str(API_KEY)
+        genai.configure(api_key=api_key_value)
         
         # 配置安全设置
         safety_mapping = {
@@ -69,10 +70,11 @@ else:
             http_client = httpx.AsyncClient(proxies=PROXY_URL)
             print(f"🌐 OpenAI 客户端已配置代理: {PROXY_URL}")
         
+        api_key_value = str(API_KEY)
         if API_BASE:
-            openai_client = AsyncOpenAI(api_key=API_KEY, base_url=API_BASE, http_client=http_client)
+            openai_client = AsyncOpenAI(api_key=api_key_value, base_url=API_BASE, http_client=http_client)
         else:
-            openai_client = AsyncOpenAI(api_key=API_KEY, http_client=http_client)
+            openai_client = AsyncOpenAI(api_key=api_key_value, http_client=http_client)
         print(f"✅ OpenAI API 初始化成功 (模型: {MODEL_NAME})")
     except ImportError as e:
         print("❌ 错误: 未安装 openai 库")
