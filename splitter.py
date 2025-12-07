@@ -19,6 +19,23 @@ class TextSplitter:
     def __init__(self):
         self.processing_config = get_processing_config()
         self.encoder = get_encoder()
+        self._sentence_end_tokens = None
+
+    @property
+    def sentence_end_tokens(self) -> set:
+        """动态获取句子结束标记的 tokens"""
+        if self._sentence_end_tokens is None:
+            # 常见的句子结束标点
+            sentence_endings = "。！？.!?；;…"
+            tokens = set()
+            for char in sentence_endings:
+                try:
+                    encoded = self.encoder.encode(char)
+                    tokens.update(encoded)
+                except Exception:
+                    pass
+            self._sentence_end_tokens = tokens
+        return self._sentence_end_tokens
 
     def split_text(self, text: str) -> List[str]:
         """
@@ -185,27 +202,21 @@ class TextSplitter:
 
     def _find_sentence_boundary(self, tokens: List[int], start: int, end: int) -> int:
         """在tokens中寻找最近的句子边界"""
-        # 句子结束标记的tokens
-        sentence_end_tokens = {
-            33,  # !
-            46,  # .
-            63,  # ?
-            1234, # 。
-            8221, # "
-            8230, # ...
-        }
-
         # 从后向前搜索
         search_start = max(start, end - min(100, end - start))  # 最多向前搜索100个token
 
         for i in range(end - 1, search_start - 1, -1):
-            if tokens[i] in sentence_end_tokens:
+            if tokens[i] in self.sentence_end_tokens:
                 return i + 1
 
         # 如果没找到句子边界，尝试在空格处分割
-        for i in range(end - 1, search_start - 1, -1):
-            if tokens[i] == 220:  # 空格的token
-                return i + 1
+        try:
+            space_tokens = set(self.encoder.encode(" "))
+            for i in range(end - 1, search_start - 1, -1):
+                if tokens[i] in space_tokens:
+                    return i + 1
+        except Exception:
+            pass
 
         # 如果都没找到，返回原始end
         return end

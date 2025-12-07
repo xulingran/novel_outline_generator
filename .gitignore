@@ -19,6 +19,7 @@ venv/
 
 # IDE/editor
 .vscode/
+.vs/
 .idea/
 *.swp
 *.swo
@@ -33,4 +34,5 @@ node_modules/
 # Coverage / reports
 .coverage
 htmlcov/
+.pytest_cache/
 

@@ -265,7 +265,7 @@ class GeminiService(LLMService):
             model = genai.GenerativeModel(self.api_config.model_name)
 
             # 在线程池中执行同步调用
-            loop = asyncio.get_event_loop()
+            loop = asyncio.get_running_loop()
             response = await loop.run_in_executor(
                 None,
                 lambda: model.generate_content(
@@ -336,7 +336,7 @@ class ZhipuService(LLMService):
         """调用智谱API"""
         try:
             # 智谱AI SDK是同步的，需要在executor中运行以避免阻塞事件循环
-            loop = asyncio.get_event_loop()
+            loop = asyncio.get_running_loop()
             response = await loop.run_in_executor(
                 None,
                 lambda: self.client.chat.completions.create(

@@ -162,7 +162,7 @@ class NovelOutlineApp:
             except Exception as e:
                 print(f"❌ 文件错误: {e}")
                 retry = input("是否重新输入？(y/n，默认y): ").strip().lower()
-                if retry and retry not in ['y', 'yes', 'Y']:
+                if retry and retry not in ['y', 'yes']:
                     print("使用默认文件")
                     return default_file
 
@@ -208,9 +208,9 @@ class NovelOutlineApp:
         # 确认继续
         while True:
             user_input = input("\n是否继续处理？(y/n): ").strip().lower()
-            if user_input in ['y', 'yes', 'Y']:
+            if user_input in ['y', 'yes']:
                 return
-            elif user_input in ['n', 'no', 'N']:
+            elif user_input in ['n', 'no']:
                 print("操作已取消")
                 exit(0)
             else:
@@ -239,9 +239,9 @@ class NovelOutlineApp:
 
         while True:
             user_input = input("\n是否恢复进度？(y/n): ").strip().lower()
-            if user_input in ['y', 'yes', 'Y']:
+            if user_input in ['y', 'yes']:
                 return True
-            elif user_input in ['n', 'no', 'N']:
+            elif user_input in ['n', 'no']:
                 self.progress_service.clear_progress()
                 return False
             else:

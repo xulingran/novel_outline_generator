@@ -166,7 +166,7 @@ def get_processing_config() -> ProcessingConfig:
     return _processing_config
 
 
-# 为了向后兼容，保留一些常量
+# 为了向前兼容，保留一些常量
 def get_txt_file() -> str:
     """获取默认文本文件路径"""
     return get_processing_config().default_txt_file
@@ -271,9 +271,15 @@ PARALLEL_LIMIT=5
 MAX_RETRY=5
 LOG_EVERY=1
 
+# 日志级别（可选）: DEBUG, INFO, WARNING, ERROR
+LOG_LEVEL=INFO
+
 # 代理配置（可选）
 USE_PROXY=false
 PROXY_URL=http://127.0.0.1:7897
+
+# CORS 允许的来源（可选，多个用逗号分隔）
+# CORS_ORIGINS=http://localhost:8000,http://127.0.0.1:8000
 """)
         with open(env_file, "a", encoding="utf-8") as f:
             f.write("\n# 大纲提示词配置\n")

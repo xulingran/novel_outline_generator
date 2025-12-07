@@ -14,11 +14,21 @@ from datetime import datetime
 # 日志配置函数
 _logging_configured = False
 
-def setup_logging(level=logging.INFO, log_file='novel_outline.log'):
-    """统一配置日志系统，避免重复配置"""
+def setup_logging(level=None, log_file='novel_outline.log'):
+    """统一配置日志系统，避免重复配置
+    
+    Args:
+        level: 日志级别，默认从环境变量 LOG_LEVEL 读取，若未设置则使用 INFO
+        log_file: 日志文件路径
+    """
     global _logging_configured
     if _logging_configured:
         return
+    
+    # 支持通过环境变量控制日志级别
+    if level is None:
+        level_str = os.getenv('LOG_LEVEL', 'INFO').upper()
+        level = getattr(logging, level_str, logging.INFO)
     
     logging.basicConfig(
         level=level,

@@ -11,10 +11,11 @@ FastAPI 后端接口：
 import asyncio
 import uuid
 import time
+import os
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Dict, Any, List, Optional, Set
-import os
+
 import shutil
 
 from fastapi import FastAPI, UploadFile, File, HTTPException
@@ -27,6 +28,29 @@ from services.token_estimator import estimate_tokens
 ENV_PATH = Path(".env")
 UPLOAD_DIR = Path("outputs/uploads")
 _UPLOAD_ROOT = UPLOAD_DIR.resolve()
+
+# CORS 允许的来源，可通过环境变量配置
+# 默认允许本地开发常用端口，生产环境应配置具体域名
+def _load_cors_origins() -> List[str]:
+    """Load CORS origins, translating file:// to null for browser Origin headers."""
+    raw = os.getenv(
+        "CORS_ORIGINS",
+        "http://localhost:8000,http://127.0.0.1:8000,http://localhost:3000,null"
+    )
+    origins: List[str] = []
+    for origin in raw.split(","):
+        origin = origin.strip()
+        if not origin:
+            continue
+        if origin == "file://":
+            origin = "null"
+        origins.append(origin)
+    # Preserve order but drop duplicates
+    return list(dict.fromkeys(origins))
+
+
+CORS_ORIGINS = _load_cors_origins()
+
 ALLOWED_KEYS = {
     "API_PROVIDER",
     "OPENAI_API_KEY",
@@ -70,6 +94,7 @@ def save_env_file(updates: Dict[str, str]) -> None:
 
 
 def mask_value(key: str, value: str) -> str:
+    """对敏感值（如 API Key）进行掩码处理"""
     if "KEY" in key.upper():
         if not value:
             return ""
@@ -183,9 +208,9 @@ def cleanup_uploads(protected_paths: Optional[Set[Path]] = None) -> int:
 app = FastAPI(title="Novel Outline API", version="0.1.0")
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=CORS_ORIGINS,
     allow_credentials=True,
-    allow_methods=["*"],
+    allow_methods=["GET", "POST"],
     allow_headers=["*"],
 )
 
