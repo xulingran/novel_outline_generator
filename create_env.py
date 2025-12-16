@@ -75,14 +75,30 @@ def create_env_file():
 # API提供商
 API_PROVIDER={api_provider}
 
-# {api_provider.upper()} API配置
-{api_key_var}={api_key if api_key else f'your_{api_provider}_api_key_here'}
-{api_base_comment}
-MODEL_{api_provider.upper()}={api_model}
 """
 
-    if api_provider == 'gemini':
-        env_content += "GEMINI_SAFETY_SETTINGS=BLOCK_ONLY_HIGH\n"
+    # 添加对应的API配置
+    if api_provider == 'openai':
+        env_content += f"""# OpenAI API配置
+{api_key_var}={api_key if api_key else 'your_openai_api_key_here'}
+{api_base_comment}
+OPENAI_MODEL={api_model}
+
+"""
+    elif api_provider == 'gemini':
+        env_content += f"""# Google Gemini API配置
+{api_key_var}={api_key if api_key else 'your_gemini_api_key_here'}
+GEMINI_MODEL={api_model}
+GEMINI_SAFETY_SETTINGS=BLOCK_ONLY_HIGH
+
+"""
+    elif api_provider == 'zhipu':
+        env_content += f"""# 智谱清言 API配置
+{api_key_var}={api_key if api_key else 'your_zhipu_api_key_here'}
+{api_base_comment}
+ZHIPU_MODEL={api_model}
+
+"""
 
     # 添加代理配置
     if use_proxy and proxy_url:
@@ -172,3 +188,4 @@ if __name__ == "__main__":
         show_help()
     else:
         create_env_file()
+

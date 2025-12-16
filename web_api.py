@@ -58,6 +58,7 @@ ALLOWED_KEYS = {
     "OPENAI_API_BASE",
     "GEMINI_API_KEY",
     "GEMINI_MODEL",
+    "GEMINI_SAFETY_SETTINGS",
     "ZHIPU_API_KEY",
     "ZHIPU_MODEL",
     "ZHIPU_API_BASE",
@@ -66,6 +67,10 @@ ALLOWED_KEYS = {
     "PARALLEL_LIMIT",
     "MAX_RETRY",
     "LOG_EVERY",
+    "LOG_LEVEL",
+    "USE_PROXY",
+    "PROXY_URL",
+    "CORS_ORIGINS",
     "OUTLINE_PROMPT_TEMPLATE",
 }
 
@@ -220,15 +225,6 @@ def get_env() -> Dict[str, Any]:
     data = load_env_file()
     masked = {k: mask_value(k, v) for k, v in data.items()}
     return {"env": data, "masked": masked}
-
-
-@app.post("/env")
-def update_env(body: EnvUpdate):
-    bad_keys = [k for k in body.updates if k not in ALLOWED_KEYS]
-    if bad_keys:
-        raise HTTPException(status_code=400, detail=f"不允许修改的键: {bad_keys}")
-    save_env_file(body.updates)
-    return {"ok": True}
 
 
 @app.post("/upload")

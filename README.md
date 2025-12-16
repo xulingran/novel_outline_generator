@@ -5,8 +5,7 @@
 ## 功能概览
 - 多模型：OpenAI / 智谱 / Gemini，支持代理、中转URL。
 - 自动分块，逐块生成大纲并递归合并总纲。
-- Web UI：上传文件、查看进度与日志。
-- 在线编辑 .env（含提示词模板）。
+- Web UI：上传文件、查看进度与日志、查看环境配置。
 - 支持断点恢复、失败重试、并发处理。
 - 处理完成后自动清理中间文件与上传缓存。
 
@@ -38,6 +37,8 @@ uv pip install pytest pytest-asyncio
 ```
 
 ### 3. 配置环境变量
+
+**方式一：使用配置工具（推荐）**
 ```bash
 # Windows
 python -Xutf8 create_env.py
@@ -45,6 +46,18 @@ python -Xutf8 create_env.py
 # Linux/Mac
 python create_env.py
 ```
+按照提示选择 API 提供商并输入 API Key
+
+**方式二：手动编辑**
+复制 `.env.example` 为 `.env` 并填入配置
+
+⚠️ **重要提示**：
+- 修改配置后需要**重启服务**才能生效
+- 详细配置说明请参考：[API 配置指南](docs/API_CONFIGURATION.md)
+
+**常见问题：**
+- 如遇到 `401 Unauthorized` 错误，说明 API Key 未正确配置
+- 使用中转 API 时，需同时配置 `OPENAI_API_BASE` 为中转地址
 
 ## 使用方式
 
@@ -61,8 +74,7 @@ python main.py
 ### Web UI
 在`main.py`中选择1使用webui
 浏览器自动打开` ui/index.html`
-**Web 界面支持上传、进度日志、Token 预估。**
-**支持在webui编辑 .env 与提示词模板。**
+**Web 界面支持上传、进度日志、Token 预估、查看环境配置。**
 
 ## uv 常用命令
 

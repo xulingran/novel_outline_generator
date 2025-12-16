@@ -4,326 +4,426 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Novel Outline Studio</title>
-  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400&display=swap" rel="stylesheet">
   <style>
     :root {
-      --bg1: #0c1027;
-      --bg2: #111b3a;
-      --glass: rgba(255, 255, 255, 0.08);
-      --glass-border: rgba(255, 255, 255, 0.15);
-      --accent: #66ffe2;
-      --accent-2: #7a5bff;
-      --accent-3: #ff7fd1;
-      --text: #e9ecf4;
-      --muted: #a9b1c7;
-      --shadow: 0 20px 60px rgba(0, 0, 0, 0.35);
-      --blur: blur(16px);
+      --bg-base: #09090b;
+      --bg-gradient-start: #0f172a;
+      --bg-gradient-end: #020617;
+      
+      --glass-surface: rgba(30, 41, 59, 0.3);
+      --glass-border: rgba(255, 255, 255, 0.08);
+      --glass-highlight: rgba(255, 255, 255, 0.05);
+      
+      --primary: #6366f1;
+      --primary-hover: #4f46e5;
+      --secondary: #ec4899;
+      --accent: #06b6d4;
+      
+      --text-primary: #f8fafc;
+      --text-secondary: #94a3b8;
+      --text-tertiary: #64748b;
+      
+      --radius-xl: 24px;
+      --radius-lg: 16px;
+      --radius-md: 12px;
+      --radius-sm: 8px;
+      
+      --shadow-glow: 0 0 40px -10px rgba(99, 102, 241, 0.2);
+      --shadow-card: 0 20px 40px -10px rgba(0, 0, 0, 0.4);
     }
 
-    * { box-sizing: border-box; }
+    * { box-sizing: border-box; outline: none; }
+    
     body {
       margin: 0;
       min-height: 100vh;
-      font-family: "Space Grotesk", "Segoe UI", sans-serif;
-      color: var(--text);
-      background: radial-gradient(circle at 20% 20%, #1b1f3a, #0b0e22 40%), linear-gradient(120deg, #0d132e, #0a0d20 60%);
+      font-family: "Space Grotesk", system-ui, -apple-system, sans-serif;
+      color: var(--text-primary);
+      background-color: var(--bg-base);
+      background-image: radial-gradient(circle at 50% 0%, #1e1b4b, var(--bg-base) 80%);
       overflow-y: auto;
       overflow-x: hidden;
+      -webkit-font-smoothing: antialiased;
     }
+
+    /* Aurora Effect */
     .bg-aurora {
       position: fixed;
       inset: 0;
-      background: radial-gradient(800px at 20% 20%, rgba(102,255,226,0.15), transparent 45%),
-                  radial-gradient(900px at 80% 10%, rgba(122,91,255,0.18), transparent 50%),
-                  radial-gradient(700px at 60% 80%, rgba(255,127,209,0.12), transparent 50%);
-      filter: blur(30px);
-      opacity: 0.7;
+      z-index: 0;
       pointer-events: none;
-      animation: drift 18s ease-in-out infinite alternate;
+      background: 
+        radial-gradient(circle at 10% 20%, rgba(99, 102, 241, 0.1), transparent 40%),
+        radial-gradient(circle at 90% 50%, rgba(236, 72, 153, 0.08), transparent 40%),
+        radial-gradient(circle at 50% 90%, rgba(6, 182, 212, 0.08), transparent 40%);
+      filter: blur(80px);
+      animation: aurora 20s ease-in-out infinite alternate;
     }
-    @keyframes drift {
-      from { transform: translateY(0px) scale(1); }
-      to { transform: translateY(-20px) scale(1.02); }
+    @keyframes aurora {
+      0% { opacity: 0.5; transform: scale(1); }
+      100% { opacity: 0.8; transform: scale(1.1); }
     }
+
     .app {
       position: relative;
-      padding: 36px 40px 48px;
-      max-width: 1280px;
-      margin: 0 auto;
       z-index: 1;
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 40px 24px 60px;
     }
+
+    /* Header */
     .header {
       display: flex;
       align-items: center;
       justify-content: space-between;
-      margin-bottom: 20px;
+      margin-bottom: 40px;
+      padding: 0 8px;
     }
     .title {
-      font-size: 28px;
+      font-size: 36px;
       font-weight: 700;
-      letter-spacing: 0.02em;
+      background: linear-gradient(135deg, #fff 0%, #cbd5e1 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      letter-spacing: -0.03em;
     }
-    .pill {
-      padding: 6px 14px;
-      border-radius: 999px;
-      background: linear-gradient(135deg, rgba(102,255,226,0.2), rgba(122,91,255,0.2));
+
+    /* Cards */
+    .card {
+      background: var(--glass-surface);
       border: 1px solid var(--glass-border);
-      color: var(--text);
-      font-size: 13px;
-      text-transform: uppercase;
-      letter-spacing: 0.04em;
+      border-radius: var(--radius-xl);
+      padding: 28px;
+      box-shadow: var(--shadow-card);
+      backdrop-filter: blur(20px);
+      transition: transform 0.3s ease, box-shadow 0.3s ease, border-color 0.3s ease;
     }
+    .card:hover {
+      box-shadow: var(--shadow-glow), var(--shadow-card);
+      border-color: rgba(255,255,255,0.15);
+    }
+
+    .card h3 {
+      margin: 0 0 24px;
+      font-size: 18px;
+      font-weight: 600;
+      color: var(--text-primary);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      letter-spacing: -0.01em;
+    }
+
+    /* Grid Layout */
     .grid {
       display: grid;
-      grid-template-columns: 1.2fr 0.8fr;
-      gap: 18px;
-      align-items: start;
+      grid-template-columns: 1.4fr 1fr;
+      gap: 24px;
+      align-items: stretch;
     }
-    .card {
-      background: var(--glass);
-      border: 1px solid var(--glass-border);
-      border-radius: 16px;
-      padding: 18px 18px 16px;
-      box-shadow: var(--shadow);
-      backdrop-filter: var(--blur);
+    @media (max-width: 900px) {
+      .grid { grid-template-columns: 1fr; }
+    }
+
+    /* Upload Area */
+    .upload {
+      border: 2px dashed var(--glass-border);
+      border-radius: var(--radius-lg);
+      padding: 40px 20px;
+      text-align: center;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      background: rgba(0,0,0,0.2);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 16px;
       position: relative;
       overflow: hidden;
-    }
-    .card::before {
-      content: "";
-      position: absolute;
-      inset: 0;
-      background: linear-gradient(135deg, rgba(255,255,255,0.06), transparent);
-      pointer-events: none;
-    }
-    .card h3 {
-      margin: 0 0 12px;
-      font-size: 18px;
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      letter-spacing: 0.01em;
-    }
-    .muted { color: var(--muted); font-size: 13px; }
-
-    .upload {
-      border: 1px dashed var(--glass-border);
-      padding: 14px;
-      border-radius: 12px;
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      background: rgba(255,255,255,0.02);
-      transition: border-color 0.2s ease, background 0.2s ease;
     }
     .upload:hover {
-      border-color: var(--accent);
-      background: rgba(255,255,255,0.04);
+      border-color: var(--primary);
+      background: rgba(99, 102, 241, 0.05);
     }
     .upload input { display: none; }
-    .btn {
-      padding: 10px 16px;
-      border-radius: 12px;
-      border: none;
-      color: #0c0f1f;
-      font-weight: 600;
-      cursor: pointer;
-      background: linear-gradient(135deg, var(--accent), var(--accent-3));
-      box-shadow: 0 8px 24px rgba(102,255,226,0.25);
-      transition: transform 0.12s ease, box-shadow 0.12s ease;
+    .upload-icon {
+      font-size: 32px;
+      opacity: 0.8;
+      filter: drop-shadow(0 0 10px rgba(255,255,255,0.2));
     }
-    .btn:hover { transform: translateY(-1px); box-shadow: 0 12px 30px rgba(102,255,226,0.32); }
+
+    /* Buttons */
+    .btn {
+      padding: 12px 24px;
+      border-radius: var(--radius-md);
+      border: none;
+      font-family: inherit;
+      font-weight: 600;
+      font-size: 14px;
+      cursor: pointer;
+      transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+    .btn-primary {
+      background: linear-gradient(135deg, var(--primary), var(--primary-hover));
+      color: white;
+      box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
+    }
+    .btn-primary:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 24px rgba(99, 102, 241, 0.4);
+    }
+    .btn-secondary {
+      background: rgba(255,255,255,0.05);
+      color: var(--text-primary);
+      border: 1px solid var(--glass-border);
+    }
+    .btn-secondary:hover {
+      background: rgba(255,255,255,0.1);
+      border-color: rgba(255,255,255,0.2);
+      transform: translateY(-2px);
+    }
     .btn:active { transform: translateY(0); }
 
+    /* Progress */
     .progress {
-      position: relative;
-      height: 10px;
-      border-radius: 999px;
+      height: 6px;
       background: rgba(255,255,255,0.08);
+      border-radius: 99px;
       overflow: hidden;
-      margin: 8px 0 6px;
+      margin: 20px 0 12px;
     }
     .progress .bar {
       height: 100%;
-      border-radius: 999px;
-      background: linear-gradient(90deg, var(--accent), var(--accent-2), var(--accent-3));
+      background: linear-gradient(90deg, var(--primary), var(--secondary));
       width: 0%;
-      transition: width 0.35s ease;
-    }
-    .progress-meta {
-      display: flex;
-      justify-content: space-between;
-      color: var(--muted);
-      font-size: 12px;
-    }
-    .progress-sub {
-      display: flex;
-      justify-content: space-between;
-      color: var(--muted);
-      font-size: 12px;
-      margin-top: 4px;
+      transition: width 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+      box-shadow: 0 0 15px rgba(99, 102, 241, 0.4);
     }
 
-    .chips {
-      display: flex;
-      gap: 8px;
-      flex-wrap: wrap;
-      margin: 6px 0 2px;
-    }
-    .chip {
-      padding: 6px 10px;
-      border-radius: 999px;
-      background: rgba(255,255,255,0.06);
-      border: 1px solid var(--glass-border);
-      font-size: 12px;
-      color: var(--text);
-    }
-
+    /* Logs */
     .logs {
-      background: rgba(0,0,0,0.35);
+      background: #050505;
       border: 1px solid var(--glass-border);
-      border-radius: 12px;
-      padding: 12px;
-      height: 260px;
-      overflow: auto;
-      font-family: "JetBrains Mono", Consolas, monospace;
-      font-size: 12px;
-      color: #d2d8f0;
-      line-height: 1.4;
-      box-shadow: inset 0 0 0 1px rgba(255,255,255,0.02);
+      border-radius: var(--radius-lg);
+      padding: 20px;
+      height: 320px;
+      overflow-y: auto;
+      font-family: "JetBrains Mono", "Fira Code", monospace;
+      font-size: 13px;
+      line-height: 1.6;
+      color: #e2e8f0;
+      box-shadow: inset 0 2px 10px rgba(0,0,0,0.5);
     }
     .log-line {
-      margin-bottom: 6px;
+      margin-bottom: 4px;
       display: flex;
-      gap: 8px;
+      gap: 12px;
     }
-    .log-time { color: #7ddac8; white-space: nowrap; }
-    .log-text { flex: 1; }
+    .log-time { color: var(--text-tertiary); font-size: 12px; user-select: none; min-width: 60px; }
+    .log-text { word-break: break-word; }
 
-    .badge {
-      padding: 4px 8px;
-      border-radius: 8px;
-      background: rgba(255,255,255,0.08);
-      border: 1px solid var(--glass-border);
-      font-size: 12px;
-      color: var(--text);
-      display: inline-block;
-      margin-left: 6px;
-    }
-
+    /* Timeline */
     .timeline {
-      margin-top: 10px;
-      border-left: 2px solid rgba(255,255,255,0.12);
-      padding-left: 14px;
-      display: grid;
-      gap: 8px;
+      margin-top: 32px;
+      padding-left: 8px;
     }
     .step {
       position: relative;
-      padding-left: 6px;
+      padding-left: 28px;
+      padding-bottom: 28px;
+      border-left: 2px solid var(--glass-border);
     }
+    .step:last-child { border-left-color: transparent; padding-bottom: 0; }
     .step::before {
       content: "";
       position: absolute;
-      left: -17px; top: 6px;
+      left: -6px; top: 2px;
       width: 10px; height: 10px;
       border-radius: 50%;
-      background: linear-gradient(135deg, var(--accent), var(--accent-2));
-      box-shadow: 0 0 0 4px rgba(102,255,226,0.15);
+      background: var(--bg-base);
+      border: 2px solid var(--text-tertiary);
+      transition: all 0.3s ease;
     }
-    .step-title { font-weight: 600; font-size: 13px; }
-    .step-desc { color: var(--muted); font-size: 12px; margin-top: 2px; }
+    /* We can use JS to add .active class, or just style all for now */
+    .step::before {
+      border-color: var(--primary);
+      box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.1);
+    }
+    .step-title { font-weight: 600; font-size: 14px; margin-bottom: 4px; color: var(--text-primary); }
+    .step-desc { color: var(--text-secondary); font-size: 13px; }
 
+    /* Chips & Badges */
+    .chips { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 16px; }
+    .chip {
+      padding: 6px 12px;
+      border-radius: 99px;
+      background: rgba(255,255,255,0.03);
+      border: 1px solid var(--glass-border);
+      font-size: 12px;
+      color: var(--text-secondary);
+      transition: background 0.2s;
+    }
+    .chip:hover { background: rgba(255,255,255,0.08); }
+    
+    .badge {
+      padding: 4px 10px;
+      border-radius: 6px;
+      background: rgba(99, 102, 241, 0.1);
+      color: var(--primary);
+      font-size: 12px;
+      font-weight: 600;
+      border: 1px solid rgba(99, 102, 241, 0.2);
+    }
+
+    /* Form Elements */
+    input, textarea {
+      background: rgba(0,0,0,0.3) !important;
+      border: 1px solid var(--glass-border) !important;
+      color: var(--text-primary) !important;
+      border-radius: var(--radius-md) !important;
+      transition: all 0.2s ease;
+      font-family: inherit;
+    }
+    input:focus, textarea:focus {
+      border-color: var(--primary) !important;
+      background: rgba(0,0,0,0.5) !important;
+      box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.2);
+    }
+    
+    /* Collapse */
     .collapse-header {
       display: flex;
       align-items: center;
       justify-content: space-between;
       cursor: pointer;
       user-select: none;
-      padding: 6px 0;
+      padding: 8px 0;
     }
     .collapse-icon {
-      font-size: 14px;
-      color: var(--muted);
-      transition: transform 0.2s ease;
+      font-size: 12px;
+      color: var(--text-secondary);
+      transition: transform 0.3s ease;
     }
-    .collapsed .collapse-icon {
-      transform: rotate(-90deg);
-    }
+    .card.collapsed .collapse-icon { transform: rotate(-90deg); }
+    
     .collapse-body {
-      max-height: 0;
-      overflow: hidden;
-      transition: max-height 0.25s ease, opacity 0.25s ease;
-      opacity: 0;
-    }
-    .collapsed .collapse-body {
-      max-height: 0;
-      opacity: 0;
-    }
-    .expanded .collapse-body {
-      max-height: none;
+      max-height: 2000px;
       opacity: 1;
-      overflow: visible;
+      overflow: hidden;
+      transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+      margin-top: 20px;
     }
+    .card.collapsed .collapse-body {
+      max-height: 0;
+      opacity: 0;
+      margin-top: 0;
+    }
+
+    /* Utilities */
+    .muted { color: var(--text-secondary); font-size: 13px; }
+    .flex-between { display: flex; justify-content: space-between; align-items: center; }
+    
+    /* Scrollbar */
+    ::-webkit-scrollbar { width: 8px; height: 8px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 4px; }
+    ::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.2); }
   </style>
 </head>
 <body>
   <div class="bg-aurora"></div>
   <div class="app">
     <div class="header">
-      <div class="title">文本大纲生成器</div>
+      <div class="title">Novel Outline Generator</div>
+      <div class="badge">v0.1.0</div>
     </div>
 
     <div class="grid">
+      <!-- Left Column -->
       <div class="card">
-        <h3>📂 文件选择 <span class="badge" id="fileStatus">未选择</span></h3>
+        <h3>📂 文件上传 <span class="badge" id="fileStatus" style="margin-left:auto;background:rgba(255,255,255,0.05);color:var(--text-secondary);border-color:var(--glass-border);">未选择</span></h3>
+        
         <label class="upload">
           <input type="file" id="fileInput" accept=".txt,.md,.text">
-          <div>
-            <div style="font-weight:600;">拖拽或点击选择小说文件</div>
-            <div class="muted">支持 txt / md / text，最大 100MB</div>
-          </div>
+          <div class="upload-icon">📄</div>
+          <div style="font-weight:500; color:var(--text-primary);">点击或拖拽上传小说文件</div>
+          <div class="muted">支持 .txt, .md (Max 100MB)</div>
         </label>
-        <div style="display:flex;gap:10px;margin-top:14px;">
-          <button class="btn" id="runBtn">开始处理</button>
-          <button class="btn" id="estimateBtn" style="background:linear-gradient(135deg,#7a5bff,#ff7fd1);">预测 Token</button>
-        </div>
+
         <div class="chips" id="metaChips"></div>
+
+        <div style="display:flex; gap:16px; margin-top:28px;">
+          <button class="btn btn-primary" id="runBtn" style="flex:1;">
+            <span>🚀</span> 开始生成大纲
+          </button>
+          <button class="btn btn-secondary" id="estimateBtn">
+            <span>📊</span> 预测 Token
+          </button>
+        </div>
+
         <div class="timeline" id="steps">
-          <div class="step"><div class="step-title">等待文件</div><div class="step-desc">选择文件后可开始处理</div></div>
+          <div class="step">
+            <div class="step-title">等待文件</div>
+            <div class="step-desc">请先上传小说文件</div>
+          </div>
         </div>
       </div>
 
-      <div class="card">
-        <h3>⏳ 进度</h3>
-        <div class="progress"><div class="bar" id="progressBar"></div></div>
-        <div class="progress-meta"><span id="progressText">0%</span><span id="statusText">就绪</span></div>
-        <div class="progress-sub"><span id="chunkText">块: 0 / 0</span><span id="etaText">预计剩余: --</span></div>
-        <h3 style="margin-top:18px;">🧠 模型信息</h3>
+      <!-- Right Column -->
+      <div class="card" style="display:flex; flex-direction:column;">
+        <h3>⚡ 任务进度</h3>
+        
+        <div class="progress">
+          <div class="bar" id="progressBar"></div>
+        </div>
+        
+        <div class="flex-between" style="margin-top:12px;">
+          <span class="muted" id="statusText">就绪</span>
+          <span style="font-weight:600; color:var(--primary);" id="progressText">0%</span>
+        </div>
+        
+        <div class="flex-between" style="margin-top:6px;">
+          <span class="muted" id="chunkText">块: 0 / 0</span>
+          <span class="muted" id="etaText">剩余: --</span>
+        </div>
+
+        <div style="height:1px; background:var(--glass-border); margin: 28px 0; margin-top: auto;"></div>
+
+        <h3>🤖 模型配置</h3>
         <div class="chips" id="modelChips">
           <span class="chip">Provider: --</span>
           <span class="chip">Model: --</span>
-          <span class="chip">并发: --</span>
         </div>
       </div>
     </div>
 
-    <div class="card" style="margin-top:16px;">
+    <!-- Logs -->
+    <div class="card" style="margin-top:24px;">
       <h3>📜 运行日志</h3>
       <div class="logs" id="logBox"></div>
     </div>
 
-    <div class="card" style="margin-top:16px;">
+    <!-- Settings -->
+    <div class="card" style="margin-top:24px;">
       <div class="collapse-header" id="envToggle">
-        <h3 style="margin:0; display:flex; align-items:center; gap:8px;">⚙️ 配置 (.env)</h3>
+        <h3 style="margin:0; display:flex; align-items:center; gap:10px;">⚙️ 环境配置 <span class="muted" style="font-weight:400; font-size:14px;">(.env - 仅查看)</span></h3>
         <span class="collapse-icon">▼</span>
       </div>
-      <div class="muted">在此直接修改配置，保存后后端自动更新 .env</div>
+      
       <div class="collapse-body" id="envSection">
-        <div id="envForm" style="display:grid;grid-template-columns:repeat(2, minmax(0, 1fr));gap:12px;margin-top:12px;"></div>
-        <div style="display:flex;gap:10px;margin-top:12px;">
-          <button class="btn" id="saveEnvBtn">保存配置</button>
-          <button class="btn" style="background:linear-gradient(135deg,#7a5bff,#ff7fd1);" id="reloadEnvBtn">刷新</button>
+        <div id="envForm" style="display:grid; grid-template-columns:repeat(auto-fit, minmax(300px, 1fr)); gap:20px;"></div>
+        
+        <div style="display:flex; gap:12px; margin-top:28px; justify-content:flex-end;">
+          <button class="btn btn-secondary" id="reloadEnvBtn">🔄 刷新配置</button>
         </div>
       </div>
     </div>
@@ -344,7 +444,6 @@
     const modelChips = document.getElementById('modelChips');
 
     const envForm = document.getElementById('envForm');
-    const saveEnvBtn = document.getElementById('saveEnvBtn');
     const reloadEnvBtn = document.getElementById('reloadEnvBtn');
     const envToggle = document.getElementById('envToggle');
     const envSection = document.getElementById('envSection');
@@ -393,6 +492,10 @@
       const file = fileInput.files[0];
       if (!file) return;
       fileStatus.textContent = file.name;
+      fileStatus.style.color = 'var(--primary)';
+      fileStatus.style.borderColor = 'var(--primary)';
+      fileStatus.style.background = 'rgba(99, 102, 241, 0.1)';
+      
       metaChips.innerHTML = `
         <span class="chip">大小: ${(file.size/1024/1024).toFixed(2)} MB</span>
         <span class="chip">类型: ${file.type || 'text/plain'}</span>
@@ -483,50 +586,90 @@
     document.getElementById('runBtn').addEventListener('click', () => startJob());
 
     // env form
-    const envFields = [
-      'API_PROVIDER','OPENAI_API_KEY','OPENAI_MODEL','OPENAI_API_BASE',
-      'GEMINI_API_KEY','GEMINI_MODEL',
-      'ZHIPU_API_KEY','ZHIPU_MODEL','ZHIPU_API_BASE',
-      'MODEL_MAX_TOKENS','TARGET_TOKENS_PER_CHUNK','PARALLEL_LIMIT','MAX_RETRY','LOG_EVERY',
-      'OUTLINE_PROMPT_TEMPLATE'
+    const envFieldGroups = [
+      {
+        title: '基础配置',
+        fields: ['API_PROVIDER']
+      },
+      {
+        title: 'OpenAI API 配置',
+        fields: ['OPENAI_API_KEY', 'OPENAI_MODEL', 'OPENAI_API_BASE']
+      },
+      {
+        title: 'Google Gemini API 配置',
+        fields: ['GEMINI_API_KEY', 'GEMINI_MODEL', 'GEMINI_SAFETY_SETTINGS']
+      },
+      {
+        title: '智谱 AI 配置',
+        fields: ['ZHIPU_API_KEY', 'ZHIPU_MODEL', 'ZHIPU_API_BASE']
+      },
+      {
+        title: '处理参数',
+        fields: ['MODEL_MAX_TOKENS', 'TARGET_TOKENS_PER_CHUNK', 'PARALLEL_LIMIT', 'MAX_RETRY', 'LOG_EVERY']
+      },
+      {
+        title: '系统配置',
+        fields: ['LOG_LEVEL', 'USE_PROXY', 'PROXY_URL', 'CORS_ORIGINS']
+      },
+      {
+        title: '提示词模板',
+        fields: ['OUTLINE_PROMPT_TEMPLATE']
+      }
     ];
     const multilineFields = new Set(['OUTLINE_PROMPT_TEMPLATE']);
 
     function renderEnvForm(values) {
       envForm.innerHTML = '';
-      envFields.forEach(key => {
-        const isMultiline = multilineFields.has(key);
-        const val = values[key] || '';
-        const displayValue = isMultiline ? val.replace(/\\n/g, '\n') : val;
-        const wrap = document.createElement('div');
-        if (isMultiline) {
-          wrap.style.gridColumn = 'span 2';
-        }
+      
+      envFieldGroups.forEach(group => {
+        // 创建分组标题
+        const groupTitle = document.createElement('div');
+        groupTitle.style.gridColumn = '1 / -1';
+        groupTitle.style.fontSize = '14px';
+        groupTitle.style.fontWeight = '600';
+        groupTitle.style.color = 'var(--text-primary)';
+        groupTitle.style.marginTop = group === envFieldGroups[0] ? '0' : '20px';
+        groupTitle.style.marginBottom = '12px';
+        groupTitle.style.paddingBottom = '8px';
+        groupTitle.style.borderBottom = '1px solid var(--glass-border)';
+        groupTitle.textContent = group.title;
+        envForm.appendChild(groupTitle);
+        
+        // 渲染字段
+        group.fields.forEach(key => {
+          const isMultiline = multilineFields.has(key);
+          const val = values[key] || '';
+          const displayValue = isMultiline ? val.replace(/\\n/g, '\n') : val;
+          const wrap = document.createElement('div');
+          if (isMultiline) {
+            wrap.style.gridColumn = '1 / -1';
+          }
 
-        const label = document.createElement('label');
-        label.style.fontSize = '12px';
-        label.style.color = 'var(--muted)';
-        label.textContent = key;
+          const label = document.createElement('label');
+          label.style.fontSize = '12px';
+          label.style.color = 'var(--text-secondary)';
+          label.style.marginBottom = '6px';
+          label.style.display = 'block';
+          label.textContent = key;
 
-        const field = isMultiline ? document.createElement('textarea') : document.createElement('input');
-        field.dataset.key = key;
-        field.value = displayValue;
-        field.style.width = '100%';
-        field.style.padding = '8px 10px';
-        field.style.borderRadius = '10px';
-        field.style.border = '1px solid var(--glass-border)';
-        field.style.background = 'rgba(255,255,255,0.05)';
-        field.style.color = 'var(--text)';
-        field.style.outline = 'none';
-        if (isMultiline) {
-          field.rows = 14;
-          field.style.resize = 'vertical';
-          field.style.whiteSpace = 'pre-wrap';
-        }
+          const field = isMultiline ? document.createElement('textarea') : document.createElement('input');
+          field.dataset.key = key;
+          field.value = displayValue;
+          field.readOnly = true;
+          field.style.width = '100%';
+          field.style.padding = '10px 12px';
+          field.style.opacity = '0.7';
+          field.style.cursor = 'default';
+          if (isMultiline) {
+            field.rows = 10;
+            field.style.resize = 'vertical';
+            field.style.whiteSpace = 'pre-wrap';
+          }
 
-        wrap.appendChild(label);
-        wrap.appendChild(field);
-        envForm.appendChild(wrap);
+          wrap.appendChild(label);
+          wrap.appendChild(field);
+          envForm.appendChild(wrap);
+        });
       });
     }
 
@@ -544,36 +687,14 @@
           parallel: env.PARALLEL_LIMIT
         });
       } catch (e) {
-        addLog('加载 .env 失败: ' + e);
+        addLog('加载 .env 配置失败: ' + e);
       }
     }
 
-    async function saveEnv() {
-      const inputs = envForm.querySelectorAll('[data-key]');
-      const updates = {};
-      inputs.forEach(inp => {
-        const key = inp.dataset.key;
-        let value = inp.value;
-        if (multilineFields.has(key)) {
-          value = value.replace(/\r?\n/g, '\\n');
-        }
-        updates[key] = value;
-      });
-      try {
-        const res = await fetch(API_BASE + '/env', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ updates })
-        });
-        if (!res.ok) throw new Error(await res.text());
-        addLog('配置已保存到 .env');
-      } catch (e) {
-        addLog('保存失败: ' + e);
-      }
-    }
-
-    saveEnvBtn.addEventListener('click', saveEnv);
-    reloadEnvBtn.addEventListener('click', loadEnv);
+    reloadEnvBtn.addEventListener('click', () => {
+      addLog('正在刷新配置...');
+      loadEnv();
+    });
 
     // 折叠/展开 env 配置
     envToggle.addEventListener('click', () => {

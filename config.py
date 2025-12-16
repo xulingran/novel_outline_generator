@@ -47,14 +47,27 @@ class APIConfig:
         if self.provider not in ['openai', 'gemini', 'zhipu']:
             raise ConfigurationError(f"不支持的API提供商: {self.provider}. 支持的提供商: openai, gemini, zhipu")
 
-        if self.provider == 'openai' and not self.openai_key:
-            raise ConfigurationError("使用OpenAI API时必须设置OPENAI_API_KEY环境变量")
+        if self.provider == 'openai':
+            if not self.openai_key or 'your_' in self.openai_key.lower() or 'here' in self.openai_key.lower():
+                raise ConfigurationError(
+                    "使用OpenAI API时必须设置OPENAI_API_KEY环境变量。\n"
+                    "当前值看起来像是占位符，请在 .env 文件中填入真实的 API Key。\n"
+                    "提示：OpenAI API Key 通常以 'sk-' 开头"
+                )
 
-        if self.provider == 'gemini' and not self.gemini_key:
-            raise ConfigurationError("使用Gemini API时必须设置GEMINI_API_KEY环境变量")
+        if self.provider == 'gemini':
+            if not self.gemini_key or 'your_' in self.gemini_key.lower() or 'here' in self.gemini_key.lower():
+                raise ConfigurationError(
+                    "使用Gemini API时必须设置GEMINI_API_KEY环境变量。\n"
+                    "当前值看起来像是占位符，请在 .env 文件中填入真实的 API Key"
+                )
 
-        if self.provider == 'zhipu' and not self.zhipu_key:
-            raise ConfigurationError("使用智谱API时必须设置ZHIPU_API_KEY环境变量")
+        if self.provider == 'zhipu':
+            if not self.zhipu_key or 'your_' in self.zhipu_key.lower() or 'here' in self.zhipu_key.lower():
+                raise ConfigurationError(
+                    "使用智谱API时必须设置ZHIPU_API_KEY环境变量。\n"
+                    "当前值看起来像是占位符，请在 .env 文件中填入真实的 API Key"
+                )
 
         self._validated = True
 
