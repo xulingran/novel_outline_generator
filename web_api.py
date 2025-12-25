@@ -12,13 +12,14 @@ import asyncio
 import uuid
 import time
 import os
+from collections import defaultdict, deque
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Dict, Any, List, Optional, Set
 
 import shutil
 
-from fastapi import FastAPI, UploadFile, File, HTTPException
+from fastapi import FastAPI, UploadFile, File, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
@@ -75,6 +76,27 @@ ALLOWED_KEYS = {
 }
 
 
+class RateLimiter:
+    """简单内存限流器，按 IP 在时间窗口内计数。"""
+
+    def __init__(self) -> None:
+        self._requests = defaultdict(deque)
+
+    def check_rate_limit(self, client_ip: str, max_requests: int, window_seconds: int) -> None:
+        now = time.time()
+        window_start = now - window_seconds
+        bucket = self._requests[client_ip]
+        # 清理窗口外的请求时间戳
+        while bucket and bucket[0] < window_start:
+            bucket.popleft()
+        if len(bucket) >= max_requests:
+            raise HTTPException(status_code=429, detail="请求过于频繁，请稍后再试")
+        bucket.append(now)
+
+
+rate_limiter = RateLimiter()
+
+
 def load_env_file() -> Dict[str, str]:
     if not ENV_PATH.exists():
         return {}
@@ -105,10 +127,6 @@ def mask_value(key: str, value: str) -> str:
             return ""
         return "*" * max(4, len(value) - 4) + value[-4:]
     return value
-
-
-class EnvUpdate(BaseModel):
-    updates: Dict[str, str]
 
 
 class ProcessRequest(BaseModel):
@@ -220,6 +238,13 @@ app.add_middleware(
 )
 
 
+@app.on_event("shutdown")
+async def shutdown_event():
+    """应用关闭时清理资源"""
+    from services.llm_service import OpenAIService
+    await OpenAIService.close_http_clients()
+
+
 @app.get("/env")
 def get_env() -> Dict[str, Any]:
     data = load_env_file()
@@ -228,9 +253,19 @@ def get_env() -> Dict[str, Any]:
 
 
 @app.post("/upload")
-async def upload_file(file: UploadFile = File(...)):
+async def upload_file(request: Request, file: UploadFile = File(...)):
+    client_host = request.client.host if request.client else "unknown"
+    rate_limiter.check_rate_limit(client_host, 10, 60)
     if file.content_type not in ("text/plain", "text/markdown", "application/octet-stream"):
         raise HTTPException(status_code=400, detail="仅支持文本文件")
+
+    # 验证文件名存在
+    if not file.filename:
+        raise HTTPException(status_code=400, detail="文件名不能为空")
+
+    suffix = Path(file.filename).suffix.lower()
+    if suffix not in (".txt", ".md"):
+        raise HTTPException(status_code=400, detail="仅支持.txt 或 .md 文件")
     UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
     dest = UPLOAD_DIR / file.filename
     content = await file.read()
@@ -300,7 +335,9 @@ async def _run_job(job: Job, req: ProcessRequest):
 
 
 @app.post("/process")
-async def start_process(req: ProcessRequest):
+async def start_process(request: Request, req: ProcessRequest):
+    client_host = request.client.host if request.client else "unknown"
+    rate_limiter.check_rate_limit(client_host, 5, 60)
     if not req.file_path:
         raise HTTPException(status_code=400, detail="file_path 不能为空")
     if not Path(req.file_path).exists():

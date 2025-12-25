@@ -141,17 +141,63 @@ class LLMService(ABC):
 class OpenAIService(LLMService):
     """OpenAI服务实现"""
 
+    _http_client: Optional["httpx.AsyncClient"] = None
+    _proxy_clients: Dict[str, "httpx.AsyncClient"] = {}
+
+    @classmethod
+    def get_http_client(cls, proxy_url: Optional[str] = None) -> "httpx.AsyncClient":
+        import httpx
+
+        if proxy_url:
+            client = cls._proxy_clients.get(proxy_url)
+            if client is None:
+                client = httpx.AsyncClient(
+                    proxies=proxy_url,
+                    limits=httpx.Limits(max_connections=100),
+                    timeout=60.0
+                )
+                cls._proxy_clients[proxy_url] = client
+            return client
+
+        if cls._http_client is None:
+            cls._http_client = httpx.AsyncClient(
+                limits=httpx.Limits(max_connections=100),
+                timeout=60.0
+            )
+        return cls._http_client
+
+    @classmethod
+    async def close_http_clients(cls) -> None:
+        """关闭所有HTTP客户端连接池"""
+        import httpx
+
+        # 关闭代理客户端
+        for proxy_url, client in list(cls._proxy_clients.items()):
+            try:
+                await client.aclose()
+                logger.debug(f"已关闭代理客户端: {proxy_url}")
+            except Exception as e:
+                logger.warning(f"关闭代理客户端失败 ({proxy_url}): {e}")
+        cls._proxy_clients.clear()
+
+        # 关闭主客户端
+        if cls._http_client is not None:
+            try:
+                await cls._http_client.aclose()
+                logger.debug("已关闭主HTTP客户端")
+            except Exception as e:
+                logger.warning(f"关闭主HTTP客户端失败: {e}")
+            cls._http_client = None
+
     def _init_client(self) -> None:
         """初始化OpenAI客户端"""
         try:
             from openai import AsyncOpenAI
-            import httpx
 
-            # 配置代理
-            http_client = None
-            if self.processing_config.use_proxy and self.processing_config.proxy_url:
-                http_client = httpx.AsyncClient(proxies=self.processing_config.proxy_url)
-                logger.debug(f"OpenAI客户端配置代理: {self.processing_config.proxy_url}")
+            proxy_url = self.processing_config.proxy_url if self.processing_config.use_proxy else None
+            http_client = self.get_http_client(proxy_url)
+            if proxy_url:
+                logger.debug(f"OpenAI客户端配置代理: {proxy_url}")
 
             self.client = AsyncOpenAI(
                 api_key=self.api_config.api_key,
