@@ -85,8 +85,8 @@ class LLMService(ABC):
         """调用API的具体实现"""
         pass
 
-    async def call(self, prompt: str, chunk_id: Optional[int] = None) -> str:
-        """统一的调用接口"""
+    async def call(self, prompt: str, chunk_id: Optional[int] = None) -> LLMResponse:
+        """统一的调用接口，返回完整的响应对象（包含token使用情况）"""
         chunk_info = f" [块 {chunk_id}]" if chunk_id else ""
 
         # 检查熔断器
@@ -101,14 +101,14 @@ class LLMService(ABC):
                     logger.debug(f"调用LLM API{chunk_info}...")
 
                 start_time = datetime.now()
-                response = await self._call_api(prompt)
+                llm_response = await self._call_api(prompt)
                 response_time = (datetime.now() - start_time).total_seconds()
 
                 # 记录成功
                 self.circuit_breaker.record_success()
 
                 logger.debug(f"LLM API调用成功{chunk_info}，耗时: {response_time:.2f}秒")
-                return response.content
+                return llm_response
 
             except RateLimitError as e:
                 # 速率限制错误，等待更长时间

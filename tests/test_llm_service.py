@@ -30,7 +30,8 @@ class DummyService(LLMService):
 async def test_call_success():
     service = DummyService([LLMResponse(content="ok")])
     service.processing_config.max_retry = 1
-    assert await service.call("ping") == "ok"
+    response = await service.call("ping")
+    assert response.content == "ok"
     assert service.call_count == 1
 
 
@@ -49,7 +50,8 @@ async def test_retry_on_retryable_error(monkeypatch):
     ])
     service.processing_config.max_retry = 2
 
-    assert await service.call("ping") == "ok"
+    response = await service.call("ping")
+    assert response.content == "ok"
     assert service.call_count == 2
     assert sleep_calls
 
@@ -70,7 +72,8 @@ async def test_rate_limit_uses_retry_after(monkeypatch):
     ])
     service.processing_config.max_retry = 2
 
-    assert await service.call("ping") == "ok"
+    response = await service.call("ping")
+    assert response.content == "ok"
     assert sleep_calls == [2]
 
 

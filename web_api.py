@@ -150,7 +150,8 @@ class Job:
         self.logs.append(text)
         if len(self.logs) > 200:
             # 只保留最近 200 条，避免内存增长过快
-            self.logs = self.logs[-200:]
+            # 使用 del 删除而非重新赋值，避免 list 对象变化导致前端轮询失效
+            del self.logs[:-200]
 
 
 JOBS: Dict[str, Job] = {}
@@ -306,6 +307,16 @@ async def _run_job(job: Job, req: ProcessRequest):
         job.result.update(result)
         job.progress = 1.0
         job.status = "success"
+
+        # 输出token统计
+        if "token_usage" in result:
+            token_usage = result["token_usage"]
+            prompt_tokens = token_usage.get("prompt_tokens", 0)
+            completion_tokens = token_usage.get("completion_tokens", 0)
+            total_tokens = token_usage.get("total_tokens", 0)
+
+            job.log(f"Token统计: 输入={prompt_tokens:,}, 输出={completion_tokens:,}, 总计={total_tokens:,}")
+
         job.log("处理完成")
         try:
             current_upload = _resolve_upload_path(req.file_path)

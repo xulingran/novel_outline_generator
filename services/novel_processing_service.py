@@ -34,6 +34,10 @@ class NovelProcessingService:
         self.processing_state: Optional[ProcessingState] = None
         self.progress_callback = progress_callback
         self.current_progress_data: Optional[ProgressData] = None
+        # Token统计
+        self.total_prompt_tokens = 0
+        self.total_completion_tokens = 0
+        self.total_tokens = 0
 
     async def process_novel(self,
                           file_path: str,
@@ -50,7 +54,11 @@ class NovelProcessingService:
         Returns:
             Dict[str, Any]: 处理结果
         """
-        # 初始化处理状态
+        # 重置token统计（确保每次处理都是新的统计）
+        self.total_prompt_tokens = 0
+        self.total_completion_tokens = 0
+        self.total_tokens = 0
+
         # 初始化处理状态，块数后续拆分时再更新
         self.processing_state = ProcessingState(file_path=file_path, total_chunks=0)
         self.processing_state.current_phase = "loading"
@@ -108,7 +116,12 @@ class NovelProcessingService:
                 "final_outline": final_outline,
                 "chunk_count": len(chunks),
                 "processing_time": self.processing_state.elapsed_time,
-                "output_dir": self.processing_config.output_dir
+                "output_dir": self.processing_config.output_dir,
+                "token_usage": {
+                    "prompt_tokens": self.total_prompt_tokens,
+                    "completion_tokens": self.total_completion_tokens,
+                    "total_tokens": self.total_tokens
+                }
             }
 
         except Exception as e:
@@ -249,7 +262,20 @@ class NovelProcessingService:
                 prompt = chunk_prompt(chunk.content, chunk_id)
 
                 # 调用LLM
-                response = await self.llm_service.call(prompt, chunk_id)
+                llm_response = await self.llm_service.call(prompt, chunk_id)
+                response = llm_response.content
+
+                # 累计token使用情况
+                if llm_response.token_usage:
+                    prompt_tokens = llm_response.token_usage.get('prompt_tokens', 0) or 0
+                    completion_tokens = llm_response.token_usage.get('completion_tokens', 0) or 0
+                    total_tokens = llm_response.token_usage.get('total_tokens', 0) or 0
+
+                    self.total_prompt_tokens += prompt_tokens
+                    self.total_completion_tokens += completion_tokens
+                    self.total_tokens += total_tokens
+
+                    logger.debug(f"块 {chunk_id} Token使用: 输入={prompt_tokens}, 输出={completion_tokens}, 总计={total_tokens}")
 
                 # 尝试解析JSON响应
                 outline_data = self._parse_llm_response(response, chunk_id)
@@ -341,7 +367,21 @@ class NovelProcessingService:
         if input_tokens <= max_input_tokens:
             # 直接合并
             logger.debug(f"层级 {level}: 合并 {len(outlines)} 个大纲块")
-            return await self.llm_service.call(merge_prompt_text)
+            llm_response = await self.llm_service.call(merge_prompt_text)
+
+            # 累计token使用情况
+            if llm_response.token_usage:
+                prompt_tokens = llm_response.token_usage.get('prompt_tokens', 0) or 0
+                completion_tokens = llm_response.token_usage.get('completion_tokens', 0) or 0
+                total_tokens = llm_response.token_usage.get('total_tokens', 0) or 0
+
+                self.total_prompt_tokens += prompt_tokens
+                self.total_completion_tokens += completion_tokens
+                self.total_tokens += total_tokens
+
+                logger.debug(f"合并 Token使用: 输入={prompt_tokens}, 输出={completion_tokens}, 总计={total_tokens}")
+
+            return llm_response.content
 
         # 需要拆分
         logger.warning(f"层级 {level}: 输入过大，拆分为多个批次")
