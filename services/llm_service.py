@@ -4,6 +4,7 @@ LLM服务模块
 """
 
 import asyncio
+import inspect
 import logging
 import random
 from abc import ABC, abstractmethod
@@ -17,6 +18,18 @@ from config import get_api_config, get_processing_config
 from exceptions import APIError, APIKeyError, RateLimitError
 
 logger = logging.getLogger(__name__)
+
+
+def _httpx_proxy_kwargs(
+    client_class: type[httpx.Client] | type[httpx.AsyncClient], proxy_url: str
+) -> dict[str, Any]:
+    """Support both proxy/proxies kwargs across httpx versions."""
+    params = inspect.signature(client_class.__init__).parameters
+    if "proxy" in params:
+        return {"proxy": proxy_url}
+    if "proxies" in params:
+        return {"proxies": proxy_url}
+    return {}
 
 
 @dataclass
@@ -154,8 +167,9 @@ class OpenAIService(LLMService):
         if proxy_url:
             client = cls._proxy_clients.get(proxy_url)
             if client is None:
+                proxy_kwargs = _httpx_proxy_kwargs(httpx.AsyncClient, proxy_url)
                 client = httpx.AsyncClient(
-                    proxies=proxy_url, limits=httpx.Limits(max_connections=100), timeout=60.0
+                    **proxy_kwargs, limits=httpx.Limits(max_connections=100), timeout=60.0
                 )
                 cls._proxy_clients[proxy_url] = client
             return client
@@ -364,7 +378,8 @@ class ZhipuService(LLMService):
             if self.processing_config.use_proxy and self.processing_config.proxy_url:
                 import httpx
 
-                http_client = httpx.Client(proxies=self.processing_config.proxy_url)
+                proxy_kwargs = _httpx_proxy_kwargs(httpx.Client, self.processing_config.proxy_url)
+                http_client = httpx.Client(**proxy_kwargs)
                 logger.debug(f"智谱客户端配置代理: {self.processing_config.proxy_url}")
 
             self.client = ZhipuAI(

@@ -85,6 +85,13 @@ class NovelProcessingService:
             self.processing_state.current_phase = "merging"
             self._emit_progress()
             final_outline = await self.merge_outlines_recursive(outlines)
+            self._emit_progress(
+                token_usage={
+                    "prompt_tokens": self.total_prompt_tokens,
+                    "completion_tokens": self.total_completion_tokens,
+                    "total_tokens": self.total_tokens,
+                }
+            )
 
             # 5. 保存结果
             if output_dir:
@@ -489,7 +496,12 @@ class NovelProcessingService:
 
         return self.processing_state.get_summary()
 
-    def _emit_progress(self, chunk_id: int | None = None, error: str | None = None) -> None:
+    def _emit_progress(
+        self,
+        chunk_id: int | None = None,
+        error: str | None = None,
+        token_usage: dict[str, int] | None = None,
+    ) -> None:
         """向外部回调当前进度，便于 Web UI 实时显示。
         设计为尽量轻量、容错，不影响主流程。
         """
@@ -522,6 +534,8 @@ class NovelProcessingService:
             payload["last_chunk_id"] = chunk_id
         if error is not None:
             payload["last_error"] = error
+        if token_usage is not None:
+            payload["token_usage"] = token_usage
 
         try:
             self.progress_callback(payload)

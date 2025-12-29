@@ -145,6 +145,8 @@ class Job:
     progress: float = 0.0
     result: dict[str, Any] = field(default_factory=dict)
     logs: list[str] = field(default_factory=list)
+    log_offset: int = 0
+    token_logged: bool = False
     created_at: float = field(default_factory=time.time)
 
     def log(self, text: str) -> None:
@@ -153,7 +155,9 @@ class Job:
         if len(self.logs) > 200:
             # 只保留最近 200 条，避免内存增长过快
             # 使用 del 删除而非重新赋值，避免 list 对象变化导致前端轮询失效
-            del self.logs[:-200]
+            overflow = len(self.logs) - 200
+            del self.logs[:overflow]
+            self.log_offset += overflow
 
 
 JOBS: dict[str, Job] = {}
@@ -302,6 +306,17 @@ async def _run_job(job: Job, req: ProcessRequest):
                 job.log(f"块 {info['last_chunk_id']} 失败: {info['last_error']}")
             else:
                 job.log(f"块 {info['last_chunk_id']} 完成")
+        if info.get("token_usage") and not job.token_logged:
+            token_usage = info["token_usage"]
+            job.result["token_usage"] = token_usage
+            prompt_tokens = token_usage.get("prompt_tokens", 0)
+            completion_tokens = token_usage.get("completion_tokens", 0)
+            total_tokens = token_usage.get("total_tokens", 0)
+            job.log(
+                "合并完成，Token统计: "
+                f"输入={prompt_tokens:,}, 输出={completion_tokens:,}, 总计={total_tokens:,}"
+            )
+            job.token_logged = True
 
     try:
         service = NovelProcessingService(progress_callback=handle_progress)
@@ -311,7 +326,7 @@ async def _run_job(job: Job, req: ProcessRequest):
         job.status = "success"
 
         # 输出token统计
-        if "token_usage" in result:
+        if "token_usage" in result and not job.token_logged:
             token_usage = result["token_usage"]
             prompt_tokens = token_usage.get("prompt_tokens", 0)
             completion_tokens = token_usage.get("completion_tokens", 0)
@@ -320,6 +335,7 @@ async def _run_job(job: Job, req: ProcessRequest):
             job.log(
                 f"Token统计: 输入={prompt_tokens:,}, 输出={completion_tokens:,}, 总计={total_tokens:,}"
             )
+            job.token_logged = True
 
         job.log("处理完成")
         try:
@@ -390,6 +406,7 @@ def get_job(job_id: str):
         "progress": job.progress,
         "result": job.result,
         "logs": job.logs,
+        "log_offset": job.log_offset,
     }
 
 

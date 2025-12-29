@@ -567,9 +567,15 @@
           etaText.textContent = '预计剩余: --';
         }
 
-        if (job.logs && job.logs.length > lastLogIndex) {
-          job.logs.slice(lastLogIndex).forEach(addLog);
-          lastLogIndex = job.logs.length;
+        const logOffset = job.log_offset || 0;
+        const logCount = logOffset + (job.logs ? job.logs.length : 0);
+        if (job.logs && logCount > lastLogIndex) {
+          const startIndex = Math.max(0, lastLogIndex - logOffset);
+          if (lastLogIndex > 0 && lastLogIndex < logOffset) {
+            addLog('日志已截断，展示最新 200 条');
+          }
+          job.logs.slice(startIndex).forEach(addLog);
+          lastLogIndex = logCount;
         }
 
         if (job.status === 'success' || job.status === 'error') {
