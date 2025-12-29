@@ -1,1 +1,1 @@
-# ²âÊÔ°ü³õÊ¼»¯
+# Test package init

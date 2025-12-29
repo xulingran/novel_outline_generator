@@ -2,7 +2,7 @@
 Pytest 配置文件
 为 CI 环境提供测试所需的环境变量
 """
-import os
+
 import pytest
 
 
@@ -10,15 +10,15 @@ import pytest
 def setup_test_env(monkeypatch):
     """为所有测试设置必要的环境变量"""
     # 设置 API 提供商为 openai（默认）
-    monkeypatch.setenv('API_PROVIDER', 'openai')
+    monkeypatch.setenv("API_PROVIDER", "openai")
 
     # 设置测试用的 API Key（不需要真实的 key，测试使用 mock）
-    monkeypatch.setenv('OPENAI_API_KEY', 'test-key-for-ci')
-    monkeypatch.setenv('OPENAI_MODEL', 'gpt-4o-mini')
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key-for-ci")
+    monkeypatch.setenv("OPENAI_MODEL", "gpt-4o-mini")
 
     # 设置其他可选的 API Key
-    monkeypatch.setenv('GEMINI_API_KEY', 'test-gemini-key')
-    monkeypatch.setenv('ZHIPU_API_KEY', 'test-zhipu-key')
+    monkeypatch.setenv("GEMINI_API_KEY", "test-gemini-key")
+    monkeypatch.setenv("ZHIPU_API_KEY", "test-zhipu-key")
 
 
 @pytest.fixture(autouse=True)

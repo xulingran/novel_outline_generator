@@ -2,41 +2,48 @@
 配置管理模块
 使用环境变量管理配置，提高安全性
 """
+
 import os
-from typing import Optional, List, Dict, Any
 from dataclasses import dataclass, field
-from exceptions import ConfigurationError, APIKeyError
+
+from exceptions import APIKeyError, ConfigurationError
 from prompts import DEFAULT_OUTLINE_PROMPT_TEMPLATE
 
 # 加载.env文件中的环境变量
 try:
     from dotenv import load_dotenv
+
     load_dotenv()
 except ImportError:
     # 如果没有安装python-dotenv，尝试手动加载
-    env_file = os.path.join(os.path.dirname(__file__), '.env')
+    env_file = os.path.join(os.path.dirname(__file__), ".env")
     if os.path.exists(env_file):
-        with open(env_file, 'r', encoding='utf-8') as f:
+        with open(env_file, encoding="utf-8") as f:
             for line in f:
                 line = line.strip()
-                if line and not line.startswith('#') and '=' in line:
-                    key, value = line.split('=', 1)
+                if line and not line.startswith("#") and "=" in line:
+                    key, value = line.split("=", 1)
                     os.environ[key.strip()] = value.strip()
 
 
 @dataclass
 class APIConfig:
     """API配置类"""
-    provider: str = field(default_factory=lambda: os.getenv('API_PROVIDER', 'openai'))
-    openai_key: Optional[str] = field(default_factory=lambda: os.getenv('OPENAI_API_KEY'))
-    openai_base: Optional[str] = field(default_factory=lambda: os.getenv('OPENAI_API_BASE'))
-    openai_model: str = field(default_factory=lambda: os.getenv('OPENAI_MODEL', 'gpt-4o-mini'))
-    gemini_key: Optional[str] = field(default_factory=lambda: os.getenv('GEMINI_API_KEY'))
-    gemini_model: str = field(default_factory=lambda: os.getenv('GEMINI_MODEL', 'gemini-2.5-flash'))
-    gemini_safety: str = field(default_factory=lambda: os.getenv('GEMINI_SAFETY_SETTINGS', 'BLOCK_NONE'))
-    zhipu_key: Optional[str] = field(default_factory=lambda: os.getenv('ZHIPU_API_KEY'))
-    zhipu_base: Optional[str] = field(default_factory=lambda: os.getenv('ZHIPU_API_BASE', 'https://open.bigmodel.cn/api/paas/v4'))
-    zhipu_model: str = field(default_factory=lambda: os.getenv('ZHIPU_MODEL', 'glm-4-flash'))
+
+    provider: str = field(default_factory=lambda: os.getenv("API_PROVIDER", "openai"))
+    openai_key: str | None = field(default_factory=lambda: os.getenv("OPENAI_API_KEY"))
+    openai_base: str | None = field(default_factory=lambda: os.getenv("OPENAI_API_BASE"))
+    openai_model: str = field(default_factory=lambda: os.getenv("OPENAI_MODEL", "gpt-4o-mini"))
+    gemini_key: str | None = field(default_factory=lambda: os.getenv("GEMINI_API_KEY"))
+    gemini_model: str = field(default_factory=lambda: os.getenv("GEMINI_MODEL", "gemini-2.5-flash"))
+    gemini_safety: str = field(
+        default_factory=lambda: os.getenv("GEMINI_SAFETY_SETTINGS", "BLOCK_NONE")
+    )
+    zhipu_key: str | None = field(default_factory=lambda: os.getenv("ZHIPU_API_KEY"))
+    zhipu_base: str | None = field(
+        default_factory=lambda: os.getenv("ZHIPU_API_BASE", "https://open.bigmodel.cn/api/paas/v4")
+    )
+    zhipu_model: str = field(default_factory=lambda: os.getenv("ZHIPU_MODEL", "glm-4-flash"))
     _validated: bool = field(default=False, init=False)
 
     def validate(self) -> None:
@@ -44,26 +51,40 @@ class APIConfig:
         if self._validated:
             return
 
-        if self.provider not in ['openai', 'gemini', 'zhipu']:
-            raise ConfigurationError(f"不支持的API提供商: {self.provider}. 支持的提供商: openai, gemini, zhipu")
+        if self.provider not in ["openai", "gemini", "zhipu"]:
+            raise ConfigurationError(
+                f"不支持的API提供商: {self.provider}. 支持的提供商: openai, gemini, zhipu"
+            )
 
-        if self.provider == 'openai':
-            if not self.openai_key or 'your_' in self.openai_key.lower() or 'here' in self.openai_key.lower():
+        if self.provider == "openai":
+            if (
+                not self.openai_key
+                or "your_" in self.openai_key.lower()
+                or "here" in self.openai_key.lower()
+            ):
                 raise ConfigurationError(
                     "使用OpenAI API时必须设置OPENAI_API_KEY环境变量。\n"
                     "当前值看起来像是占位符，请在 .env 文件中填入真实的 API Key。\n"
                     "提示：OpenAI API Key 通常以 'sk-' 开头"
                 )
 
-        if self.provider == 'gemini':
-            if not self.gemini_key or 'your_' in self.gemini_key.lower() or 'here' in self.gemini_key.lower():
+        if self.provider == "gemini":
+            if (
+                not self.gemini_key
+                or "your_" in self.gemini_key.lower()
+                or "here" in self.gemini_key.lower()
+            ):
                 raise ConfigurationError(
                     "使用Gemini API时必须设置GEMINI_API_KEY环境变量。\n"
                     "当前值看起来像是占位符，请在 .env 文件中填入真实的 API Key"
                 )
 
-        if self.provider == 'zhipu':
-            if not self.zhipu_key or 'your_' in self.zhipu_key.lower() or 'here' in self.zhipu_key.lower():
+        if self.provider == "zhipu":
+            if (
+                not self.zhipu_key
+                or "your_" in self.zhipu_key.lower()
+                or "here" in self.zhipu_key.lower()
+            ):
                 raise ConfigurationError(
                     "使用智谱API时必须设置ZHIPU_API_KEY环境变量。\n"
                     "当前值看起来像是占位符，请在 .env 文件中填入真实的 API Key"
@@ -77,11 +98,11 @@ class APIConfig:
         # 先验证配置
         self.validate()
 
-        if self.provider == 'openai':
+        if self.provider == "openai":
             if not self.openai_key:
                 raise APIKeyError("OpenAI API密钥未配置")
             return self.openai_key
-        elif self.provider == 'gemini':
+        elif self.provider == "gemini":
             if not self.gemini_key:
                 raise APIKeyError("Gemini API密钥未配置")
             return self.gemini_key
@@ -91,11 +112,11 @@ class APIConfig:
             return self.zhipu_key
 
     @property
-    def base_url(self) -> Optional[str]:
+    def base_url(self) -> str | None:
         """获取API基础URL"""
-        if self.provider == 'openai':
+        if self.provider == "openai":
             return self.openai_base
-        elif self.provider == 'zhipu':
+        elif self.provider == "zhipu":
             return self.zhipu_base
         else:
             return None
@@ -103,9 +124,9 @@ class APIConfig:
     @property
     def model_name(self) -> str:
         """获取模型名称"""
-        if self.provider == 'openai':
+        if self.provider == "openai":
             return self.openai_model
-        elif self.provider == 'gemini':
+        elif self.provider == "gemini":
             return self.gemini_model
         else:  # zhipu
             return self.zhipu_model
@@ -114,27 +135,44 @@ class APIConfig:
 @dataclass
 class ProcessingConfig:
     """处理配置类"""
+
     # 文件配置
     default_txt_file: str = field(default="novel.txt")
     output_dir: str = field(default="outputs")
     progress_file: str = field(init=False)
 
     # 编码配置
-    encodings: List[str] = field(default_factory=lambda: [
-        "utf-8", "gbk", "gb2312", "gb18030", "big5",
-        "utf-16", "utf-16-le", "utf-16-be", "latin1", "cp1252"
-    ])
+    encodings: list[str] = field(
+        default_factory=lambda: [
+            "utf-8",
+            "gbk",
+            "gb2312",
+            "gb18030",
+            "big5",
+            "utf-16",
+            "utf-16-le",
+            "utf-16-be",
+            "latin1",
+            "cp1252",
+        ]
+    )
 
     # 处理参数
-    model_max_tokens: int = field(default_factory=lambda: int(os.getenv('MODEL_MAX_TOKENS', '200000')))
-    target_tokens_per_chunk: int = field(default_factory=lambda: int(os.getenv('TARGET_TOKENS_PER_CHUNK', '6000')))
-    parallel_limit: int = field(default_factory=lambda: int(os.getenv('PARALLEL_LIMIT', '5')))
-    max_retry: int = field(default_factory=lambda: int(os.getenv('MAX_RETRY', '5')))
-    log_every: int = field(default_factory=lambda: int(os.getenv('LOG_EVERY', '1')))
+    model_max_tokens: int = field(
+        default_factory=lambda: int(os.getenv("MODEL_MAX_TOKENS", "200000"))
+    )
+    target_tokens_per_chunk: int = field(
+        default_factory=lambda: int(os.getenv("TARGET_TOKENS_PER_CHUNK", "6000"))
+    )
+    parallel_limit: int = field(default_factory=lambda: int(os.getenv("PARALLEL_LIMIT", "5")))
+    max_retry: int = field(default_factory=lambda: int(os.getenv("MAX_RETRY", "5")))
+    log_every: int = field(default_factory=lambda: int(os.getenv("LOG_EVERY", "1")))
 
     # 代理配置
-    use_proxy: bool = field(default_factory=lambda: os.getenv('USE_PROXY', 'false').lower() == 'true')
-    proxy_url: str = field(default_factory=lambda: os.getenv('PROXY_URL', 'http://127.0.0.1:7897'))
+    use_proxy: bool = field(
+        default_factory=lambda: os.getenv("USE_PROXY", "false").lower() == "true"
+    )
+    proxy_url: str = field(default_factory=lambda: os.getenv("PROXY_URL", "http://127.0.0.1:7897"))
 
     def __post_init__(self):
         """初始化后处理"""
@@ -195,7 +233,7 @@ def get_progress_file() -> str:
     return get_processing_config().progress_file
 
 
-def get_encodings() -> List[str]:
+def get_encodings() -> list[str]:
     """获取支持的编码列表"""
     return get_processing_config().encodings
 
@@ -225,18 +263,24 @@ except Exception:
     MODEL_NAME = "gpt-4o-mini"
     GEMINI_SAFETY_SETTINGS = "BLOCK_NONE"
 
+
 # API_KEY延迟访问函数（向后兼容）
 def _get_api_key():
     """获取API密钥（延迟验证）"""
     return get_api_config().api_key
 
+
 # 为了向后兼容，创建一个对象模拟API_KEY属性
 class _APIKeyWrapper:
     """API密钥包装器，延迟验证"""
+
     def __str__(self):
         return _get_api_key()
+
     def __repr__(self):
         return repr(str(self))
+
+
 API_KEY = _APIKeyWrapper()
 
 # 处理配置（这些不会在导入时验证）
@@ -256,7 +300,8 @@ def create_env_file():
     if not os.path.exists(env_file):
         outline_prompt_env = DEFAULT_OUTLINE_PROMPT_TEMPLATE.replace("\n", "\\n")
         with open(env_file, "w", encoding="utf-8") as f:
-            f.write("""# 小说大纲生成工具环境变量配置
+            f.write(
+                """# 小说大纲生成工具环境变量配置
 # 复制此文件并填入你的API密钥
 
 # API提供商选择: openai, gemini 或 zhipu
@@ -293,7 +338,8 @@ PROXY_URL=http://127.0.0.1:7897
 
 # CORS 允许的来源（可选，多个用逗号分隔）
 # CORS_ORIGINS=http://localhost:8000,http://127.0.0.1:8000
-""")
+"""
+            )
         with open(env_file, "a", encoding="utf-8") as f:
             f.write("\n# 大纲提示词配置\n")
             f.write(f"OUTLINE_PROMPT_TEMPLATE={outline_prompt_env}\n")
@@ -302,8 +348,8 @@ PROXY_URL=http://127.0.0.1:7897
 
 
 # 检查并创建环境变量文件
-if not os.getenv('OPENAI_API_KEY') and not os.getenv('GEMINI_API_KEY'):
-    if not os.path.exists('.env'):
+if not os.getenv("OPENAI_API_KEY") and not os.getenv("GEMINI_API_KEY"):
+    if not os.path.exists(".env"):
         print("\n⚠️  警告: 未检测到API密钥环境变量")
         print("  建议使用环境变量或.env文件来管理API密钥")
         create_env_file()

@@ -1,20 +1,22 @@
 """
 大纲相关的数据模型
 """
-from typing import List, Dict, Any, Optional
+
 from dataclasses import dataclass, field
 from datetime import datetime
+from typing import Any
 
 
 @dataclass
 class TextChunk:
     """文本块模型"""
+
     id: int
     content: str
     token_count: int
     start_position: int
     end_position: int
-    chapter_title: Optional[str] = None
+    chapter_title: str | None = None
 
     def __str__(self) -> str:
         return f"TextChunk(id={self.id}, tokens={self.token_count})"
@@ -23,16 +25,17 @@ class TextChunk:
 @dataclass
 class OutlineData:
     """大纲数据模型"""
+
     chunk_id: int
-    events: List[str] = field(default_factory=list)
-    characters: List[str] = field(default_factory=list)
-    relationships: List[List[str]] = field(default_factory=list)
-    conflicts: List[str] = field(default_factory=list)
-    raw_response: Optional[str] = None
-    processing_time: Optional[float] = None
+    events: list[str] = field(default_factory=list)
+    characters: list[str] = field(default_factory=list)
+    relationships: list[list[str]] = field(default_factory=list)
+    conflicts: list[str] = field(default_factory=list)
+    raw_response: str | None = None
+    processing_time: float | None = None
     created_at: datetime = field(default_factory=datetime.now)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """转换为字典格式（用于JSON序列化）"""
         return {
             "chunk_id": self.chunk_id,
@@ -41,16 +44,16 @@ class OutlineData:
             "relationships": self.relationships,
             "conflicts": self.conflicts,
             "processing_time": self.processing_time,
-            "created_at": self.created_at.isoformat() if self.created_at else None
+            "created_at": self.created_at.isoformat() if self.created_at else None,
         }
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> 'OutlineData':
+    def from_dict(cls, data: dict[str, Any]) -> "OutlineData":
         """从字典创建实例（用于JSON反序列化）"""
         outline = cls(
             chunk_id=data.get("chunk_id", 0),
             raw_response=data.get("raw_response"),
-            processing_time=data.get("processing_time")
+            processing_time=data.get("processing_time"),
         )
 
         outline.events = data.get("events", [])
@@ -81,7 +84,7 @@ class OutlineData:
         """返回关系数量"""
         return len(self.relationships)
 
-    def merge_with(self, other: 'OutlineData') -> None:
+    def merge_with(self, other: "OutlineData") -> None:
         """合并另一个大纲数据"""
         if other.chunk_id != self.chunk_id:
             raise ValueError("Cannot merge outlines with different chunk IDs")

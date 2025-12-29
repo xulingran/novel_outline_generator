@@ -1,19 +1,19 @@
 """
 人物相关的数据模型
 """
-from typing import List, Tuple, Optional
+
 from dataclasses import dataclass, field
-from datetime import datetime
 
 
 @dataclass
 class Relationship:
     """人物关系模型"""
+
     character_a: str
     character_b: str
     description: str
     weight: int = 1
-    contexts: List[str] = field(default_factory=list)
+    contexts: list[str] = field(default_factory=list)
 
     def __post_init__(self):
         """初始化后处理"""
@@ -29,19 +29,21 @@ class Relationship:
             self.contexts.append(context)
 
     @property
-    def pair(self) -> Tuple[str, str]:
+    def pair(self) -> tuple[str, str]:
         """返回排序后的人物对"""
-        return tuple(sorted([self.character_a, self.character_b]))
+        character_a, character_b = sorted([self.character_a, self.character_b])
+        return character_a, character_b
 
 
 @dataclass
 class Character:
     """人物模型"""
+
     name: str
-    aliases: List[str] = field(default_factory=list)
-    descriptions: List[str] = field(default_factory=list)
-    appearances: List[int] = field(default_factory=list)  # 出现的块ID
-    first_appearance: Optional[int] = None
+    aliases: list[str] = field(default_factory=list)
+    descriptions: list[str] = field(default_factory=list)
+    appearances: list[int] = field(default_factory=list)  # 出现的块ID
+    first_appearance: int | None = None
     relationship_count: int = 0
     importance_score: float = 0.0
 
@@ -87,8 +89,8 @@ class Character:
         description_factor = min(len(self.descriptions) / 5, 1.0)
 
         # 综合评分
-        self.importance_score = (frequency * 0.5 +
-                                relationship_factor * 0.3 +
-                                description_factor * 0.2)
+        self.importance_score = (
+            frequency * 0.5 + relationship_factor * 0.3 + description_factor * 0.2
+        )
 
         return self.importance_score

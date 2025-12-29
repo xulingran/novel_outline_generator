@@ -2,19 +2,40 @@
 Token计数器模块
 使用tiktoken库计算文本的token数量
 """
-import tiktoken
-from typing import Optional
+
 import logging
+from typing import Protocol
+
+import tiktoken
 
 from exceptions import EncodingError
 
 logger = logging.getLogger(__name__)
 
+
+class TokenEncoder(Protocol):
+    """Minimal encoder interface used by this module."""
+
+    def encode(self, text: str) -> list[int]: ...
+
+    def decode(self, tokens: list[int]) -> str: ...
+
+
+class _FallbackEncoder:
+    """Offline fallback encoder using Unicode code points."""
+
+    def encode(self, text: str) -> list[int]:
+        return [ord(char) for char in text]
+
+    def decode(self, tokens: list[int]) -> str:
+        return "".join(chr(token) for token in tokens)
+
+
 # 全局编码器实例
-_encoder: Optional[tiktoken.Encoding] = None
+_encoder: TokenEncoder | None = None
 
 
-def get_encoder() -> tiktoken.Encoding:
+def get_encoder() -> TokenEncoder:
     """获取编码器实例（单例模式）"""
     global _encoder
     if _encoder is None:
@@ -22,8 +43,8 @@ def get_encoder() -> tiktoken.Encoding:
             _encoder = tiktoken.get_encoding("cl100k_base")
             logger.debug("初始化tiktoken编码器: cl100k_base")
         except Exception as e:
-            logger.error(f"初始化编码器失败: {e}")
-            raise EncodingError(f"无法初始化token编码器: {str(e)}")
+            logger.warning(f"初始化编码器失败，使用简化编码器: {e}")
+            _encoder = _FallbackEncoder()
     return _encoder
 
 

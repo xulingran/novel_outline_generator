@@ -2,13 +2,13 @@
 文本分割器模块
 将长文本分割成适合处理的块
 """
-import re
-from typing import List, Tuple, Optional
-import logging
 
-from tokenizer import count_tokens, get_encoder
-from config import get_processing_config
+import logging
+import re
+
+from config import ProcessingConfig, get_processing_config
 from exceptions import ProcessingError
+from tokenizer import count_tokens, get_encoder
 
 logger = logging.getLogger(__name__)
 
@@ -17,12 +17,12 @@ class TextSplitter:
     """智能文本分割器"""
 
     def __init__(self):
-        self.processing_config = get_processing_config()
+        self.processing_config: ProcessingConfig = get_processing_config()
         self.encoder = get_encoder()
-        self._sentence_end_tokens = None
+        self._sentence_end_tokens: set[int] | None = None
 
     @property
-    def sentence_end_tokens(self) -> set:
+    def sentence_end_tokens(self) -> set[int]:
         """动态获取句子结束标记的 tokens"""
         if self._sentence_end_tokens is None:
             # 常见的句子结束标点
@@ -37,7 +37,7 @@ class TextSplitter:
             self._sentence_end_tokens = tokens
         return self._sentence_end_tokens
 
-    def split_text(self, text: str) -> List[str]:
+    def split_text(self, text: str) -> list[str]:
         """
         分割文本为适合处理的块
 
@@ -75,7 +75,7 @@ class TextSplitter:
             logger.error(f"分割文本失败: {e}")
             raise ProcessingError(f"分割文本失败: {str(e)}") from e
 
-    def _split_by_chapters(self, text: str) -> List[str]:
+    def _split_by_chapters(self, text: str) -> list[str]:
         """
         按章节分割文本
 
@@ -104,7 +104,7 @@ class TextSplitter:
         logger.debug("未找到章节标记，使用段落分割")
         return self._split_by_paragraphs(text)
 
-    def _try_split_pattern(self, text: str, pattern: str) -> List[str]:
+    def _try_split_pattern(self, text: str, pattern: str) -> list[str]:
         """尝试使用特定模式分割"""
         parts = re.split(pattern, text, flags=re.IGNORECASE | re.MULTILINE)
 
@@ -112,7 +112,6 @@ class TextSplitter:
             return [text]
 
         chunks = []
-        current_chunk = ""
 
         # 重新组合分割结果
         for i in range(1, len(parts), 2):
@@ -125,24 +124,19 @@ class TextSplitter:
 
         return chunks if chunks else [text]
 
-    def _split_by_paragraphs(self, text: str) -> List[str]:
+    def _split_by_paragraphs(self, text: str) -> list[str]:
         """按段落分割文本"""
-        paragraphs = text.split('\n\n')
+        paragraphs = text.split("\n\n")
         chunks = []
         current_chunk = ""
-        current_tokens = 0
-
         for para in paragraphs:
             para = para.strip()
             if not para:
                 continue
 
-            para_tokens = count_tokens(para)
-
             # 如果当前块为空，直接添加
             if not current_chunk:
                 current_chunk = para
-                current_tokens = para_tokens
             else:
                 # 检查添加后是否会超限
                 test_chunk = current_chunk + "\n\n" + para
@@ -152,11 +146,9 @@ class TextSplitter:
                     # 保存当前块，开始新块
                     chunks.append(current_chunk)
                     current_chunk = para
-                    current_tokens = para_tokens
                 else:
                     # 添加到当前块
                     current_chunk = test_chunk
-                    current_tokens = test_tokens
 
         # 添加最后一个块
         if current_chunk:
@@ -164,7 +156,7 @@ class TextSplitter:
 
         return chunks if chunks else [text]
 
-    def _split_by_tokens(self, text: str) -> List[str]:
+    def _split_by_tokens(self, text: str) -> list[str]:
         """
         基于token数量精确分割文本
 
@@ -200,7 +192,7 @@ class TextSplitter:
         logger.debug(f"基于tokens分割得到 {len(chunks)} 个块")
         return chunks
 
-    def _find_sentence_boundary(self, tokens: List[int], start: int, end: int) -> int:
+    def _find_sentence_boundary(self, tokens: list[int], start: int, end: int) -> int:
         """在tokens中寻找最近的句子边界"""
         # 从后向前搜索
         search_start = max(start, end - min(100, end - start))  # 最多向前搜索100个token
@@ -237,7 +229,7 @@ class TextSplitter:
 
 
 # 全局分割器实例
-_splitter: Optional[TextSplitter] = None
+_splitter: TextSplitter | None = None
 
 
 def get_splitter() -> TextSplitter:
@@ -248,7 +240,7 @@ def get_splitter() -> TextSplitter:
     return _splitter
 
 
-def split_text(text: str) -> List[str]:
+def split_text(text: str) -> list[str]:
     """
     分割文本（向后兼容的函数）
 
@@ -263,13 +255,13 @@ def split_text(text: str) -> List[str]:
 
 
 # 保留旧函数以向后兼容
-def try_split_by_chapter(text: str) -> List[str]:
+def try_split_by_chapter(text: str) -> list[str]:
     """按章节分割（向后兼容）"""
     splitter = get_splitter()
     return splitter._split_by_chapters(text)
 
 
-def split_by_tokens(text: str) -> List[str]:
+def split_by_tokens(text: str) -> list[str]:
     """按token分割（向后兼容）"""
     splitter = get_splitter()
     return splitter._split_by_tokens(text)

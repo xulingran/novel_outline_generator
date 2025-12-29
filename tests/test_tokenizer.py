@@ -1,9 +1,10 @@
-# -*- coding: utf-8 -*-
 """
 Tokenizer module unit tests
 """
+
 import pytest
-from tokenizer import count_tokens, get_encoder, truncate_by_tokens, count_tokens_batch
+
+from tokenizer import count_tokens, count_tokens_batch, get_encoder, truncate_by_tokens
 
 
 class TestCountTokens:

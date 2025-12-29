@@ -2,21 +2,23 @@
 通用工具模块
 包含原子文件操作、JSON处理等实用功能
 """
-import os
+
 import json
-import tempfile
-import shutil
-from pathlib import Path
-from typing import Any, Dict, Optional, Union, List
 import logging
+import os
+import shutil
+import tempfile
 from datetime import datetime
+from pathlib import Path
+from typing import Any, cast
 
 # 日志配置函数
 _logging_configured = False
 
-def setup_logging(level=None, log_file='novel_outline.log'):
+
+def setup_logging(level=None, log_file="novel_outline.log"):
     """统一配置日志系统，避免重复配置
-    
+
     Args:
         level: 日志级别，默认从环境变量 LOG_LEVEL 读取，若未设置则使用 INFO
         log_file: 日志文件路径
@@ -24,22 +26,20 @@ def setup_logging(level=None, log_file='novel_outline.log'):
     global _logging_configured
     if _logging_configured:
         return
-    
+
     # 支持通过环境变量控制日志级别
     if level is None:
-        level_str = os.getenv('LOG_LEVEL', 'INFO').upper()
+        level_str = os.getenv("LOG_LEVEL", "INFO").upper()
         level = getattr(logging, level_str, logging.INFO)
-    
+
     logging.basicConfig(
         level=level,
-        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-        handlers=[
-            logging.FileHandler(log_file, encoding='utf-8'),
-            logging.StreamHandler()
-        ],
-        force=True  # 强制重新配置，即使已经配置过
+        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+        handlers=[logging.FileHandler(log_file, encoding="utf-8"), logging.StreamHandler()],
+        force=True,  # 强制重新配置，即使已经配置过
     )
     _logging_configured = True
+
 
 # 自动配置日志（首次导入时）
 setup_logging()
@@ -47,10 +47,12 @@ setup_logging()
 logger = logging.getLogger(__name__)
 
 
-def atomic_write_json(file_path: Union[str, Path],
-                     data: Dict[str, Any],
-                     backup: bool = True,
-                     indent: int = 2) -> None:
+def atomic_write_json(
+    file_path: str | Path,
+    data: dict[str, Any] | list[Any],
+    backup: bool = True,
+    indent: int = 2,
+) -> None:
     """原子性写入JSON文件
 
     Args:
@@ -79,13 +81,11 @@ def atomic_write_json(file_path: Union[str, Path],
 
     # 写入临时文件
     temp_fd, temp_path = tempfile.mkstemp(
-        suffix='.tmp',
-        prefix=file_path.name + '_',
-        dir=file_path.parent
+        suffix=".tmp", prefix=file_path.name + "_", dir=file_path.parent
     )
 
     try:
-        with os.fdopen(temp_fd, 'w', encoding='utf-8') as f:
+        with os.fdopen(temp_fd, "w", encoding="utf-8") as f:
             json.dump(data, f, ensure_ascii=False, indent=indent)
             f.flush()
             os.fsync(f.fileno())  # 强制写入磁盘
@@ -105,10 +105,9 @@ def atomic_write_json(file_path: Union[str, Path],
         raise
 
 
-def atomic_write_text(file_path: Union[str, Path],
-                     content: str,
-                     backup: bool = True,
-                     encoding: str = 'utf-8') -> None:
+def atomic_write_text(
+    file_path: str | Path, content: str, backup: bool = True, encoding: str = "utf-8"
+) -> None:
     """原子性写入文本文件
 
     Args:
@@ -133,13 +132,11 @@ def atomic_write_text(file_path: Union[str, Path],
 
     # 写入临时文件
     temp_fd, temp_path = tempfile.mkstemp(
-        suffix='.tmp',
-        prefix=file_path.name + '_',
-        dir=file_path.parent
+        suffix=".tmp", prefix=file_path.name + "_", dir=file_path.parent
     )
 
     try:
-        with os.fdopen(temp_fd, 'w', encoding=encoding) as f:
+        with os.fdopen(temp_fd, "w", encoding=encoding) as f:
             f.write(content)
             f.flush()
             os.fsync(f.fileno())  # 强制写入磁盘
@@ -159,9 +156,11 @@ def atomic_write_text(file_path: Union[str, Path],
         raise
 
 
-def safe_read_json(file_path: Union[str, Path],
-                  default: Optional[Dict[str, Any]] = None,
-                  backup_on_corruption: bool = True) -> Dict[str, Any]:
+def safe_read_json(
+    file_path: str | Path,
+    default: dict[str, Any] | None = None,
+    backup_on_corruption: bool = True,
+) -> dict[str, Any]:
     """安全读取JSON文件
 
     Args:
@@ -178,14 +177,19 @@ def safe_read_json(file_path: Union[str, Path],
         return default or {}
 
     try:
-        with open(file_path, 'r', encoding='utf-8') as f:
-            return json.load(f)
+        with open(file_path, encoding="utf-8") as f:
+            data = json.load(f)
+            if isinstance(data, dict):
+                return cast(dict[str, Any], data)
+            return default or {}
 
     except json.JSONDecodeError as e:
         logger.error(f"JSON文件损坏: {file_path}, 错误: {e}")
 
         if backup_on_corruption:
-            backup_path = file_path.with_suffix(f'.corrupt_{datetime.now().strftime("%Y%m%d_%H%M%S")}')
+            backup_path = file_path.with_suffix(
+                f'.corrupt_{datetime.now().strftime("%Y%m%d_%H%M%S")}'
+            )
             try:
                 shutil.copy2(file_path, backup_path)
                 logger.info(f"损坏的文件已备份: {backup_path}")
@@ -199,9 +203,11 @@ def safe_read_json(file_path: Union[str, Path],
         return default or {}
 
 
-def safe_read_text(file_path: Union[str, Path],
-                  encoding: str = 'utf-8',
-                  fallback_encodings: Optional[List[str]] = None) -> str:
+def safe_read_text(
+    file_path: str | Path,
+    encoding: str = "utf-8",
+    fallback_encodings: list[str] | None = None,
+) -> str:
     """安全读取文本文件，支持多种编码
 
     Args:
@@ -224,7 +230,7 @@ def safe_read_text(file_path: Union[str, Path],
     last_error = None
     for enc in encodings:
         try:
-            with open(file_path, 'r', encoding=enc) as f:
+            with open(file_path, encoding=enc) as f:
                 content = f.read()
             logger.debug(f"成功读取文件 {file_path}，使用编码: {enc}")
             return content
@@ -238,11 +244,11 @@ def safe_read_text(file_path: Union[str, Path],
 
     # 所有编码都失败
     raise UnicodeDecodeError(
-        last_error.encoding if last_error else 'unknown',
-        last_error.object if last_error else b'',
+        last_error.encoding if last_error else "unknown",
+        last_error.object if last_error else b"",
         last_error.start if last_error else 0,
         last_error.end if last_error else 1,
-        f"无法使用任何编码读取文件: {', '.join(encodings)}"
+        f"无法使用任何编码读取文件: {', '.join(encodings)}",
     )
 
 
@@ -255,11 +261,12 @@ def format_file_size(size_bytes: int) -> str:
     Returns:
         str: 格式化的大小字符串
     """
-    for unit in ['B', 'KB', 'MB', 'GB', 'TB']:
-        if size_bytes < 1024.0:
-            return f"{size_bytes:.1f}{unit}"
-        size_bytes /= 1024.0
-    return f"{size_bytes:.1f}PB"
+    size = float(size_bytes)
+    for unit in ["B", "KB", "MB", "GB", "TB"]:
+        if size < 1024.0:
+            return f"{size:.1f}{unit}"
+        size /= 1024.0
+    return f"{size:.1f}PB"
 
 
 def truncate_text(text: str, max_length: int = 100, suffix: str = "...") -> str:
@@ -275,10 +282,10 @@ def truncate_text(text: str, max_length: int = 100, suffix: str = "...") -> str:
     """
     if len(text) <= max_length:
         return text
-    return text[:max_length-len(suffix)] + suffix
+    return text[: max_length - len(suffix)] + suffix
 
 
-def get_file_info(file_path: Union[str, Path]) -> Dict[str, Any]:
+def get_file_info(file_path: str | Path) -> dict[str, Any]:
     """获取文件信息
 
     Args:
@@ -304,13 +311,11 @@ def get_file_info(file_path: Union[str, Path]) -> Dict[str, Any]:
         "is_dir": file_path.is_dir(),
         "extension": file_path.suffix,
         "name": file_path.name,
-        "absolute_path": str(file_path.absolute())
+        "absolute_path": str(file_path.absolute()),
     }
 
 
-def cleanup_old_backups(directory: Union[str, Path],
-                       pattern: str = "*.bak",
-                       max_files: int = 10) -> None:
+def cleanup_old_backups(directory: str | Path, pattern: str = "*.bak", max_files: int = 10) -> None:
     """清理旧的备份文件
 
     Args:
@@ -343,10 +348,10 @@ class ProgressTracker:
 
     def __init__(self, batch_size: int = 10):
         self.batch_size = batch_size
-        self.pending_updates = []
-        self.logger = logging.getLogger(__name__ + '.ProgressTracker')
+        self.pending_updates: list[dict[str, Any]] = []
+        self.logger = logging.getLogger(__name__ + ".ProgressTracker")
 
-    def add_update(self, update: Dict[str, Any]) -> None:
+    def add_update(self, update: dict[str, Any]) -> None:
         """添加进度更新（批量保存）"""
         self.pending_updates.append(update)
 

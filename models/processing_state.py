@@ -1,24 +1,26 @@
 """
 处理状态相关的数据模型
 """
-from typing import List, Set, Optional, Dict, Any
+
+import hashlib
 from dataclasses import dataclass, field
 from datetime import datetime
-import hashlib
+from typing import Any
 
 
 @dataclass
 class ProgressData:
     """进度数据模型"""
+
     txt_file: str
     total_chunks: int
     completed_count: int
-    completed_indices: Set[int]
-    outlines: List[Dict[str, Any]]
+    completed_indices: set[int]
+    outlines: list[dict[str, Any]]
     last_update: datetime
     chunks_hash: str
-    processing_times: List[float] = field(default_factory=list)
-    errors: List[Dict[str, Any]] = field(default_factory=list)
+    processing_times: list[float] = field(default_factory=list)
+    errors: list[dict[str, Any]] = field(default_factory=list)
 
     @property
     def completion_rate(self) -> float:
@@ -36,28 +38,26 @@ class ProgressData:
 
     def add_error(self, chunk_id: int, error_message: str) -> None:
         """添加错误记录"""
-        self.errors.append({
-            "chunk_id": chunk_id,
-            "error": error_message,
-            "timestamp": datetime.now().isoformat()
-        })
+        self.errors.append(
+            {"chunk_id": chunk_id, "error": error_message, "timestamp": datetime.now().isoformat()}
+        )
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """转换为字典格式（用于JSON序列化）"""
         return {
             "txt_file": self.txt_file,
             "total_chunks": self.total_chunks,
             "completed_count": self.completed_count,
-            "completed_indices": sorted(list(self.completed_indices)),
+            "completed_indices": sorted(self.completed_indices),
             "outlines": self.outlines,
             "last_update": self.last_update.isoformat(),
             "chunks_hash": self.chunks_hash,
             "processing_times": self.processing_times,
-            "errors": self.errors
+            "errors": self.errors,
         }
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> 'ProgressData':
+    def from_dict(cls, data: dict[str, Any]) -> "ProgressData":
         """从字典创建实例（用于JSON反序列化）"""
         return cls(
             txt_file=data.get("txt_file", ""),
@@ -68,28 +68,29 @@ class ProgressData:
             last_update=datetime.fromisoformat(data.get("last_update", datetime.now().isoformat())),
             chunks_hash=data.get("chunks_hash", ""),
             processing_times=data.get("processing_times", []),
-            errors=data.get("errors", [])
+            errors=data.get("errors", []),
         )
 
     @staticmethod
-    def calculate_chunks_hash(chunks: List[str]) -> str:
+    def calculate_chunks_hash(chunks: list[str]) -> str:
         """计算文本块的哈希值"""
         content = str(sorted(chunks))
-        return hashlib.md5(content.encode('utf-8')).hexdigest()
+        return hashlib.md5(content.encode("utf-8")).hexdigest()
 
 
 @dataclass
 class ProcessingState:
     """处理状态模型"""
+
     file_path: str
     total_chunks: int
     processed_chunks: int = 0
     failed_chunks: int = 0
     start_time: datetime = field(default_factory=datetime.now)
-    end_time: Optional[datetime] = None
+    end_time: datetime | None = None
     current_phase: str = "initialization"
-    errors: List[str] = field(default_factory=list)
-    warnings: List[str] = field(default_factory=list)
+    errors: list[str] = field(default_factory=list)
+    warnings: list[str] = field(default_factory=list)
 
     @property
     def elapsed_time(self) -> float:
@@ -136,7 +137,7 @@ class ProcessingState:
         self.current_phase = "failed"
         self.add_error(error)
 
-    def get_summary(self) -> Dict[str, Any]:
+    def get_summary(self) -> dict[str, Any]:
         """获取处理摘要"""
         return {
             "file_path": self.file_path,
@@ -148,5 +149,5 @@ class ProcessingState:
             "elapsed_time": round(self.elapsed_time, 2),
             "current_phase": self.current_phase,
             "errors_count": len(self.errors),
-            "warnings_count": len(self.warnings)
+            "warnings_count": len(self.warnings),
         }

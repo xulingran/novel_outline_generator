@@ -2,16 +2,19 @@
 输入验证模块
 提供各种输入验证功能，确保安全性
 """
+
 import os
 import re
 from pathlib import Path
-from typing import Optional, Union
+
 from exceptions import FileValidationError
 
 
-def validate_file_path(file_path: Union[str, Path],
-                      allowed_extensions: Optional[list] = None,
-                      max_size_mb: Optional[int] = None) -> Path:
+def validate_file_path(
+    file_path: str | Path,
+    allowed_extensions: list | None = None,
+    max_size_mb: int | None = None,
+) -> Path:
     """验证文件路径的安全性
 
     Args:
@@ -33,7 +36,7 @@ def validate_file_path(file_path: Union[str, Path],
 
     # 检查路径遍历攻击
     normalized_path = os.path.normpath(file_path)
-    if '..' in normalized_path.split(os.sep):
+    if ".." in normalized_path.split(os.sep):
         raise FileValidationError("检测到不安全的路径遍历")
 
     # 转换为Path对象
@@ -59,9 +62,7 @@ def validate_file_path(file_path: Union[str, Path],
     if max_size_mb is not None:
         size_mb = path_obj.stat().st_size / (1024 * 1024)
         if size_mb > max_size_mb:
-            raise FileValidationError(
-                f"文件过大: {size_mb:.2f}MB. 最大允许: {max_size_mb}MB"
-            )
+            raise FileValidationError(f"文件过大: {size_mb:.2f}MB. 最大允许: {max_size_mb}MB")
 
     return path_obj
 
@@ -80,7 +81,7 @@ def validate_output_dir(output_dir: str) -> Path:
 
     # 检查路径遍历攻击
     normalized_path = os.path.normpath(output_dir)
-    if '..' in normalized_path.split(os.sep):
+    if ".." in normalized_path.split(os.sep):
         raise FileValidationError("检测到不安全的路径遍历")
 
     path_obj = Path(output_dir)
@@ -88,10 +89,10 @@ def validate_output_dir(output_dir: str) -> Path:
     # 创建目录（如果不存在）
     try:
         path_obj.mkdir(parents=True, exist_ok=True)
-    except PermissionError:
-        raise FileValidationError(f"没有权限创建目录: {output_dir}")
+    except PermissionError as e:
+        raise FileValidationError(f"没有权限创建目录: {output_dir}") from e
     except Exception as e:
-        raise FileValidationError(f"创建目录失败: {output_dir}, 错误: {str(e)}")
+        raise FileValidationError(f"创建目录失败: {output_dir}, 错误: {str(e)}") from e
 
     return path_obj
 
@@ -113,9 +114,17 @@ def validate_encoding_list(encodings: list) -> list:
 
     # 常见的有效编码
     valid_encodings = {
-        'utf-8', 'utf-16', 'utf-16-le', 'utf-16-be',
-        'gbk', 'gb2312', 'gb18030', 'big5',
-        'latin1', 'cp1252', 'ascii'
+        "utf-8",
+        "utf-16",
+        "utf-16-le",
+        "utf-16-be",
+        "gbk",
+        "gb2312",
+        "gb18030",
+        "big5",
+        "latin1",
+        "cp1252",
+        "ascii",
     }
 
     validated_encodings = []
@@ -123,7 +132,7 @@ def validate_encoding_list(encodings: list) -> list:
         if not isinstance(encoding, str):
             continue
 
-        encoding_lower = encoding.lower().replace('_', '-')
+        encoding_lower = encoding.lower().replace("_", "-")
         if encoding_lower in valid_encodings or encoding.lower() in valid_encodings:
             validated_encodings.append(encoding)
 
@@ -146,8 +155,10 @@ def validate_api_provider(provider: str) -> str:
         raise FileValidationError("API提供商不能为空")
 
     provider = provider.lower()
-    if provider not in ['openai', 'gemini', 'zhipu']:
-        raise FileValidationError(f"不支持的API提供商: {provider}. 支持的提供商: openai, gemini, zhipu")
+    if provider not in ["openai", "gemini", "zhipu"]:
+        raise FileValidationError(
+            f"不支持的API提供商: {provider}. 支持的提供商: openai, gemini, zhipu"
+        )
 
     return provider
 
@@ -197,18 +208,18 @@ def sanitize_filename(filename: str) -> str:
         return "output"
 
     # 移除路径分隔符和其他不安全字符
-    sanitized = re.sub(r'[<>:"/\\|?*]', '_', filename)
+    sanitized = re.sub(r'[<>:"/\\|?*]', "_", filename)
 
     # 移除控制字符
-    sanitized = re.sub(r'[\x00-\x1f\x7f-\x9f]', '', sanitized)
+    sanitized = re.sub(r"[\x00-\x1f\x7f-\x9f]", "", sanitized)
 
     # 限制长度
     if len(sanitized) > 255:
         name, ext = os.path.splitext(sanitized)
-        sanitized = name[:255-len(ext)] + ext
+        sanitized = name[: 255 - len(ext)] + ext
 
     # 确保不为空
-    if not sanitized or sanitized in ['.', '..']:
+    if not sanitized or sanitized in [".", ".."]:
         sanitized = "output"
 
     return sanitized
@@ -228,16 +239,16 @@ def validate_chunk_size(chunk_size: int, max_tokens: int) -> int:
     max_tokens = validate_positive_int(max_tokens, "MODEL_MAX_TOKENS")
 
     if chunk_size >= max_tokens:
-        raise FileValidationError(
-            f"块大小({chunk_size})必须小于模型最大token数({max_tokens})"
-        )
+        raise FileValidationError(f"块大小({chunk_size})必须小于模型最大token数({max_tokens})")
 
     # 建议块大小不超过最大token数的80%
     if chunk_size > max_tokens * 0.8:
         import warnings
+
         warnings.warn(
             f"块大小({chunk_size})接近模型限制({max_tokens})，建议设置为最大值的80%以下",
-            UserWarning
+            UserWarning,
+            stacklevel=2,
         )
 
     return chunk_size
@@ -257,9 +268,11 @@ def validate_parallel_limit(limit: int) -> int:
     # 建议合理的并发限制
     if limit > 20:
         import warnings
+
         warnings.warn(
             f"并发限制({limit})较高，可能导致API速率限制或资源不足",
-            UserWarning
+            UserWarning,
+            stacklevel=2,
         )
 
     return limit

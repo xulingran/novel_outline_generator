@@ -1,20 +1,21 @@
-# -*- coding: utf-8 -*-
 """
 Utils module unit tests
 """
-import pytest
-import tempfile
+
 import json
+import tempfile
 from pathlib import Path
+
+import pytest
 
 from utils import (
     atomic_write_json,
     atomic_write_text,
+    format_file_size,
+    get_file_info,
     safe_read_json,
     safe_read_text,
-    format_file_size,
     truncate_text,
-    get_file_info,
 )
 
 
@@ -30,7 +31,7 @@ class TestAtomicWriteJson:
             atomic_write_json(file_path, data)
 
             assert file_path.exists()
-            with open(file_path, "r", encoding="utf-8") as f:
+            with open(file_path, encoding="utf-8") as f:
                 result = json.load(f)
             assert result == data
 
@@ -57,7 +58,7 @@ class TestAtomicWriteText:
             atomic_write_text(file_path, content)
 
             assert file_path.exists()
-            with open(file_path, "r", encoding="utf-8") as f:
+            with open(file_path, encoding="utf-8") as f:
                 result = f.read()
             assert result == content
 
@@ -88,7 +89,9 @@ class TestSafeReadText:
 
     def test_read_utf8(self):
         """Read UTF-8 file"""
-        with tempfile.NamedTemporaryFile(suffix=".txt", delete=False, mode="w", encoding="utf-8") as f:
+        with tempfile.NamedTemporaryFile(
+            suffix=".txt", delete=False, mode="w", encoding="utf-8"
+        ) as f:
             f.write("Hello World")
             temp_path = f.name
 

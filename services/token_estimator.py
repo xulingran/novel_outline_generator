@@ -2,14 +2,15 @@
 Token 预测服务
 用于在前后端调用时估算文本分块与合并的 token 消耗。
 """
+
 from pathlib import Path
-from typing import Dict, Any
+from typing import Any
 
-from tokenizer import count_tokens
 from splitter import get_splitter
+from tokenizer import count_tokens
 
 
-def estimate_tokens(file_path: str) -> Dict[str, Any]:
+def estimate_tokens(file_path: str) -> dict[str, Any]:
     """
     估算 token 消耗。
     Returns:
@@ -29,7 +30,7 @@ def estimate_tokens(file_path: str) -> Dict[str, Any]:
     chunks = splitter.split_text(text)
     chunk_tokens = sum(count_tokens(chunk) for chunk in chunks)
     chunk_responses = int(chunk_tokens * 0.3)  # 估算响应
-    merge_tokens = int(total_tokens * 0.1)    # 估算合并消耗
+    merge_tokens = int(total_tokens * 0.1)  # 估算合并消耗
 
     return {
         "total_tokens": total_tokens,

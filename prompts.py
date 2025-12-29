@@ -2,9 +2,8 @@
 LLM提示词模板模块
 定义用于生成和处理大纲的各种提示词
 """
-import os
-from typing import List, Dict, Any
 
+import os
 
 DEFAULT_OUTLINE_PROMPT_TEMPLATE = """你是专业文学编辑。请对下面这段小说内容生成结构化剧情大纲。
 
@@ -80,7 +79,7 @@ def merge_prompt(json_blocks: str) -> str:
 """
 
 
-def merge_text_prompt(text_blocks: List[str]) -> str:
+def merge_text_prompt(text_blocks: list[str]) -> str:
     """
     生成合并文本格式大纲的提示词
     """
@@ -167,7 +166,7 @@ def style_adjustment_prompt(outline: str, style: str) -> str:
     """
     生成调整大纲风格的提示词
     """
-    style_instructions: Dict[str, str] = {
+    style_instructions: dict[str, str] = {
         "concise": "请将以下大纲改写得更简洁，只保留最重要的信息",
         "detailed": "请将以下大纲扩展得更详细，增加更多细节和分析",
         "academic": "请以学术分析的风格重写以下大纲",

@@ -2,22 +2,25 @@
 文件服务模块
 提供文件读写、编码检测等功能的封装
 """
-import os
-from pathlib import Path
-from typing import List, Optional, Generator, Tuple, Union
+
 import logging
+import os
+from collections.abc import Generator
+from pathlib import Path
+from typing import Any
 
 from config import get_processing_config
-from validators import validate_file_path, validate_encoding_list, validate_output_dir
+from exceptions import EncodingError, FileValidationError
 from utils import (
-    safe_read_text,
-    safe_read_json,
     atomic_write_json,
     atomic_write_text,
-    get_file_info as utils_get_file_info,
-    cleanup_old_backups,
+    safe_read_json,
+    safe_read_text,
 )
-from exceptions import EncodingError, FileValidationError
+from utils import (
+    get_file_info as utils_get_file_info,
+)
+from validators import validate_encoding_list, validate_file_path, validate_output_dir
 
 logger = logging.getLogger(__name__)
 
@@ -36,9 +39,9 @@ class FileService:
         except FileValidationError as e:
             logger.error(f"编码配置无效: {e}")
             # 使用默认编码
-            self.processing_config.encodings = ['utf-8', 'gbk', 'gb2312']
+            self.processing_config.encodings = ["utf-8", "gbk", "gb2312"]
 
-    def read_text_file(self, file_path: Union[str, Path]) -> Tuple[str, str]:
+    def read_text_file(self, file_path: str | Path) -> tuple[str, str]:
         """
         读取文本文件，自动检测编码
 
@@ -53,9 +56,7 @@ class FileService:
             EncodingError: 所有编码都失败
         """
         file_path = validate_file_path(
-            file_path,
-            allowed_extensions=['.txt', '.md', '.text'],
-            max_size_mb=100  # 限制100MB
+            file_path, allowed_extensions=[".txt", ".md", ".text"], max_size_mb=100  # 限制100MB
         )
 
         logger.debug(f"尝试读取文件: {file_path}")
@@ -66,17 +67,19 @@ class FileService:
             content = safe_read_text(
                 file_path,
                 encoding=self.processing_config.encodings[0],
-                fallback_encodings=fallback_encodings
+                fallback_encodings=fallback_encodings,
             )
             logger.info(f"成功读取文件: {file_path}")
             return content, self.processing_config.encodings[0]
         except UnicodeDecodeError as e:
-            raise EncodingError(f"无法读取文件 {file_path}，已尝试编码: {', '.join(self.processing_config.encodings)}") from e
+            raise EncodingError(
+                f"无法读取文件 {file_path}，已尝试编码: {', '.join(self.processing_config.encodings)}"
+            ) from e
         except Exception as e:
             logger.error(f"读取文件失败: {file_path}, 错误: {e}")
             raise
 
-    def write_text_file(self, file_path: Union[str, Path], content: str, encoding: str = 'utf-8') -> None:
+    def write_text_file(self, file_path: str | Path, content: str, encoding: str = "utf-8") -> None:
         """
         写入文本文件（原子性操作）
 
@@ -92,7 +95,7 @@ class FileService:
             logger.error(f"写入文件失败: {file_path}, 错误: {e}")
             raise
 
-    def read_json_file(self, file_path: Union[str, Path], default: Optional[dict] = None) -> dict:
+    def read_json_file(self, file_path: str | Path, default: dict | None = None) -> dict:
         """
         读取JSON文件（带容错处理）
 
@@ -111,7 +114,9 @@ class FileService:
             logger.error(f"读取JSON文件失败: {file_path}, 错误: {e}")
             raise
 
-    def write_json_file(self, file_path: Union[str, Path], data: dict, backup: bool = True) -> None:
+    def write_json_file(
+        self, file_path: str | Path, data: dict[str, Any] | list[Any], backup: bool = True
+    ) -> None:
         """
         写入JSON文件（原子性操作）
 
@@ -127,7 +132,7 @@ class FileService:
             logger.error(f"写入JSON文件失败: {file_path}, 错误: {e}")
             raise
 
-    def ensure_output_directory(self, subdirectory: Optional[str] = None) -> Path:
+    def ensure_output_directory(self, subdirectory: str | None = None) -> Path:
         """
         确保输出目录存在
 
@@ -143,7 +148,7 @@ class FileService:
 
         return validate_output_dir(output_dir)
 
-    def list_txt_files(self, directory: Union[str, Path]) -> List[Path]:
+    def list_txt_files(self, directory: str | Path) -> list[Path]:
         """
         列出目录中的所有文本文件
 
@@ -158,14 +163,14 @@ class FileService:
             logger.warning(f"目录不存在: {directory}")
             return []
 
-        txt_files = []
-        for pattern in ['*.txt', '*.md', '*.text']:
+        txt_files: list[Path] = []
+        for pattern in ["*.txt", "*.md", "*.text"]:
             txt_files.extend(directory.glob(pattern))
 
         logger.debug(f"在目录 {directory} 中找到 {len(txt_files)} 个文本文件")
         return sorted(txt_files)
 
-    def get_file_size(self, file_path: Union[str, Path]) -> int:
+    def get_file_size(self, file_path: str | Path) -> int:
         """
         获取文件大小（字节）
 
@@ -180,11 +185,11 @@ class FileService:
         except Exception:
             return 0
 
-    def get_file_info(self, file_path: Union[str, Path]) -> dict:
+    def get_file_info(self, file_path: str | Path) -> dict:
         """获取文件信息（存在性、大小、时间等），包装 utils.get_file_info。"""
         return utils_get_file_info(file_path)
 
-    def remove_backups(self, directory: Union[str, Path], pattern: str = "*.bak") -> int:
+    def remove_backups(self, directory: str | Path, pattern: str = "*.bak") -> int:
         """删除目录下的备份文件，返回删除数量。"""
         directory = Path(directory)
         if not directory.exists():
@@ -200,7 +205,9 @@ class FileService:
                 logger.warning(f"删除备份文件失败: {bak}, 错误: {e}")
         return removed
 
-    def stream_text_chunks(self, file_path: Union[str, Path], chunk_size: int = 8192) -> Generator[str, None, None]:
+    def stream_text_chunks(
+        self, file_path: str | Path, chunk_size: int = 8192
+    ) -> Generator[str, None, None]:
         """
         流式读取大文件
 
@@ -214,7 +221,7 @@ class FileService:
         file_path = validate_file_path(file_path)
 
         try:
-            with open(file_path, 'r', encoding='utf-8') as f:
+            with open(file_path, encoding="utf-8") as f:
                 while True:
                     chunk = f.read(chunk_size)
                     if not chunk:
@@ -224,7 +231,7 @@ class FileService:
             # 如果UTF-8失败，尝试其他编码
             for encoding in self.processing_config.encodings[1:]:
                 try:
-                    with open(file_path, 'r', encoding=encoding) as f:
+                    with open(file_path, encoding=encoding) as f:
                         while True:
                             chunk = f.read(chunk_size)
                             if not chunk:
@@ -236,7 +243,7 @@ class FileService:
             else:
                 raise EncodingError(f"无法读取文件 {file_path}")
 
-    def cleanup_temp_files(self, directory: Union[str, Path], pattern: str = "*.tmp") -> int:
+    def cleanup_temp_files(self, directory: str | Path, pattern: str = "*.tmp") -> int:
         """
         清理临时文件
 
@@ -265,7 +272,7 @@ class FileService:
 
         return cleaned_count
 
-    def backup_file(self, file_path: Union[str, Path], max_backups: int = 5) -> Path:
+    def backup_file(self, file_path: str | Path, max_backups: int = 5) -> Path:
         """
         创建文件备份
 
@@ -276,15 +283,15 @@ class FileService:
         Returns:
             Path: 备份文件路径
         """
-        from datetime import datetime
         import shutil
+        from datetime import datetime
 
         file_path = Path(file_path)
         if not file_path.exists():
             raise FileNotFoundError(f"文件不存在: {file_path}")
 
         # 创建备份目录
-        backup_dir = file_path.parent / '.backups'
+        backup_dir = file_path.parent / ".backups"
         backup_dir.mkdir(exist_ok=True)
 
         # 生成备份文件名
@@ -303,8 +310,6 @@ class FileService:
 
     def _cleanup_old_backups(self, backup_dir: Path, file_stem: str, max_backups: int) -> None:
         """清理旧的备份文件"""
-        import glob
-
         pattern = f"{file_stem}_*.*"
         backup_files = list(backup_dir.glob(pattern))
 

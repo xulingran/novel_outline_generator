@@ -2,27 +2,23 @@
 小说大纲生成工具 - 主程序
 重构后的版本，使用新的服务架构
 """
+
 import asyncio
 import logging
 import webbrowser
 from pathlib import Path
 
-# 导入日志配置（统一在utils.py中配置）
+from config import get_api_config, get_processing_config, get_txt_file
+from exceptions import APIKeyError, ConfigurationError, NovelOutlineError
+from services.file_service import FileService
+from services.novel_processing_service import NovelProcessingService
+from services.progress_service import ProgressService
 from utils import setup_logging
+from validators import validate_file_path
+
 setup_logging()
 
 logger = logging.getLogger(__name__)
-
-# 导入服务层
-from services.novel_processing_service import NovelProcessingService
-from services.progress_service import ProgressService
-from services.file_service import FileService
-
-# 导入配置和工具
-from config import get_processing_config, get_api_config, get_txt_file, get_output_dir
-from validators import validate_file_path
-from utils import format_file_size
-from exceptions import NovelOutlineError, ConfigurationError, APIKeyError
 
 
 class NovelOutlineApp:
@@ -63,14 +59,14 @@ class NovelOutlineApp:
 
     def _print_welcome(self) -> None:
         """打印欢迎信息"""
-        print("\n" + "="*60)
+        print("\n" + "=" * 60)
         print("📝 小说大纲生成工具 v2.0")
-        print("="*60)
+        print("=" * 60)
         api_cfg = get_api_config()
         print(f"🔧 API提供商: {api_cfg.provider.upper()}")
         print(f"📊 并发限制: {self.processing_config.parallel_limit}")
         print(f"🎯 目标块大小: {self.processing_config.target_tokens_per_chunk} tokens")
-        print("="*60 + "\n")
+        print("=" * 60 + "\n")
 
     def _select_mode(self) -> str:
         """选择运行模式"""
@@ -105,19 +101,16 @@ class NovelOutlineApp:
 
         # 5. 开始处理
         print("\n🚀 开始处理...")
-        result = await self.processing_service.process_novel(
-            file_path=file_path,
-            resume=resume
-        )
+        result = await self.processing_service.process_novel(file_path=file_path, resume=resume)
 
         # 6. 显示结果
         self._show_results(result)
-
 
     def _start_web_ui(self) -> None:
         """启动 Web UI（FastAPI + uvicorn）"""
         try:
             import uvicorn
+
             print("\n🚀 正在启动 Web UI（http://localhost:8000）...")
             print("   若需自定义端口，请直接运行：uvicorn web_api:app --reload --port 8000")
 
@@ -143,7 +136,7 @@ class NovelOutlineApp:
         default_file = get_txt_file()
 
         while True:
-            user_input = input(f"\n请输入要分析的txt文件名（直接回车使用默认值）: ").strip()
+            user_input = input("\n请输入要分析的txt文件名（直接回车使用默认值）: ").strip()
 
             if not user_input:
                 file_path = default_file
@@ -154,23 +147,21 @@ class NovelOutlineApp:
             try:
                 # 验证文件
                 validated_path = validate_file_path(
-                    file_path,
-                    allowed_extensions=['.txt', '.md'],
-                    max_size_mb=100
+                    file_path, allowed_extensions=[".txt", ".md"], max_size_mb=100
                 )
                 return str(validated_path)
             except Exception as e:
                 print(f"❌ 文件错误: {e}")
                 retry = input("是否重新输入？(y/n，默认y): ").strip().lower()
-                if retry and retry not in ['y', 'yes']:
+                if retry and retry not in ["y", "yes"]:
                     print("使用默认文件")
                     return default_file
 
     async def _show_file_info(self, file_path: str) -> None:
         """显示文件信息"""
         file_info = self.file_service.get_file_info(file_path)
-        if file_info['exists']:
-            print(f"\n📄 文件信息:")
+        if file_info["exists"]:
+            print("\n📄 文件信息:")
             print(f"   路径: {file_path}")
             print(f"   大小: {file_info['size_formatted']}")
             print(f"   修改时间: {file_info['modified']}")
@@ -178,6 +169,7 @@ class NovelOutlineApp:
             # 估算块数
             text, _ = self.file_service.read_text_file(file_path)
             from splitter import get_splitter
+
             splitter = get_splitter()
             estimated_chunks = splitter.estimate_chunk_count(text)
             print(f"   预估块数: {estimated_chunks}")
@@ -185,8 +177,8 @@ class NovelOutlineApp:
     async def _predict_tokens(self, file_path: str) -> None:
         """预测token使用量"""
         text, _ = self.file_service.read_text_file(file_path)
-        from tokenizer import count_tokens
         from splitter import get_splitter
+        from tokenizer import count_tokens
 
         total_tokens = count_tokens(text)
         splitter = get_splitter()
@@ -208,9 +200,9 @@ class NovelOutlineApp:
         # 确认继续
         while True:
             user_input = input("\n是否继续处理？(y/n): ").strip().lower()
-            if user_input in ['y', 'yes']:
+            if user_input in ["y", "yes"]:
                 return
-            elif user_input in ['n', 'no']:
+            elif user_input in ["n", "no"]:
                 print("操作已取消")
                 exit(0)
             else:
@@ -234,32 +226,35 @@ class NovelOutlineApp:
         summary = self.progress_service.get_progress_summary(progress_data)
         print("\n📋 发现未完成的进度:")
         print(f"   文件: {summary['file']}")
-        print(f"   进度: {summary['completed_chunks']}/{summary['total_chunks']} ({summary['completion_rate']})")
+        print(
+            f"   进度: {summary['completed_chunks']}/{summary['total_chunks']} ({summary['completion_rate']})"
+        )
         print(f"   最后更新: {summary['last_update']}")
 
         while True:
             user_input = input("\n是否恢复进度？(y/n): ").strip().lower()
-            if user_input in ['y', 'yes']:
+            if user_input in ["y", "yes"]:
                 return True
-            elif user_input in ['n', 'no']:
+            elif user_input in ["n", "no"]:
                 self.progress_service.clear_progress()
                 return False
             else:
                 print("请输入 y/yes 或 n/no")
 
-
     def _show_results(self, result: dict) -> None:
         """显示处理结果"""
-        print("\n" + "="*60)
+        print("\n" + "=" * 60)
         print("🎉 处理完成！")
-        print("="*60)
+        print("=" * 60)
         print(f"✅ 成功处理: {result['chunk_count']} 个文本块")
         print(f"⏱️  处理时间: {result['processing_time']:.1f} 秒")
         print(f"📁 输出目录: {result['output_dir']}")
         print("\n生成文件:")
-        print(f"   📄 chunk_outlines.json - 分块大纲")
-        print(f"   📄 final_outline.txt - 最终大纲")
-        print(f"   📄 processing_metadata.json - 处理元数据")
+        print("   📄 chunk_outlines.json - 分块大纲")
+        print("   📄 final_outline.txt - 最终大纲")
+        print("   📄 processing_metadata.json - 处理元数据")
+
+
 async def main():
     """主入口函数"""
     app = NovelOutlineApp()

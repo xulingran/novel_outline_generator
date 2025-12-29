@@ -8,18 +8,19 @@ FastAPI 后端接口：
 启动方式：
   uvicorn web_api:app --reload --port 8000
 """
+
 import asyncio
-import uuid
-import time
 import os
+import shutil
+import time
+import uuid
 from collections import defaultdict, deque
+from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Dict, Any, List, Optional, Set
+from typing import Any
 
-import shutil
-
-from fastapi import FastAPI, UploadFile, File, HTTPException, Request
+from fastapi import FastAPI, File, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
@@ -30,15 +31,15 @@ ENV_PATH = Path(".env")
 UPLOAD_DIR = Path("outputs/uploads")
 _UPLOAD_ROOT = UPLOAD_DIR.resolve()
 
+
 # CORS 允许的来源，可通过环境变量配置
 # 默认允许本地开发常用端口，生产环境应配置具体域名
-def _load_cors_origins() -> List[str]:
+def _load_cors_origins() -> list[str]:
     """Load CORS origins, translating file:// to null for browser Origin headers."""
     raw = os.getenv(
-        "CORS_ORIGINS",
-        "http://localhost:8000,http://127.0.0.1:8000,http://localhost:3000,null"
+        "CORS_ORIGINS", "http://localhost:8000,http://127.0.0.1:8000,http://localhost:3000,null"
     )
-    origins: List[str] = []
+    origins: list[str] = []
     for origin in raw.split(","):
         origin = origin.strip()
         if not origin:
@@ -80,7 +81,7 @@ class RateLimiter:
     """简单内存限流器，按 IP 在时间窗口内计数。"""
 
     def __init__(self) -> None:
-        self._requests = defaultdict(deque)
+        self._requests: dict[str, deque[float]] = defaultdict(deque)
 
     def check_rate_limit(self, client_ip: str, max_requests: int, window_seconds: int) -> None:
         now = time.time()
@@ -95,12 +96,13 @@ class RateLimiter:
 
 
 rate_limiter = RateLimiter()
+UPLOAD_FILE_PARAM = File(...)
 
 
-def load_env_file() -> Dict[str, str]:
+def load_env_file() -> dict[str, str]:
     if not ENV_PATH.exists():
         return {}
-    data: Dict[str, str] = {}
+    data: dict[str, str] = {}
     for line in ENV_PATH.read_text(encoding="utf-8").splitlines():
         if not line or line.strip().startswith("#") or "=" not in line:
             continue
@@ -109,12 +111,12 @@ def load_env_file() -> Dict[str, str]:
     return data
 
 
-def save_env_file(updates: Dict[str, str]) -> None:
+def save_env_file(updates: dict[str, str]) -> None:
     existing = load_env_file()
     existing.update(updates)
     for key, value in updates.items():
         os.environ[key] = value
-    lines: List[str] = []
+    lines: list[str] = []
     for k, v in existing.items():
         lines.append(f"{k}={v}")
     ENV_PATH.write_text("\n".join(lines) + "\n", encoding="utf-8")
@@ -141,8 +143,8 @@ class Job:
     status: str = "pending"  # pending|running|success|error
     message: str = ""
     progress: float = 0.0
-    result: Dict[str, Any] = field(default_factory=dict)
-    logs: List[str] = field(default_factory=list)
+    result: dict[str, Any] = field(default_factory=dict)
+    logs: list[str] = field(default_factory=list)
     created_at: float = field(default_factory=time.time)
 
     def log(self, text: str) -> None:
@@ -154,7 +156,7 @@ class Job:
             del self.logs[:-200]
 
 
-JOBS: Dict[str, Job] = {}
+JOBS: dict[str, Job] = {}
 # 最大保留的job数量，防止内存泄漏
 MAX_JOBS = 100
 
@@ -170,7 +172,7 @@ def cleanup_old_jobs():
     def _by_age(statuses):
         return sorted(
             ((job_id, job) for job_id, job in JOBS.items() if job.status in statuses),
-            key=lambda x: x[1].created_at
+            key=lambda x: x[1].created_at,
         )
 
     for statuses in (("success", "error"), ("pending",), ("running",)):
@@ -182,7 +184,8 @@ def cleanup_old_jobs():
             del JOBS[job_id]
             over_limit -= 1
 
-def _resolve_upload_path(path: str) -> Optional[Path]:
+
+def _resolve_upload_path(path: str) -> Path | None:
     """返回在 uploads 目录下的路径，其他情况返回 None。"""
     try:
         resolved = Path(path).resolve()
@@ -199,7 +202,7 @@ def _resolve_upload_path(path: str) -> Optional[Path]:
         return None
 
 
-def cleanup_uploads(protected_paths: Optional[Set[Path]] = None) -> int:
+def cleanup_uploads(protected_paths: set[Path] | None = None) -> int:
     """删除上传目录中的内容，保留目录本身。
 
     Args:
@@ -213,10 +216,7 @@ def cleanup_uploads(protected_paths: Optional[Set[Path]] = None) -> int:
     cleaned = 0
     for item in UPLOAD_DIR.iterdir():
         item_path = item.resolve()
-        if any(
-            item_path == kept_path or item_path in kept_path.parents
-            for kept_path in keep
-        ):
+        if any(item_path == kept_path or item_path in kept_path.parents for kept_path in keep):
             continue
         try:
             if item.is_dir():
@@ -229,7 +229,16 @@ def cleanup_uploads(protected_paths: Optional[Set[Path]] = None) -> int:
             continue
     return cleaned
 
-app = FastAPI(title="Novel Outline API", version="0.1.0")
+
+@asynccontextmanager
+async def lifespan(_: FastAPI):
+    yield
+    from services.llm_service import OpenAIService
+
+    await OpenAIService.close_http_clients()
+
+
+app = FastAPI(title="Novel Outline API", version="0.1.0", lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=CORS_ORIGINS,
@@ -239,22 +248,15 @@ app.add_middleware(
 )
 
 
-@app.on_event("shutdown")
-async def shutdown_event():
-    """应用关闭时清理资源"""
-    from services.llm_service import OpenAIService
-    await OpenAIService.close_http_clients()
-
-
 @app.get("/env")
-def get_env() -> Dict[str, Any]:
+def get_env() -> dict[str, Any]:
     data = load_env_file()
     masked = {k: mask_value(k, v) for k, v in data.items()}
     return {"env": data, "masked": masked}
 
 
 @app.post("/upload")
-async def upload_file(request: Request, file: UploadFile = File(...)):
+async def upload_file(request: Request, file: UploadFile = UPLOAD_FILE_PARAM):
     client_host = request.client.host if request.client else "unknown"
     rate_limiter.check_rate_limit(client_host, 10, 60)
     if file.content_type not in ("text/plain", "text/markdown", "application/octet-stream"):
@@ -283,7 +285,7 @@ async def _run_job(job: Job, req: ProcessRequest):
     job.result = {}
     job.log(f"开始处理文件: {req.file_path}")
 
-    def handle_progress(info: Dict[str, Any]) -> None:
+    def handle_progress(info: dict[str, Any]) -> None:
         job.progress = info.get("progress", job.progress)
         if "total_chunks" in info:
             job.result["chunk_count"] = info["total_chunks"]
@@ -315,13 +317,15 @@ async def _run_job(job: Job, req: ProcessRequest):
             completion_tokens = token_usage.get("completion_tokens", 0)
             total_tokens = token_usage.get("total_tokens", 0)
 
-            job.log(f"Token统计: 输入={prompt_tokens:,}, 输出={completion_tokens:,}, 总计={total_tokens:,}")
+            job.log(
+                f"Token统计: 输入={prompt_tokens:,}, 输出={completion_tokens:,}, 总计={total_tokens:,}"
+            )
 
         job.log("处理完成")
         try:
             current_upload = _resolve_upload_path(req.file_path)
             if current_upload:
-                active_uploads: Set[Path] = set()
+                active_uploads: set[Path] = set()
                 for other_job in JOBS.values():
                     if other_job.id == job.id:
                         continue

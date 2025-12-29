@@ -10,8 +10,8 @@ from services.llm_service import LLMResponse, LLMService
 
 
 class DummyService(LLMService):
-    def __init__(self, responses):
-        self._responses = list(responses)
+    def __init__(self, responses: list[LLMResponse | Exception]):
+        self._responses: list[LLMResponse | Exception] = list(responses)
         self.call_count = 0
         super().__init__()
 
@@ -44,10 +44,12 @@ async def test_retry_on_retryable_error(monkeypatch):
 
     monkeypatch.setattr(llm_service.asyncio, "sleep", fake_sleep)
 
-    service = DummyService([
-        APIError("retry", is_retryable=True),
-        LLMResponse(content="ok"),
-    ])
+    service = DummyService(
+        [
+            APIError("retry", is_retryable=True),
+            LLMResponse(content="ok"),
+        ]
+    )
     service.processing_config.max_retry = 2
 
     response = await service.call("ping")
@@ -66,10 +68,12 @@ async def test_rate_limit_uses_retry_after(monkeypatch):
     monkeypatch.setattr(llm_service.asyncio, "sleep", fake_sleep)
     monkeypatch.setattr(llm_service.random, "uniform", lambda _a, _b: 0)
 
-    service = DummyService([
-        RateLimitError("limit", retry_after=2),
-        LLMResponse(content="ok"),
-    ])
+    service = DummyService(
+        [
+            RateLimitError("limit", retry_after=2),
+            LLMResponse(content="ok"),
+        ]
+    )
     service.processing_config.max_retry = 2
 
     response = await service.call("ping")

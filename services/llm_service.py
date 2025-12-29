@@ -2,16 +2,19 @@
 LLM服务模块
 提供统一的LLM调用接口
 """
+
 import asyncio
+import logging
 import random
 from abc import ABC, abstractmethod
-from typing import Optional, Dict, Any, List
 from dataclasses import dataclass
-import logging
 from datetime import datetime, timedelta
+from typing import Any, cast
+
+import httpx
 
 from config import get_api_config, get_processing_config
-from exceptions import APIKeyError, RateLimitError, APIError
+from exceptions import APIError, APIKeyError, RateLimitError
 
 logger = logging.getLogger(__name__)
 
@@ -19,11 +22,12 @@ logger = logging.getLogger(__name__)
 @dataclass
 class LLMResponse:
     """LLM响应模型"""
+
     content: str
-    token_usage: Optional[Dict[str, int]] = None
-    response_time: Optional[float] = None
-    model: Optional[str] = None
-    finish_reason: Optional[str] = None
+    token_usage: dict[str, int] | None = None
+    response_time: float | None = None
+    model: str | None = None
+    finish_reason: str | None = None
 
 
 class CircuitBreaker:
@@ -33,18 +37,19 @@ class CircuitBreaker:
         self.failure_threshold = failure_threshold
         self.timeout_seconds = timeout_seconds
         self.failure_count = 0
-        self.last_failure_time: Optional[datetime] = None
-        self.state = 'CLOSED'  # CLOSED, OPEN, HALF_OPEN
+        self.last_failure_time: datetime | None = None
+        self.state = "CLOSED"  # CLOSED, OPEN, HALF_OPEN
 
     def call_allowed(self) -> bool:
         """检查是否允许调用"""
-        if self.state == 'CLOSED':
+        if self.state == "CLOSED":
             return True
 
-        if self.state == 'OPEN':
-            if (self.last_failure_time and
-                datetime.now() - self.last_failure_time > timedelta(seconds=self.timeout_seconds)):
-                self.state = 'HALF_OPEN'
+        if self.state == "OPEN":
+            if self.last_failure_time and datetime.now() - self.last_failure_time > timedelta(
+                seconds=self.timeout_seconds
+            ):
+                self.state = "HALF_OPEN"
                 return True
             return False
 
@@ -54,7 +59,7 @@ class CircuitBreaker:
     def record_success(self) -> None:
         """记录成功"""
         self.failure_count = 0
-        self.state = 'CLOSED'
+        self.state = "CLOSED"
 
     def record_failure(self) -> None:
         """记录失败"""
@@ -62,7 +67,7 @@ class CircuitBreaker:
         self.last_failure_time = datetime.now()
 
         if self.failure_count >= self.failure_threshold:
-            self.state = 'OPEN'
+            self.state = "OPEN"
             logger.warning(f"熔断器打开，失败次数: {self.failure_count}")
 
 
@@ -85,7 +90,7 @@ class LLMService(ABC):
         """调用API的具体实现"""
         pass
 
-    async def call(self, prompt: str, chunk_id: Optional[int] = None) -> LLMResponse:
+    async def call(self, prompt: str, chunk_id: int | None = None) -> LLMResponse:
         """统一的调用接口，返回完整的响应对象（包含token使用情况）"""
         chunk_info = f" [块 {chunk_id}]" if chunk_id else ""
 
@@ -112,7 +117,7 @@ class LLMService(ABC):
 
             except RateLimitError as e:
                 # 速率限制错误，等待更长时间
-                wait_time = e.retry_after or (2 ** attempt) + random.uniform(0, 1)
+                wait_time = e.retry_after or (2**attempt) + random.uniform(0, 1)
                 logger.warning(f"API速率限制{chunk_info}，等待 {wait_time:.1f} 秒后重试")
                 await asyncio.sleep(wait_time)
 
@@ -123,12 +128,12 @@ class LLMService(ABC):
                     raise
 
                 # 可重试的错误
-                wait_time = (2 ** attempt) + random.uniform(0, 1)
+                wait_time = (2**attempt) + random.uniform(0, 1)
                 logger.warning(f"API调用失败{chunk_info}，{wait_time:.1f}秒后重试: {e.message}")
                 await asyncio.sleep(wait_time)
 
             except Exception as e:
-                wait_time = (2 ** attempt) + random.uniform(0, 1)
+                wait_time = (2**attempt) + random.uniform(0, 1)
                 logger.error(f"未知错误{chunk_info}，{wait_time:.1f}秒后重试: {str(e)}")
                 self.circuit_breaker.record_failure()
                 await asyncio.sleep(wait_time)
@@ -141,35 +146,29 @@ class LLMService(ABC):
 class OpenAIService(LLMService):
     """OpenAI服务实现"""
 
-    _http_client: Optional["httpx.AsyncClient"] = None
-    _proxy_clients: Dict[str, "httpx.AsyncClient"] = {}
+    _http_client: httpx.AsyncClient | None = None
+    _proxy_clients: dict[str, httpx.AsyncClient] = {}
 
     @classmethod
-    def get_http_client(cls, proxy_url: Optional[str] = None) -> "httpx.AsyncClient":
-        import httpx
-
+    def get_http_client(cls, proxy_url: str | None = None) -> httpx.AsyncClient:
         if proxy_url:
             client = cls._proxy_clients.get(proxy_url)
             if client is None:
                 client = httpx.AsyncClient(
-                    proxies=proxy_url,
-                    limits=httpx.Limits(max_connections=100),
-                    timeout=60.0
+                    proxies=proxy_url, limits=httpx.Limits(max_connections=100), timeout=60.0
                 )
                 cls._proxy_clients[proxy_url] = client
             return client
 
         if cls._http_client is None:
             cls._http_client = httpx.AsyncClient(
-                limits=httpx.Limits(max_connections=100),
-                timeout=60.0
+                limits=httpx.Limits(max_connections=100), timeout=60.0
             )
         return cls._http_client
 
     @classmethod
     async def close_http_clients(cls) -> None:
         """关闭所有HTTP客户端连接池"""
-        import httpx
 
         # 关闭代理客户端
         for proxy_url, client in list(cls._proxy_clients.items()):
@@ -194,7 +193,9 @@ class OpenAIService(LLMService):
         try:
             from openai import AsyncOpenAI
 
-            proxy_url = self.processing_config.proxy_url if self.processing_config.use_proxy else None
+            proxy_url = (
+                self.processing_config.proxy_url if self.processing_config.use_proxy else None
+            )
             http_client = self.get_http_client(proxy_url)
             if proxy_url:
                 logger.debug(f"OpenAI客户端配置代理: {proxy_url}")
@@ -202,14 +203,14 @@ class OpenAIService(LLMService):
             self.client = AsyncOpenAI(
                 api_key=self.api_config.api_key,
                 base_url=self.api_config.base_url,
-                http_client=http_client
+                http_client=http_client,
             )
             logger.info(f"OpenAI API客户端初始化成功 (模型: {self.api_config.model_name})")
 
-        except ImportError:
-            raise APIKeyError("未安装openai库，请运行: pip install openai")
+        except ImportError as e:
+            raise APIKeyError("未安装openai库，请运行: pip install openai") from e
         except Exception as e:
-            raise APIKeyError(f"OpenAI API配置失败: {str(e)}")
+            raise APIKeyError(f"OpenAI API配置失败: {str(e)}") from e
 
     async def _call_api(self, prompt: str, **kwargs) -> LLMResponse:
         """调用OpenAI API"""
@@ -218,14 +219,14 @@ class OpenAIService(LLMService):
                 model=self.api_config.model_name,
                 messages=[{"role": "user", "content": prompt}],
                 timeout=60,
-                **kwargs
+                **kwargs,
             )
 
             return LLMResponse(
                 content=response.choices[0].message.content,
                 token_usage=response.usage.model_dump() if response.usage else None,
                 model=response.model,
-                finish_reason=response.choices[0].finish_reason
+                finish_reason=response.choices[0].finish_reason,
             )
 
         except Exception as e:
@@ -233,22 +234,22 @@ class OpenAIService(LLMService):
 
             # 检查特定错误类型
             if "authentication" in error_str or "unauthorized" in error_str:
-                raise APIKeyError("API密钥无效或已过期")
+                raise APIKeyError("API密钥无效或已过期") from e
 
             if "rate" in error_str and "limit" in error_str:
                 # 尝试从错误中提取重试时间
                 retry_after = None
-                if hasattr(e, 'response') and e.response:
-                    retry_after = e.response.headers.get('retry-after')
+                if hasattr(e, "response") and e.response:
+                    retry_after = e.response.headers.get("retry-after")
                     if retry_after:
                         retry_after = int(retry_after)
-                raise RateLimitError("API速率限制", retry_after=retry_after)
+                raise RateLimitError("API速率限制", retry_after=retry_after) from e
 
             if "quota" in error_str or "exceeded" in error_str:
-                raise APIError("API配额已用尽", is_retryable=False)
+                raise APIError("API配额已用尽", is_retryable=False) from e
 
             # 其他错误
-            raise APIError(f"OpenAI API错误: {str(e)}", is_retryable=True)
+            raise APIError(f"OpenAI API错误: {str(e)}", is_retryable=True) from e
 
 
 class GeminiService(LLMService):
@@ -271,8 +272,7 @@ class GeminiService(LLMService):
             }
 
             safety_threshold = safety_mapping.get(
-                self.api_config.gemini_safety,
-                genai.types.HarmBlockThreshold.BLOCK_ONLY_HIGH
+                self.api_config.gemini_safety, genai.types.HarmBlockThreshold.BLOCK_ONLY_HIGH
             )
 
             self.safety_settings = [
@@ -297,10 +297,12 @@ class GeminiService(LLMService):
             logger.info(f"Gemini API初始化成功 (模型: {self.api_config.model_name})")
             logger.info(f"安全设置: {self.api_config.gemini_safety}")
 
-        except ImportError:
-            raise APIKeyError("未安装google-generativeai库，请运行: pip install google-generativeai")
+        except ImportError as e:
+            raise APIKeyError(
+                "未安装google-generativeai库，请运行: pip install google-generativeai"
+            ) from e
         except Exception as e:
-            raise APIKeyError(f"Gemini API配置失败: {str(e)}")
+            raise APIKeyError(f"Gemini API配置失败: {str(e)}") from e
 
     async def _call_api(self, prompt: str, **kwargs) -> LLMResponse:
         """调用Gemini API"""
@@ -315,23 +317,21 @@ class GeminiService(LLMService):
             response = await loop.run_in_executor(
                 None,
                 lambda: model.generate_content(
-                    prompt,
-                    safety_settings=self.safety_settings
-                )
+                    prompt, safety_settings=cast(Any, self.safety_settings)
+                ),
             )
 
             # 检查内容是否被阻止
-            if hasattr(response, 'prompt_feedback') and response.prompt_feedback:
+            if hasattr(response, "prompt_feedback") and response.prompt_feedback:
                 feedback = response.prompt_feedback
-                if hasattr(feedback, 'block_reason') and feedback.block_reason:
-                    raise APIError(f"内容被安全过滤器阻止: {feedback.block_reason}", is_retryable=False)
+                if hasattr(feedback, "block_reason") and feedback.block_reason:
+                    raise APIError(
+                        f"内容被安全过滤器阻止: {feedback.block_reason}", is_retryable=False
+                    )
 
             # 提取文本内容
-            if hasattr(response, 'text') and response.text:
-                return LLMResponse(
-                    content=response.text,
-                    model=self.api_config.model_name
-                )
+            if hasattr(response, "text") and response.text:
+                return LLMResponse(content=response.text, model=self.api_config.model_name)
             else:
                 raise APIError("Gemini API返回空内容", is_retryable=True)
 
@@ -340,15 +340,15 @@ class GeminiService(LLMService):
 
             # 检查特定错误类型
             if "permission" in error_str or "forbidden" in error_str:
-                raise APIKeyError("API密钥无效或无权限")
+                raise APIKeyError("API密钥无效或无权限") from e
 
             if "quota" in error_str or "exceeded" in error_str:
-                raise APIError("API配额已用尽", is_retryable=False)
+                raise APIError("API配额已用尽", is_retryable=False) from e
 
             if "safety" in error_str and "filter" in error_str:
-                raise APIError("内容被安全过滤器阻止", is_retryable=False)
+                raise APIError("内容被安全过滤器阻止", is_retryable=False) from e
 
-            raise APIError(f"Gemini API错误: {str(e)}", is_retryable=True)
+            raise APIError(f"Gemini API错误: {str(e)}", is_retryable=True) from e
 
 
 class ZhipuService(LLMService):
@@ -363,20 +363,21 @@ class ZhipuService(LLMService):
             http_client = None
             if self.processing_config.use_proxy and self.processing_config.proxy_url:
                 import httpx
+
                 http_client = httpx.Client(proxies=self.processing_config.proxy_url)
                 logger.debug(f"智谱客户端配置代理: {self.processing_config.proxy_url}")
 
             self.client = ZhipuAI(
                 api_key=self.api_config.api_key,
                 base_url=self.api_config.base_url,
-                http_client=http_client
+                http_client=http_client,
             )
             logger.info(f"智谱API客户端初始化成功 (模型: {self.api_config.model_name})")
 
-        except ImportError:
-            raise APIKeyError("未安装zhipuai库，请运行: pip install zhipuai")
+        except ImportError as e:
+            raise APIKeyError("未安装zhipuai库，请运行: pip install zhipuai") from e
         except Exception as e:
-            raise APIKeyError(f"智谱API配置失败: {str(e)}")
+            raise APIKeyError(f"智谱API配置失败: {str(e)}") from e
 
     async def _call_api(self, prompt: str, **kwargs) -> LLMResponse:
         """调用智谱API"""
@@ -387,24 +388,26 @@ class ZhipuService(LLMService):
                 None,
                 lambda: self.client.chat.completions.create(
                     model=self.api_config.model_name,
-                    messages=[
-                        {"role": "user", "content": prompt}
-                    ],
+                    messages=[{"role": "user", "content": prompt}],
                     temperature=0.7,
                     max_tokens=None,  # 让API自行决定
-                    **kwargs
-                )
+                    **kwargs,
+                ),
             )
+
+            token_usage = None
+            if response.usage:
+                token_usage = {
+                    "prompt_tokens": response.usage.prompt_tokens,
+                    "completion_tokens": response.usage.completion_tokens,
+                    "total_tokens": response.usage.total_tokens,
+                }
 
             return LLMResponse(
                 content=response.choices[0].message.content,
-                token_usage={
-                    "prompt_tokens": response.usage.prompt_tokens if response.usage else None,
-                    "completion_tokens": response.usage.completion_tokens if response.usage else None,
-                    "total_tokens": response.usage.total_tokens if response.usage else None
-                } if response.usage else None,
+                token_usage=token_usage,
                 model=response.model,
-                finish_reason=response.choices[0].finish_reason
+                finish_reason=response.choices[0].finish_reason,
             )
 
         except Exception as e:
@@ -412,37 +415,37 @@ class ZhipuService(LLMService):
 
             # 检查特定错误类型
             if "invalid_api_key" in error_str or "unauthorized" in error_str:
-                raise APIKeyError("API密钥无效或已过期")
+                raise APIKeyError("API密钥无效或已过期") from e
 
             if "rate" in error_str and "limit" in error_str:
                 # 尝试从错误中提取重试时间
                 retry_after = None
                 # 智谱API可能会在响应中包含重试时间
-                if hasattr(e, 'response') and e.response:
-                    retry_after = e.response.headers.get('retry-after')
+                if hasattr(e, "response") and e.response:
+                    retry_after = e.response.headers.get("retry-after")
                     if retry_after:
                         retry_after = int(retry_after)
-                raise RateLimitError("API速率限制", retry_after=retry_after)
+                raise RateLimitError("API速率限制", retry_after=retry_after) from e
 
             if "insufficient_quota" in error_str or "exceeded" in error_str:
-                raise APIError("API配额已用尽", is_retryable=False)
+                raise APIError("API配额已用尽", is_retryable=False) from e
 
             if "content_filter" in error_str or "sensitive" in error_str:
-                raise APIError("内容被安全过滤器阻止", is_retryable=False)
+                raise APIError("内容被安全过滤器阻止", is_retryable=False) from e
 
             # 其他错误
-            raise APIError(f"智谱API错误: {str(e)}", is_retryable=True)
+            raise APIError(f"智谱API错误: {str(e)}", is_retryable=True) from e
 
 
 def create_llm_service() -> LLMService:
     """工厂函数：创建LLM服务实例"""
     api_config = get_api_config()
 
-    if api_config.provider == 'openai':
+    if api_config.provider == "openai":
         return OpenAIService()
-    elif api_config.provider == 'gemini':
+    elif api_config.provider == "gemini":
         return GeminiService()
-    elif api_config.provider == 'zhipu':
+    elif api_config.provider == "zhipu":
         return ZhipuService()
     else:
         raise ValueError(f"不支持的API提供商: {api_config.provider}")

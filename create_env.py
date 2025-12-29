@@ -2,10 +2,11 @@
 创建环境变量文件
 用于快速设置项目配置
 """
-import os
+
 import sys
-from pathlib import Path
 from datetime import datetime
+from pathlib import Path
+
 from prompts import DEFAULT_OUTLINE_PROMPT_TEMPLATE
 
 
@@ -17,14 +18,14 @@ def create_env_file():
     if env_file.exists():
         print(f"⚠️  {env_file} 已存在")
         response = input("是否覆盖？(y/n): ").strip().lower()
-        if response not in ['y', 'yes', 'Y']:
+        if response not in ["y", "yes", "Y"]:
             print("操作已取消")
             return
 
     # 获取用户选择
-    print("\n" + "="*60)
+    print("\n" + "=" * 60)
     print("小说大纲生成工具 - 初始化配置")
-    print("="*60)
+    print("=" * 60)
 
     print("\n请选择API提供商:")
     print("1. OpenAI (推荐，需要国外网络或代理)")
@@ -33,23 +34,23 @@ def create_env_file():
 
     while True:
         choice = input("\n请选择 (1/2/3): ").strip()
-        if choice == '1':
-            api_provider = 'openai'
-            api_key_var = 'OPENAI_API_KEY'
-            api_model = 'gpt-4o-mini'
-            api_base_comment = 'OPENAI_API_BASE=https://api.openai.com/v1'
+        if choice == "1":
+            api_provider = "openai"
+            api_key_var = "OPENAI_API_KEY"
+            api_model = "gpt-4o-mini"
+            api_base_comment = "OPENAI_API_BASE=https://api.openai.com/v1"
             break
-        elif choice == '2':
-            api_provider = 'zhipu'
-            api_key_var = 'ZHIPU_API_KEY'
-            api_model = 'glm-4-flash'
-            api_base_comment = 'ZHIPU_API_BASE=https://open.bigmodel.cn/api/paas/v4'
+        elif choice == "2":
+            api_provider = "zhipu"
+            api_key_var = "ZHIPU_API_KEY"
+            api_model = "glm-4-flash"
+            api_base_comment = "ZHIPU_API_BASE=https://open.bigmodel.cn/api/paas/v4"
             break
-        elif choice == '3':
-            api_provider = 'gemini'
-            api_key_var = 'GEMINI_API_KEY'
-            api_model = 'gemini-2.5-flash'
-            api_base_comment = '# GEMINI_API_BASE=https://generativelanguage.googleapis.com'
+        elif choice == "3":
+            api_provider = "gemini"
+            api_key_var = "GEMINI_API_KEY"
+            api_model = "gemini-2.5-flash"
+            api_base_comment = "# GEMINI_API_BASE=https://generativelanguage.googleapis.com"
             break
         else:
             print("无效选择，请输入 1、2 或 3")
@@ -61,7 +62,7 @@ def create_env_file():
 
     # 询问是否使用代理
     use_proxy = input("\n是否使用代理？(y/n，默认n): ").strip().lower()
-    use_proxy = use_proxy in ['y', 'yes', 'Y']
+    use_proxy = use_proxy in ["y", "yes", "Y"]
 
     proxy_url = ""
     if use_proxy:
@@ -78,21 +79,21 @@ API_PROVIDER={api_provider}
 """
 
     # 添加对应的API配置
-    if api_provider == 'openai':
+    if api_provider == "openai":
         env_content += f"""# OpenAI API配置
 {api_key_var}={api_key if api_key else 'your_openai_api_key_here'}
 {api_base_comment}
 OPENAI_MODEL={api_model}
 
 """
-    elif api_provider == 'gemini':
+    elif api_provider == "gemini":
         env_content += f"""# Google Gemini API配置
 {api_key_var}={api_key if api_key else 'your_gemini_api_key_here'}
 GEMINI_MODEL={api_model}
 GEMINI_SAFETY_SETTINGS=BLOCK_ONLY_HIGH
 
 """
-    elif api_provider == 'zhipu':
+    elif api_provider == "zhipu":
         env_content += f"""# 智谱清言 API配置
 {api_key_var}={api_key if api_key else 'your_zhipu_api_key_here'}
 {api_base_comment}
@@ -132,7 +133,7 @@ OUTLINE_PROMPT_TEMPLATE={outline_prompt_env}
 
     # 写入文件
     try:
-        with open(env_file, 'w', encoding='utf-8') as f:
+        with open(env_file, "w", encoding="utf-8") as f:
             f.write(env_content)
         print(f"\n✅ 配置文件已创建: {env_file}")
 
@@ -151,7 +152,8 @@ OUTLINE_PROMPT_TEMPLATE={outline_prompt_env}
 
 def show_help():
     """显示帮助信息"""
-    print("""
+    print(
+        """
 小说大纲生成工具 - 配置助手
 
 用法:
@@ -180,12 +182,12 @@ def show_help():
   OPENAI_API_KEY=your_api_key_here
   USE_PROXY=true
   PROXY_URL=http://127.0.0.1:7890
-""")
+"""
+    )
 
 
 if __name__ == "__main__":
-    if len(sys.argv) > 1 and sys.argv[1] in ['-h', '--help', 'help']:
+    if len(sys.argv) > 1 and sys.argv[1] in ["-h", "--help", "help"]:
         show_help()
     else:
         create_env_file()
-

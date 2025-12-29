@@ -2,16 +2,17 @@
 
 Provides simple persistence and recovery for processing progress.
 """
+
 from __future__ import annotations
 
 import logging
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, List, Optional, Any
+from typing import Any
 
+from config import get_processing_config
 from models.processing_state import ProgressData
 from services.file_service import FileService
-from config import get_processing_config
 from utils import ProgressTracker
 
 logger = logging.getLogger(__name__)
@@ -49,7 +50,7 @@ class ProgressService:
             logger.error("Failed to save progress: %s", e)
             raise
 
-    def load_progress(self) -> Optional[ProgressData]:
+    def load_progress(self) -> ProgressData | None:
         """Load progress from disk if available."""
         progress_path = Path(self.processing_config.progress_file)
         try:
@@ -95,9 +96,7 @@ class ProgressService:
             except Exception:
                 pass
 
-    def create_progress(
-        self, txt_file: str, total_chunks: int, chunks_hash: str
-    ) -> ProgressData:
+    def create_progress(self, txt_file: str, total_chunks: int, chunks_hash: str) -> ProgressData:
         """Create a new progress record."""
         return ProgressData(
             txt_file=txt_file,
@@ -113,8 +112,8 @@ class ProgressService:
         self,
         progress_data: ProgressData,
         chunk_id: int,
-        outline_data: Dict[str, Any],
-        processing_time: Optional[float] = None,
+        outline_data: dict[str, Any],
+        processing_time: float | None = None,
     ) -> None:
         """Mark a chunk as completed and optionally record time."""
         progress_data.completed_indices.add(chunk_id)
@@ -133,9 +132,9 @@ class ProgressService:
 
     def is_progress_valid(
         self,
-        progress_data: Optional[ProgressData],
+        progress_data: ProgressData | None,
         current_file: str,
-        current_chunks: List[str],
+        current_chunks: list[str],
         current_hash: str,
     ) -> bool:
         """Validate that existing progress matches current input."""
@@ -166,7 +165,7 @@ class ProgressService:
         except Exception as e:  # noqa: BLE001
             logger.error("Failed to clear progress file: %s", e)
 
-    def get_progress_summary(self, progress_data: Optional[ProgressData]) -> Dict[str, Any]:
+    def get_progress_summary(self, progress_data: ProgressData | None) -> dict[str, Any]:
         """Return a lightweight summary of current progress."""
         if not progress_data:
             return {"has_progress": False, "message": "暂无进度数据"}

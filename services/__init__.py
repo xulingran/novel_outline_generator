@@ -3,15 +3,16 @@
 包含各种业务逻辑服务
 """
 
-from .llm_service import LLMService, OpenAIService, GeminiService
-from .progress_service import ProgressService
 from .file_service import FileService
+from .llm_service import GeminiService, LLMService, OpenAIService
 from .novel_processing_service import NovelProcessingService
+from .progress_service import ProgressService
+
 __all__ = [
-    'LLMService',
-    'OpenAIService',
-    'GeminiService',
-    'ProgressService',
-    'FileService',
-    'NovelProcessingService'
+    "LLMService",
+    "OpenAIService",
+    "GeminiService",
+    "ProgressService",
+    "FileService",
+    "NovelProcessingService",
 ]

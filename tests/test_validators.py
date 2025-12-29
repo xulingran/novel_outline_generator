@@ -1,20 +1,21 @@
-# -*- coding: utf-8 -*-
 """
 Validators module unit tests
 """
-import pytest
+
 import tempfile
 from pathlib import Path
 
-from validators import (
-    validate_file_path,
-    validate_output_dir,
-    validate_api_provider,
-    validate_positive_int,
-    validate_non_negative_int,
-    sanitize_filename,
-)
+import pytest
+
 from exceptions import FileValidationError
+from validators import (
+    sanitize_filename,
+    validate_api_provider,
+    validate_file_path,
+    validate_non_negative_int,
+    validate_output_dir,
+    validate_positive_int,
+)
 
 
 class TestValidateFilePath:

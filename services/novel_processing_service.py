@@ -2,23 +2,25 @@
 小说处理服务模块
 核心业务逻辑，处理小说文本并生成大纲
 """
+
 import asyncio
-from typing import List, Dict, Any, Optional, Tuple, Callable
-import logging
 import json
+import logging
+from collections.abc import Callable
 from datetime import datetime
 from pathlib import Path
+from typing import Any, cast
 
+from config import get_processing_config
+from exceptions import APIError, ProcessingError
 from models.outline import TextChunk
 from models.processing_state import ProcessingState, ProgressData
+from prompts import chunk_prompt, merge_prompt, merge_text_prompt
+from services.file_service import FileService
 from services.llm_service import create_llm_service
 from services.progress_service import ProgressService
-from services.file_service import FileService
 from splitter import split_text
 from tokenizer import count_tokens
-from prompts import chunk_prompt, merge_prompt, merge_text_prompt
-from config import get_processing_config
-from exceptions import ProcessingError, APIError
 
 logger = logging.getLogger(__name__)
 
@@ -26,23 +28,22 @@ logger = logging.getLogger(__name__)
 class NovelProcessingService:
     """小说处理服务类"""
 
-    def __init__(self, progress_callback: Optional[Callable[[Dict[str, Any]], None]] = None):
+    def __init__(self, progress_callback: Callable[[dict[str, Any]], None] | None = None):
         self.processing_config = get_processing_config()
         self.llm_service = create_llm_service()
         self.progress_service = ProgressService()
         self.file_service = FileService()
-        self.processing_state: Optional[ProcessingState] = None
+        self.processing_state: ProcessingState | None = None
         self.progress_callback = progress_callback
-        self.current_progress_data: Optional[ProgressData] = None
+        self.current_progress_data: ProgressData | None = None
         # Token统计
         self.total_prompt_tokens = 0
         self.total_completion_tokens = 0
         self.total_tokens = 0
 
-    async def process_novel(self,
-                          file_path: str,
-                          output_dir: Optional[str] = None,
-                          resume: bool = True) -> Dict[str, Any]:
+    async def process_novel(
+        self, file_path: str, output_dir: str | None = None, resume: bool = True
+    ) -> dict[str, Any]:
         """
         处理小说文件，生成大纲
 
@@ -66,7 +67,7 @@ class NovelProcessingService:
 
         try:
             # 1. 读取和分割文本
-            text, encoding = await self._load_and_validate_file(file_path)
+            text, _ = await self._load_and_validate_file(file_path)
             chunks = self._split_text_into_chunks(text)
             self.processing_state.total_chunks = len(chunks)
             if not chunks:
@@ -74,9 +75,7 @@ class NovelProcessingService:
             self._emit_progress()
 
             # 2. 处理或恢复进度
-            outlines = await self._handle_progress_resume(
-                file_path, chunks, resume
-            )
+            outlines = await self._handle_progress_resume(file_path, chunks, resume)
 
             # 3. 处理文本块
             if outlines is None:
@@ -94,14 +93,18 @@ class NovelProcessingService:
             await self._save_results(outlines, final_outline, file_path)
             # 5.1 清理备份文件（成功完成后删除 outputs 下的 .bak）
             try:
-                removed = self.file_service.remove_backups(self.processing_config.output_dir, "*.bak")
+                removed = self.file_service.remove_backups(
+                    self.processing_config.output_dir, "*.bak"
+                )
                 logger.debug(f"已清理备份文件: {removed} 个")
             except Exception as cleanup_err:
                 logger.warning(f"清理备份文件失败: {cleanup_err}")
 
             # 5.2 清理中间结果文件
             try:
-                cleaned = self._cleanup_intermediate_outputs(Path(self.processing_config.output_dir))
+                cleaned = self._cleanup_intermediate_outputs(
+                    Path(self.processing_config.output_dir)
+                )
                 if cleaned:
                     logger.info(f"已清理中间结果文件: {', '.join(cleaned)}")
             except Exception as cleanup_err:
@@ -120,8 +123,8 @@ class NovelProcessingService:
                 "token_usage": {
                     "prompt_tokens": self.total_prompt_tokens,
                     "completion_tokens": self.total_completion_tokens,
-                    "total_tokens": self.total_tokens
-                }
+                    "total_tokens": self.total_tokens,
+                },
             }
 
         except Exception as e:
@@ -131,7 +134,7 @@ class NovelProcessingService:
             logger.error(f"处理小说失败: {e}")
             raise ProcessingError(f"处理小说失败: {str(e)}") from e
 
-    async def _load_and_validate_file(self, file_path: str) -> Tuple[str, str]:
+    async def _load_and_validate_file(self, file_path: str) -> tuple[str, str]:
         """加载并验证文件"""
         logger.info(f"正在读取文件: {file_path}")
         try:
@@ -142,7 +145,7 @@ class NovelProcessingService:
         except Exception as e:
             raise ProcessingError(f"读取文件失败: {str(e)}") from e
 
-    def _split_text_into_chunks(self, text: str) -> List[TextChunk]:
+    def _split_text_into_chunks(self, text: str) -> list[TextChunk]:
         """分割文本为块"""
         logger.info("正在分割文本...")
         try:
@@ -153,13 +156,15 @@ class NovelProcessingService:
             position = 0
             for idx, chunk_content in enumerate(raw_chunks, 1):
                 token_count = count_tokens(chunk_content)
-                chunks.append(TextChunk(
-                    id=idx,
-                    content=chunk_content,
-                    token_count=token_count,
-                    start_position=position,
-                    end_position=position + len(chunk_content)
-                ))
+                chunks.append(
+                    TextChunk(
+                        id=idx,
+                        content=chunk_content,
+                        token_count=token_count,
+                        start_position=position,
+                        end_position=position + len(chunk_content),
+                    )
+                )
                 position += len(chunk_content)
 
             logger.info(f"文本已分割为 {len(chunks)} 个块")
@@ -168,10 +173,9 @@ class NovelProcessingService:
         except Exception as e:
             raise ProcessingError(f"分割文本失败: {str(e)}") from e
 
-    async def _handle_progress_resume(self,
-                                     file_path: str,
-                                     chunks: List[TextChunk],
-                                     resume: bool) -> Optional[List[Dict[str, Any]]]:
+    async def _handle_progress_resume(
+        self, file_path: str, chunks: list[TextChunk], resume: bool
+    ) -> list[dict[str, Any]] | None:
         """处理进度恢复逻辑"""
         if not resume:
             return None
@@ -195,17 +199,21 @@ class NovelProcessingService:
         logger.info(f"恢复进度: {progress_data.completed_count}/{progress_data.total_chunks}")
         return progress_data.outlines
 
-    async def _process_chunks(self, chunks: List[TextChunk]) -> List[Dict[str, Any]]:
+    async def _process_chunks(self, chunks: list[TextChunk]) -> list[dict[str, Any]]:
         """处理所有文本块"""
-        self.processing_state.current_phase = "processing"
-        self.processing_state.total_chunks = len(chunks)
+        if self.processing_state is None:
+            raise ProcessingError("处理状态未初始化")
+
+        processing_state = self.processing_state
+        processing_state.current_phase = "processing"
+        processing_state.total_chunks = len(chunks)
         self._emit_progress()
 
         # 创建进度数据
         progress_data = self.progress_service.create_progress(
-            self.processing_state.file_path,
+            processing_state.file_path,
             len(chunks),
-            ProgressData.calculate_chunks_hash([c.content for c in chunks])
+            ProgressData.calculate_chunks_hash([c.content for c in chunks]),
         )
         self.current_progress_data = progress_data
 
@@ -223,16 +231,16 @@ class NovelProcessingService:
             outlines = await asyncio.gather(*tasks, return_exceptions=True)
 
             # 处理异常
-            successful_outlines = []
+            successful_outlines: list[dict[str, Any]] = []
             for idx, result in enumerate(outlines, 1):
                 if isinstance(result, Exception):
                     logger.error(f"块 {idx} 处理失败: {result}")
-                    self.processing_state.add_error(f"块 {idx}: {str(result)}")
-                    self.processing_state.update_progress(processed=0, failed=1)
+                    processing_state.add_error(f"块 {idx}: {str(result)}")
+                    processing_state.update_progress(processed=0, failed=1)
                     self.progress_service.add_progress_error(progress_data, idx, str(result))
                     self._emit_progress(chunk_id=idx, error=str(result))
                 else:
-                    successful_outlines.append(result)
+                    successful_outlines.append(cast(dict[str, Any], result))
 
         except Exception as e:
             raise ProcessingError(f"处理文本块失败: {str(e)}") from e
@@ -241,16 +249,19 @@ class NovelProcessingService:
             self.progress_service.finalize_progress(progress_data)
 
         # 按chunk_id排序
-        successful_outlines.sort(key=lambda x: x.get('chunk_id', 0))
+        successful_outlines.sort(key=lambda x: x.get("chunk_id", 0))
 
         logger.info(f"成功处理 {len(successful_outlines)}/{len(chunks)} 个块")
         return successful_outlines
 
-    async def _process_single_chunk(self,
-                                   chunk: TextChunk,
-                                   sem: asyncio.Semaphore,
-                                   progress_data: Any) -> Dict[str, Any]:
+    async def _process_single_chunk(
+        self, chunk: TextChunk, sem: asyncio.Semaphore, progress_data: Any
+    ) -> dict[str, Any]:
         """处理单个文本块"""
+        if self.processing_state is None:
+            raise ProcessingError("处理状态未初始化")
+
+        processing_state = self.processing_state
         async with sem:
             chunk_id = chunk.id
             logger.debug(f"开始处理块 {chunk_id}")
@@ -267,15 +278,17 @@ class NovelProcessingService:
 
                 # 累计token使用情况
                 if llm_response.token_usage:
-                    prompt_tokens = llm_response.token_usage.get('prompt_tokens', 0) or 0
-                    completion_tokens = llm_response.token_usage.get('completion_tokens', 0) or 0
-                    total_tokens = llm_response.token_usage.get('total_tokens', 0) or 0
+                    prompt_tokens = llm_response.token_usage.get("prompt_tokens", 0) or 0
+                    completion_tokens = llm_response.token_usage.get("completion_tokens", 0) or 0
+                    total_tokens = llm_response.token_usage.get("total_tokens", 0) or 0
 
                     self.total_prompt_tokens += prompt_tokens
                     self.total_completion_tokens += completion_tokens
                     self.total_tokens += total_tokens
 
-                    logger.debug(f"块 {chunk_id} Token使用: 输入={prompt_tokens}, 输出={completion_tokens}, 总计={total_tokens}")
+                    logger.debug(
+                        f"块 {chunk_id} Token使用: 输入={prompt_tokens}, 输出={completion_tokens}, 总计={total_tokens}"
+                    )
 
                 # 尝试解析JSON响应
                 outline_data = self._parse_llm_response(response, chunk_id)
@@ -284,14 +297,14 @@ class NovelProcessingService:
                 processing_time = (datetime.now() - start_time).total_seconds()
 
                 # 保存原始响应
-                outline_data['raw_response'] = response
-                outline_data['processing_time'] = processing_time
+                outline_data["raw_response"] = response
+                outline_data["processing_time"] = processing_time
 
                 # 更新进度
                 self.progress_service.update_chunk_completed(
                     progress_data, chunk_id, outline_data, processing_time
                 )
-                self.processing_state.update_progress(processed=1)
+                processing_state.update_progress(processed=1)
                 self._emit_progress(chunk_id=chunk_id)
 
                 logger.debug(f"块 {chunk_id} 处理完成，耗时: {processing_time:.2f}秒")
@@ -299,30 +312,35 @@ class NovelProcessingService:
 
             except APIError as e:
                 logger.error(f"块 {chunk_id} API调用失败: {e}")
-                self.processing_state.update_progress(processed=0, failed=1)
+                processing_state.update_progress(processed=0, failed=1)
                 self._emit_progress(chunk_id=chunk_id, error=str(e))
                 raise ProcessingError(f"块 {chunk_id} API调用失败: {str(e)}") from e
             except Exception as e:
                 logger.error(f"块 {chunk_id} 处理失败: {e}")
-                self.processing_state.update_progress(processed=0, failed=1)
+                processing_state.update_progress(processed=0, failed=1)
                 self._emit_progress(chunk_id=chunk_id, error=str(e))
                 raise ProcessingError(f"块 {chunk_id} 处理失败: {str(e)}") from e
 
-    def _parse_llm_response(self, response: str, chunk_id: int) -> Dict[str, Any]:
+    def _parse_llm_response(self, response: str, chunk_id: int) -> dict[str, Any]:
         """解析LLM响应"""
         import json
         import re
 
         try:
             # 尝试直接解析JSON
-            return json.loads(response)
+            data = json.loads(response)
+            if isinstance(data, dict):
+                return cast(dict[str, Any], data)
+            raise ValueError("LLM响应不是JSON对象")
 
-        except json.JSONDecodeError:
+        except (json.JSONDecodeError, ValueError, TypeError):
             # 尝试提取JSON部分
-            json_match = re.search(r'\{.*\}', response, re.DOTALL)
+            json_match = re.search(r"\{.*\}", response, re.DOTALL)
             if json_match:
                 try:
-                    return json.loads(json_match.group())
+                    data = json.loads(json_match.group())
+                    if isinstance(data, dict):
+                        return cast(dict[str, Any], data)
                 except (json.JSONDecodeError, ValueError, TypeError):
                     # JSON解析失败，继续使用默认结构
                     pass
@@ -334,13 +352,15 @@ class NovelProcessingService:
                 "events": [response],
                 "characters": [],
                 "relationships": [],
-                "conflicts": []
+                "conflicts": [],
             }
 
-    async def merge_outlines_recursive(self,
-                                     outlines: List[Dict[str, Any]],
-                                     level: int = 1,
-                                     is_text_mode: bool = False) -> str:
+    async def merge_outlines_recursive(
+        self,
+        outlines: list[dict[str, Any]] | list[str],
+        level: int = 1,
+        is_text_mode: bool = False,
+    ) -> str:
         """递归合并大纲"""
         if not outlines:
             return ""
@@ -350,12 +370,13 @@ class NovelProcessingService:
             if isinstance(outlines[0], str):
                 is_text_mode = True
             elif isinstance(outlines[0], dict) and "merged_content" in outlines[0]:
-                outlines = [item["merged_content"] for item in outlines]
+                outlines_dicts = cast(list[dict[str, Any]], outlines)
+                outlines = [item["merged_content"] for item in outlines_dicts]
                 is_text_mode = True
 
         # 生成合并提示
         if is_text_mode:
-            merge_prompt_text = merge_text_prompt(outlines)
+            merge_prompt_text = merge_text_prompt(cast(list[str], outlines))
         else:
             outlines_json = json.dumps(outlines, ensure_ascii=False)
             merge_prompt_text = merge_prompt(outlines_json)
@@ -371,15 +392,17 @@ class NovelProcessingService:
 
             # 累计token使用情况
             if llm_response.token_usage:
-                prompt_tokens = llm_response.token_usage.get('prompt_tokens', 0) or 0
-                completion_tokens = llm_response.token_usage.get('completion_tokens', 0) or 0
-                total_tokens = llm_response.token_usage.get('total_tokens', 0) or 0
+                prompt_tokens = llm_response.token_usage.get("prompt_tokens", 0) or 0
+                completion_tokens = llm_response.token_usage.get("completion_tokens", 0) or 0
+                total_tokens = llm_response.token_usage.get("total_tokens", 0) or 0
 
                 self.total_prompt_tokens += prompt_tokens
                 self.total_completion_tokens += completion_tokens
                 self.total_tokens += total_tokens
 
-                logger.debug(f"合并 Token使用: 输入={prompt_tokens}, 输出={completion_tokens}, 总计={total_tokens}")
+                logger.debug(
+                    f"合并 Token使用: 输入={prompt_tokens}, 输出={completion_tokens}, 总计={total_tokens}"
+                )
 
             return llm_response.content
 
@@ -390,7 +413,7 @@ class NovelProcessingService:
         # 分批处理
         batches = []
         for i in range(0, len(outlines), batch_size):
-            batches.append(outlines[i:i + batch_size])
+            batches.append(outlines[i : i + batch_size])
 
         # 递归处理每批
         merged_batches = []
@@ -407,12 +430,15 @@ class NovelProcessingService:
         logger.debug(f"合并 {len(merged_batches)} 个批次的结果")
         return await self.merge_outlines_recursive(merged_batches, level + 1, is_text_mode=True)
 
-    async def _save_results(self,
-                           outlines: List[Dict[str, Any]],
-                           final_outline: str,
-                           original_file: str) -> None:
+    async def _save_results(
+        self, outlines: list[dict[str, Any]], final_outline: str, original_file: str
+    ) -> None:
         """保存结果文件"""
-        self.processing_state.current_phase = "saving"
+        if self.processing_state is None:
+            raise ProcessingError("处理状态未初始化")
+
+        processing_state = self.processing_state
+        processing_state.current_phase = "saving"
         self._emit_progress()
 
         # 确保输出目录存在
@@ -429,24 +455,24 @@ class NovelProcessingService:
         # 保存处理元数据
         metadata = {
             "original_file": original_file,
-            "processing_time": self.processing_state.elapsed_time,
+            "processing_time": processing_state.elapsed_time,
             "total_chunks": len(outlines),
-            "success_rate": self.processing_state.success_rate,
+            "success_rate": processing_state.success_rate,
             "completed_at": datetime.now().isoformat(),
-            "summary": self.processing_state.get_summary()
+            "summary": processing_state.get_summary(),
         }
         metadata_path = output_dir / "processing_metadata.json"
         self.file_service.write_json_file(metadata_path, metadata)
 
         logger.info(f"结果已保存到: {output_dir}")
 
-    def _cleanup_intermediate_outputs(self, output_dir: Path) -> List[str]:
+    def _cleanup_intermediate_outputs(self, output_dir: Path) -> list[str]:
         """删除中间产物，保留最终大纲"""
         targets = [
             output_dir / "chunk_outlines.json",
             output_dir / "processing_metadata.json",
         ]
-        removed: List[str] = []
+        removed: list[str] = []
         for path in targets:
             try:
                 if path.exists():
@@ -456,14 +482,14 @@ class NovelProcessingService:
                 logger.debug(f"删除中间文件失败 {path}: {err}")
         return removed
 
-    def get_processing_summary(self) -> Dict[str, Any]:
+    def get_processing_summary(self) -> dict[str, Any]:
         """获取处理摘要"""
         if not self.processing_state:
             return {"status": "not_started"}
 
         return self.processing_state.get_summary()
 
-    def _emit_progress(self, chunk_id: Optional[int] = None, error: Optional[str] = None) -> None:
+    def _emit_progress(self, chunk_id: int | None = None, error: str | None = None) -> None:
         """向外部回调当前进度，便于 Web UI 实时显示。
         设计为尽量轻量、容错，不影响主流程。
         """
@@ -475,13 +501,15 @@ class NovelProcessingService:
         failed = self.processing_state.failed_chunks
         progress = (completed / total) if total else 0.0
 
-        eta_seconds: Optional[float] = None
+        eta_seconds: float | None = None
         if self.current_progress_data and self.current_progress_data.processing_times:
-            avg_time = sum(self.current_progress_data.processing_times) / len(self.current_progress_data.processing_times)
+            avg_time = sum(self.current_progress_data.processing_times) / len(
+                self.current_progress_data.processing_times
+            )
             remaining = max(total - completed - failed, 0)
             eta_seconds = remaining * avg_time
 
-        payload: Dict[str, Any] = {
+        payload: dict[str, Any] = {
             "progress": progress,
             "completed_chunks": completed,
             "failed_chunks": failed,

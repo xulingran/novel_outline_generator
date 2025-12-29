@@ -1,8 +1,7 @@
-# -*- coding: utf-8 -*-
 """
 Splitter module unit tests
 """
-import pytest
+
 from splitter import TextSplitter, get_splitter, split_text
 
 
