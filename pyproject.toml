@@ -53,4 +53,4 @@ ignore = ["E501"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 python_files = "test_*.py"
-addopts = "-v --cov=. --cov-report=term-missing --omit=tests/*,outputs/*,__pycache__/*,.venv/*,venv/*,docs/*,ui/dist/*"
+addopts = "-v --cov=. --cov-report=term-missing --cov-omit=tests/*,outputs/*,__pycache__/*,.venv/*,venv/*,docs/*,ui/dist/*"
