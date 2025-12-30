@@ -4,33 +4,28 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Novel Outline Studio</title>
-  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400&display=swap" rel="stylesheet">
   <style>
     :root {
-      --bg-base: #09090b;
-      --bg-gradient-start: #0f172a;
-      --bg-gradient-end: #020617;
+      --primary: #4f46e5;
+      --primary-hover: #4338ca;
+      --primary-light: #eef2ff;
       
-      --glass-surface: rgba(30, 41, 59, 0.3);
-      --glass-border: rgba(255, 255, 255, 0.08);
-      --glass-highlight: rgba(255, 255, 255, 0.05);
+      --bg-body: #f8fafc;
+      --bg-card: #ffffff;
+      --bg-input: #f1f5f9;
       
-      --primary: #6366f1;
-      --primary-hover: #4f46e5;
-      --secondary: #ec4899;
-      --accent: #06b6d4;
+      --text-main: #0f172a;
+      --text-secondary: #64748b;
+      --text-tertiary: #94a3b8;
       
-      --text-primary: #f8fafc;
-      --text-secondary: #94a3b8;
-      --text-tertiary: #64748b;
-      
-      --radius-xl: 24px;
+      --border: #e2e8f0;
       --radius-lg: 16px;
       --radius-md: 12px;
       --radius-sm: 8px;
       
-      --shadow-glow: 0 0 40px -10px rgba(99, 102, 241, 0.2);
-      --shadow-card: 0 20px 40px -10px rgba(0, 0, 0, 0.4);
+      --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+      --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
     }
 
     * { box-sizing: border-box; outline: none; }
@@ -38,39 +33,17 @@
     body {
       margin: 0;
       min-height: 100vh;
-      font-family: "Space Grotesk", system-ui, -apple-system, sans-serif;
-      color: var(--text-primary);
-      background-color: var(--bg-base);
-      background-image: radial-gradient(circle at 50% 0%, #1e1b4b, var(--bg-base) 80%);
-      overflow-y: auto;
-      overflow-x: hidden;
+      font-family: "Inter", system-ui, -apple-system, sans-serif;
+      color: var(--text-main);
+      background-color: var(--bg-body);
       -webkit-font-smoothing: antialiased;
-    }
-
-    /* Aurora Effect */
-    .bg-aurora {
-      position: fixed;
-      inset: 0;
-      z-index: 0;
-      pointer-events: none;
-      background: 
-        radial-gradient(circle at 10% 20%, rgba(99, 102, 241, 0.1), transparent 40%),
-        radial-gradient(circle at 90% 50%, rgba(236, 72, 153, 0.08), transparent 40%),
-        radial-gradient(circle at 50% 90%, rgba(6, 182, 212, 0.08), transparent 40%);
-      filter: blur(80px);
-      animation: aurora 20s ease-in-out infinite alternate;
-    }
-    @keyframes aurora {
-      0% { opacity: 0.5; transform: scale(1); }
-      100% { opacity: 0.8; transform: scale(1.1); }
+      padding-bottom: 60px;
     }
 
     .app {
-      position: relative;
-      z-index: 1;
       max-width: 1200px;
       margin: 0 auto;
-      padding: 40px 24px 60px;
+      padding: 40px 24px;
     }
 
     /* Header */
@@ -78,249 +51,202 @@
       display: flex;
       align-items: center;
       justify-content: space-between;
-      margin-bottom: 40px;
-      padding: 0 8px;
+      margin-bottom: 32px;
     }
-    .title {
-      font-size: 36px;
-      font-weight: 700;
-      background: linear-gradient(135deg, #fff 0%, #cbd5e1 100%);
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
-      letter-spacing: -0.03em;
-    }
-
-    /* Cards */
-    .card {
-      background: var(--glass-surface);
-      border: 1px solid var(--glass-border);
-      border-radius: var(--radius-xl);
-      padding: 28px;
-      box-shadow: var(--shadow-card);
-      backdrop-filter: blur(20px);
-      transition: transform 0.3s ease, box-shadow 0.3s ease, border-color 0.3s ease;
-    }
-    .card:hover {
-      box-shadow: var(--shadow-glow), var(--shadow-card);
-      border-color: rgba(255,255,255,0.15);
-    }
-
-    .card h3 {
-      margin: 0 0 24px;
-      font-size: 18px;
-      font-weight: 600;
-      color: var(--text-primary);
+    .brand {
       display: flex;
       align-items: center;
-      gap: 10px;
-      letter-spacing: -0.01em;
+      gap: 12px;
+    }
+    .title {
+      font-size: 28px;
+      font-weight: 700;
+      color: var(--text-main);
+      letter-spacing: -0.02em;
+    }
+    .badge {
+      padding: 4px 10px;
+      border-radius: 99px;
+      background: var(--primary-light);
+      color: var(--primary);
+      font-size: 12px;
+      font-weight: 600;
     }
 
-    /* Grid Layout */
+    /* Grid */
     .grid {
       display: grid;
-      grid-template-columns: 1.4fr 1fr;
+      grid-template-columns: 400px 1fr;
       gap: 24px;
-      align-items: stretch;
+      margin-bottom: 24px;
     }
     @media (max-width: 900px) {
       .grid { grid-template-columns: 1fr; }
     }
 
-    /* Upload Area */
-    .upload {
-      border: 2px dashed var(--glass-border);
+    /* Cards */
+    .card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
       border-radius: var(--radius-lg);
+      padding: 24px;
+      box-shadow: var(--shadow-sm);
+      transition: box-shadow 0.2s ease;
+    }
+    .card:hover {
+      box-shadow: var(--shadow-md);
+    }
+    .card h3 {
+      margin: 0 0 20px;
+      font-size: 18px;
+      font-weight: 600;
+      color: var(--text-main);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    /* Upload */
+    .upload {
+      border: 2px dashed var(--border);
+      border-radius: var(--radius-md);
       padding: 40px 20px;
       text-align: center;
       cursor: pointer;
       transition: all 0.2s ease;
-      background: rgba(0,0,0,0.2);
+      background: var(--bg-body);
       display: flex;
       flex-direction: column;
       align-items: center;
-      justify-content: center;
-      gap: 16px;
-      position: relative;
-      overflow: hidden;
+      gap: 12px;
     }
     .upload:hover {
       border-color: var(--primary);
-      background: rgba(99, 102, 241, 0.05);
+      background: var(--primary-light);
     }
     .upload input { display: none; }
-    .upload-icon {
-      font-size: 32px;
-      opacity: 0.8;
-      filter: drop-shadow(0 0 10px rgba(255,255,255,0.2));
-    }
+    .upload-icon { font-size: 32px; margin-bottom: 4px; }
+    .upload-text { font-weight: 500; color: var(--text-main); }
+    .upload-hint { font-size: 13px; color: var(--text-secondary); }
 
     /* Buttons */
     .btn {
-      padding: 12px 24px;
+      padding: 10px 20px;
       border-radius: var(--radius-md);
-      border: none;
+      border: 1px solid transparent;
       font-family: inherit;
       font-weight: 600;
       font-size: 14px;
       cursor: pointer;
-      transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+      transition: all 0.2s;
       display: inline-flex;
       align-items: center;
       justify-content: center;
       gap: 8px;
-      text-transform: uppercase;
-      letter-spacing: 0.05em;
     }
     .btn-primary {
-      background: linear-gradient(135deg, var(--primary), var(--primary-hover));
+      background: var(--primary);
       color: white;
-      box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
+      box-shadow: 0 2px 4px rgba(79, 70, 229, 0.2);
     }
     .btn-primary:hover {
-      transform: translateY(-2px);
-      box-shadow: 0 8px 24px rgba(99, 102, 241, 0.4);
+      background: var(--primary-hover);
+      transform: translateY(-1px);
+      box-shadow: 0 4px 6px rgba(79, 70, 229, 0.3);
     }
     .btn-secondary {
-      background: rgba(255,255,255,0.05);
-      color: var(--text-primary);
-      border: 1px solid var(--glass-border);
+      background: white;
+      border-color: var(--border);
+      color: var(--text-main);
     }
     .btn-secondary:hover {
-      background: rgba(255,255,255,0.1);
-      border-color: rgba(255,255,255,0.2);
-      transform: translateY(-2px);
+      background: var(--bg-body);
+      border-color: var(--text-tertiary);
     }
-    .btn:active { transform: translateY(0); }
 
     /* Progress */
-    .progress {
-      height: 6px;
-      background: rgba(255,255,255,0.08);
+    .progress-container {
+      background: var(--bg-input);
       border-radius: 99px;
+      height: 8px;
       overflow: hidden;
-      margin: 20px 0 12px;
+      margin: 16px 0 12px;
     }
-    .progress .bar {
+    .progress-bar {
       height: 100%;
-      background: linear-gradient(90deg, var(--primary), var(--secondary));
+      background: var(--primary);
       width: 0%;
-      transition: width 0.5s cubic-bezier(0.4, 0, 0.2, 1);
-      box-shadow: 0 0 15px rgba(99, 102, 241, 0.4);
+      transition: width 0.3s ease;
+      border-radius: 99px;
     }
-
+    
     /* Logs */
     .logs {
-      background: #050505;
-      border: 1px solid var(--glass-border);
-      border-radius: var(--radius-lg);
-      padding: 20px;
-      height: 320px;
+      background: #1e293b;
+      border-radius: var(--radius-md);
+      padding: 16px;
+      min-height: 600px;
+      flex: 1;
       overflow-y: auto;
-      font-family: "JetBrains Mono", "Fira Code", monospace;
+      font-family: "JetBrains Mono", monospace;
       font-size: 13px;
       line-height: 1.6;
       color: #e2e8f0;
-      box-shadow: inset 0 2px 10px rgba(0,0,0,0.5);
     }
-    .log-line {
-      margin-bottom: 4px;
-      display: flex;
-      gap: 12px;
-    }
-    .log-time { color: var(--text-tertiary); font-size: 12px; user-select: none; min-width: 60px; }
+    .log-line { display: flex; gap: 12px; margin-bottom: 4px; }
+    .log-time { color: #64748b; min-width: 65px; user-select: none; }
     .log-text { word-break: break-word; }
 
     /* Timeline */
-    .timeline {
-      margin-top: 32px;
-      padding-left: 8px;
-    }
+    .timeline { margin-top: 24px; padding-left: 8px; }
     .step {
       position: relative;
-      padding-left: 28px;
-      padding-bottom: 28px;
-      border-left: 2px solid var(--glass-border);
+      padding-left: 24px;
+      padding-bottom: 24px;
+      border-left: 2px solid var(--border);
     }
     .step:last-child { border-left-color: transparent; padding-bottom: 0; }
     .step::before {
       content: "";
       position: absolute;
-      left: -6px; top: 2px;
+      left: -6px; top: 4px;
       width: 10px; height: 10px;
       border-radius: 50%;
-      background: var(--bg-base);
+      background: white;
       border: 2px solid var(--text-tertiary);
-      transition: all 0.3s ease;
+      transition: all 0.3s;
     }
-    /* We can use JS to add .active class, or just style all for now */
-    .step::before {
-      border-color: var(--primary);
-      box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.1);
-    }
-    .step-title { font-weight: 600; font-size: 14px; margin-bottom: 4px; color: var(--text-primary); }
-    .step-desc { color: var(--text-secondary); font-size: 13px; }
+    .step-title { font-weight: 600; font-size: 14px; color: var(--text-main); margin-bottom: 2px; }
+    .step-desc { font-size: 13px; color: var(--text-secondary); }
 
-    /* Chips & Badges */
+    /* Chips */
     .chips { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 16px; }
     .chip {
-      padding: 6px 12px;
-      border-radius: 99px;
-      background: rgba(255,255,255,0.03);
-      border: 1px solid var(--glass-border);
-      font-size: 12px;
-      color: var(--text-secondary);
-      transition: background 0.2s;
-    }
-    .chip:hover { background: rgba(255,255,255,0.08); }
-    
-    .badge {
       padding: 4px 10px;
       border-radius: 6px;
-      background: rgba(99, 102, 241, 0.1);
-      color: var(--primary);
+      background: var(--bg-input);
+      color: var(--text-secondary);
       font-size: 12px;
-      font-weight: 600;
-      border: 1px solid rgba(99, 102, 241, 0.2);
+      font-weight: 500;
     }
 
-    /* Form Elements */
-    input, textarea {
-      background: rgba(0,0,0,0.3) !important;
-      border: 1px solid var(--glass-border) !important;
-      color: var(--text-primary) !important;
-      border-radius: var(--radius-md) !important;
-      transition: all 0.2s ease;
-      font-family: inherit;
-    }
-    input:focus, textarea:focus {
-      border-color: var(--primary) !important;
-      background: rgba(0,0,0,0.5) !important;
-      box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.2);
-    }
-    
-    /* Collapse */
+    /* Form & Env */
     .collapse-header {
       display: flex;
       align-items: center;
       justify-content: space-between;
       cursor: pointer;
-      user-select: none;
       padding: 8px 0;
     }
-    .collapse-icon {
-      font-size: 12px;
-      color: var(--text-secondary);
-      transition: transform 0.3s ease;
-    }
+    .collapse-icon { transition: transform 0.3s; color: var(--text-secondary); }
     .card.collapsed .collapse-icon { transform: rotate(-90deg); }
     
     .collapse-body {
       max-height: 2000px;
       opacity: 1;
       overflow: hidden;
-      transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
-      margin-top: 20px;
+      transition: all 0.4s ease;
+      margin-top: 16px;
     }
     .card.collapsed .collapse-body {
       max-height: 0;
@@ -328,40 +254,61 @@
       margin-top: 0;
     }
 
-    /* Utilities */
-    .muted { color: var(--text-secondary); font-size: 13px; }
+    input, textarea {
+      background: var(--bg-input) !important;
+      border: 1px solid var(--border) !important;
+      color: var(--text-main) !important;
+      border-radius: var(--radius-sm) !important;
+      font-family: inherit;
+      transition: border-color 0.2s;
+    }
+    input:focus, textarea:focus {
+      border-color: var(--primary) !important;
+      box-shadow: 0 0 0 2px var(--primary-light);
+    }
+
+    /* Utils */
     .flex-between { display: flex; justify-content: space-between; align-items: center; }
+    .text-muted { color: var(--text-secondary); font-size: 13px; }
+    .text-primary { color: var(--primary); font-weight: 600; }
     
     /* Scrollbar */
     ::-webkit-scrollbar { width: 8px; height: 8px; }
     ::-webkit-scrollbar-track { background: transparent; }
-    ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 4px; }
-    ::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.2); }
+    ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+    ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
   </style>
 </head>
 <body>
-  <div class="bg-aurora"></div>
   <div class="app">
     <div class="header">
-      <div class="title">Novel Outline Generator</div>
-      <div class="badge">v0.1.0</div>
+      <div class="brand">
+        <div class="title">Novel Outline Studio</div>
+        <div class="badge">v0.1.0</div>
+      </div>
+      <div class="chips" id="modelChips" style="margin:0;">
+        <!-- Model info injected here -->
+      </div>
     </div>
 
     <div class="grid">
       <!-- Left Column -->
       <div class="card">
-        <h3>📂 文件上传 <span class="badge" id="fileStatus" style="margin-left:auto;background:rgba(255,255,255,0.05);color:var(--text-secondary);border-color:var(--glass-border);">未选择</span></h3>
+        <h3>
+          <span>📂 文件上传</span>
+          <span id="fileStatus" class="chip" style="background:var(--bg-input); color:var(--text-secondary);">未选择</span>
+        </h3>
         
         <label class="upload">
           <input type="file" id="fileInput" accept=".txt,.md,.text">
           <div class="upload-icon">📄</div>
-          <div style="font-weight:500; color:var(--text-primary);">点击或拖拽上传小说文件</div>
-          <div class="muted">支持 .txt, .md (Max 100MB)</div>
+          <div class="upload-text">点击或拖拽上传小说文件</div>
+          <div class="upload-hint">支持 .txt, .md (Max 100MB)</div>
         </label>
 
         <div class="chips" id="metaChips"></div>
 
-        <div style="display:flex; gap:16px; margin-top:28px;">
+        <div style="display:flex; gap:12px; margin-top:24px;">
           <button class="btn btn-primary" id="runBtn" style="flex:1;">
             <span>🚀</span> 开始生成大纲
           </button>
@@ -369,6 +316,26 @@
             <span>📊</span> 预测 Token
           </button>
         </div>
+
+        <div style="height:1px; background:var(--border); margin: 32px 0;"></div>
+
+        <h3>⚡ 任务进度</h3>
+        
+        <div class="progress-container">
+          <div class="progress-bar" id="progressBar"></div>
+        </div>
+        
+        <div class="flex-between" style="margin-bottom:8px;">
+          <span class="text-muted" id="statusText">就绪</span>
+          <span class="text-primary" id="progressText">0%</span>
+        </div>
+        
+        <div class="flex-between">
+          <span class="text-muted" id="chunkText">块: 0 / 0</span>
+          <span class="text-muted" id="etaText">剩余: --</span>
+        </div>
+
+        <div style="height:1px; background:var(--border); margin: 24px 0;"></div>
 
         <div class="timeline" id="steps">
           <div class="step">
@@ -380,49 +347,22 @@
 
       <!-- Right Column -->
       <div class="card" style="display:flex; flex-direction:column;">
-        <h3>⚡ 任务进度</h3>
-        
-        <div class="progress">
-          <div class="bar" id="progressBar"></div>
-        </div>
-        
-        <div class="flex-between" style="margin-top:12px;">
-          <span class="muted" id="statusText">就绪</span>
-          <span style="font-weight:600; color:var(--primary);" id="progressText">0%</span>
-        </div>
-        
-        <div class="flex-between" style="margin-top:6px;">
-          <span class="muted" id="chunkText">块: 0 / 0</span>
-          <span class="muted" id="etaText">剩余: --</span>
-        </div>
-
-        <div style="height:1px; background:var(--glass-border); margin: 28px 0; margin-top: auto;"></div>
-
-        <h3>🤖 模型配置</h3>
-        <div class="chips" id="modelChips">
-          <span class="chip">Provider: --</span>
-          <span class="chip">Model: --</span>
-        </div>
+        <h3>📜 运行日志</h3>
+        <div class="logs" id="logBox"></div>
       </div>
     </div>
 
-    <!-- Logs -->
-    <div class="card" style="margin-top:24px;">
-      <h3>📜 运行日志</h3>
-      <div class="logs" id="logBox"></div>
-    </div>
-
     <!-- Settings -->
-    <div class="card" style="margin-top:24px;">
+    <div class="card">
       <div class="collapse-header" id="envToggle">
-        <h3 style="margin:0; display:flex; align-items:center; gap:10px;">⚙️ 环境配置 <span class="muted" style="font-weight:400; font-size:14px;">(.env - 仅查看)</span></h3>
+        <h3 style="margin:0; font-size:16px;">⚙️ 环境配置 <span class="text-muted" style="font-weight:400; font-size:13px; margin-left:8px;">(.env - 仅查看)</span></h3>
         <span class="collapse-icon">▼</span>
       </div>
       
       <div class="collapse-body" id="envSection">
         <div id="envForm" style="display:grid; grid-template-columns:repeat(auto-fit, minmax(300px, 1fr)); gap:20px;"></div>
         
-        <div style="display:flex; gap:12px; margin-top:28px; justify-content:flex-end;">
+        <div style="display:flex; gap:12px; margin-top:24px; justify-content:flex-end;">
           <button class="btn btn-secondary" id="reloadEnvBtn">🔄 刷新配置</button>
         </div>
       </div>
@@ -633,11 +573,11 @@
         groupTitle.style.gridColumn = '1 / -1';
         groupTitle.style.fontSize = '14px';
         groupTitle.style.fontWeight = '600';
-        groupTitle.style.color = 'var(--text-primary)';
+        groupTitle.style.color = 'var(--text-main)';
         groupTitle.style.marginTop = group === envFieldGroups[0] ? '0' : '20px';
         groupTitle.style.marginBottom = '12px';
         groupTitle.style.paddingBottom = '8px';
-        groupTitle.style.borderBottom = '1px solid var(--glass-border)';
+        groupTitle.style.borderBottom = '1px solid var(--border)';
         groupTitle.textContent = group.title;
         envForm.appendChild(groupTitle);
         
