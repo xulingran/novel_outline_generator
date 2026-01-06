@@ -56,16 +56,20 @@ class ETAEstimator:
             self.processing_start_time = datetime.now()
             logger.debug("ETA 估算器：处理开始")
 
-    def add_completion(self, processing_time: float, completed_count: int) -> None:
+    def add_completion(
+        self, processing_time: float, completed_count: int, record_timestamp: bool = True
+    ) -> None:
         """
         添加一个完成的块
 
         Args:
             processing_time: 处理时间（秒）
             completed_count: 已完成块数
+            record_timestamp: 是否记录时间戳用于吞吐量计算
         """
         self.processing_times.append(processing_time)
-        self.timestamps.append((datetime.now(), completed_count))
+        if record_timestamp:
+            self.timestamps.append((datetime.now(), completed_count))
         logger.debug(f"ETA 估算器：添加完成，时间={processing_time:.2f}s，已完成={completed_count}")
 
     def add_retry(self, retry_time: float) -> None:

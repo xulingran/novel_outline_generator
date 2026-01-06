@@ -185,9 +185,9 @@ class TestETAEstimator:
     def test_estimate_weighted_average_method(self):
         """测试使用加权平均方法估算"""
         estimator = ETAEstimator(min_samples=3, window_size=10)
-        # 不设置时间戳，强制使用加权平均
+        # 不记录时间戳，强制使用加权平均
         for i in range(5):
-            estimator.add_completion(2.0, i + 1)
+            estimator.add_completion(2.0, i + 1, record_timestamp=False)
         result = estimator.estimate(total_chunks=10, completed_chunks=5)
         assert result["eta_seconds"] is not None
         assert result["method"] == "weighted_average"
