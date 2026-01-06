@@ -16,6 +16,7 @@ from exceptions import APIError, ProcessingError
 from models.outline import TextChunk
 from models.processing_state import ProcessingState, ProgressData
 from prompts import chunk_prompt, merge_prompt, merge_text_prompt
+from services.eta_estimator import ETAEstimator
 from services.file_service import FileService
 from services.llm_service import create_llm_service
 from services.progress_service import ProgressService
@@ -40,6 +41,13 @@ class NovelProcessingService:
         self.total_prompt_tokens = 0
         self.total_completion_tokens = 0
         self.total_tokens = 0
+        # ETA 估算器
+        self.eta_estimator = ETAEstimator(
+            window_size=20,
+            outlier_threshold=2.5,
+            min_samples=3,
+        )
+        self.eta_estimator.set_parallel_limit(self.processing_config.parallel_limit)
 
     async def process_novel(
         self, file_path: str, output_dir: str | None = None, resume: bool = True
@@ -214,6 +222,8 @@ class NovelProcessingService:
         processing_state = self.processing_state
         processing_state.current_phase = "processing"
         processing_state.total_chunks = len(chunks)
+        processing_state.processing_start_time = datetime.now()
+        self.eta_estimator.start_processing()
         self._emit_progress()
 
         # 创建进度数据
@@ -312,6 +322,10 @@ class NovelProcessingService:
                     progress_data, chunk_id, outline_data, processing_time
                 )
                 processing_state.update_progress(processed=1)
+
+                # 添加到 ETA 估算器
+                self.eta_estimator.add_completion(processing_time, progress_data.completed_count)
+
                 self._emit_progress(chunk_id=chunk_id)
 
                 logger.debug(f"块 {chunk_id} 处理完成，耗时: {processing_time:.2f}秒")
@@ -372,6 +386,15 @@ class NovelProcessingService:
         if not outlines:
             return ""
 
+        # 检查处理状态
+        if self.processing_state is None:
+            raise ProcessingError("处理状态未初始化")
+
+        # 更新合并层级
+        self.processing_state.merge_level += 1
+        self.processing_state.merge_outlines_count = len(outlines)
+        self._emit_progress()
+
         # 判断模式
         if not is_text_mode and len(outlines) > 0:
             if isinstance(outlines[0], str):
@@ -411,6 +434,9 @@ class NovelProcessingService:
                     f"合并 Token使用: 输入={prompt_tokens}, 输出={completion_tokens}, 总计={total_tokens}"
                 )
 
+            # 减少合并层级
+            self.processing_state.merge_level -= 1
+            self._emit_progress()
             return llm_response.content
 
         # 需要拆分
@@ -422,20 +448,35 @@ class NovelProcessingService:
         for i in range(0, len(outlines), batch_size):
             batches.append(outlines[i : i + batch_size])
 
+        # 更新批次信息
+        self.processing_state.merge_batch_total = len(batches)
+        self.processing_state.merge_batch_current = 0
+        self._emit_progress()
+
         # 递归处理每批
         merged_batches = []
         for idx, batch in enumerate(batches, 1):
+            # 更新当前批次
+            self.processing_state.merge_batch_current = idx
+            self._emit_progress()
             logger.debug(f"处理批次 {idx}/{len(batches)}")
             merged = await self.merge_outlines_recursive(batch, level + 1, is_text_mode)
             merged_batches.append(merged)
 
         # 如果只有一个批次，直接返回
         if len(merged_batches) == 1:
+            # 减少合并层级
+            self.processing_state.merge_level -= 1
+            self._emit_progress()
             return merged_batches[0]
 
         # 合并批次结果
         logger.debug(f"合并 {len(merged_batches)} 个批次的结果")
-        return await self.merge_outlines_recursive(merged_batches, level + 1, is_text_mode=True)
+        result = await self.merge_outlines_recursive(merged_batches, level + 1, is_text_mode=True)
+        # 减少合并层级
+        self.processing_state.merge_level -= 1
+        self._emit_progress()
+        return result
 
     async def _save_results(
         self, outlines: list[dict[str, Any]], final_outline: str, original_file: str
@@ -456,7 +497,9 @@ class NovelProcessingService:
         self.file_service.write_json_file(chunk_outlines_path, outlines)
 
         # 保存最终大纲
-        final_outline_path = output_dir / "final_outline.txt"
+        original_path = Path(original_file)
+        final_outline_filename = f"{original_path.stem}-提纲{original_path.suffix}"
+        final_outline_path = output_dir / final_outline_filename
         self.file_service.write_text_file(final_outline_path, final_outline)
 
         # 保存处理元数据
@@ -513,13 +556,12 @@ class NovelProcessingService:
         failed = self.processing_state.failed_chunks
         progress = (completed / total) if total else 0.0
 
-        eta_seconds: float | None = None
-        if self.current_progress_data and self.current_progress_data.processing_times:
-            avg_time = sum(self.current_progress_data.processing_times) / len(
-                self.current_progress_data.processing_times
-            )
-            remaining = max(total - completed - failed, 0)
-            eta_seconds = remaining * avg_time
+        # 使用 ETA 估算器计算剩余时间
+        eta_result = self.eta_estimator.estimate(
+            total_chunks=total,
+            completed_chunks=completed,
+            failed_chunks=failed,
+        )
 
         payload: dict[str, Any] = {
             "progress": progress,
@@ -527,9 +569,15 @@ class NovelProcessingService:
             "failed_chunks": failed,
             "total_chunks": total,
             "phase": self.processing_state.current_phase,
+            "merge_level": self.processing_state.merge_level,
+            "merge_batch_current": self.processing_state.merge_batch_current,
+            "merge_batch_total": self.processing_state.merge_batch_total,
+            "merge_outlines_count": self.processing_state.merge_outlines_count,
         }
-        if eta_seconds is not None:
-            payload["eta_seconds"] = eta_seconds
+        if eta_result["eta_seconds"] is not None:
+            payload["eta_seconds"] = eta_result["eta_seconds"]
+            payload["eta_confidence"] = eta_result["confidence"]
+            payload["eta_method"] = eta_result["method"]
         if chunk_id is not None:
             payload["last_chunk_id"] = chunk_id
         if error is not None:

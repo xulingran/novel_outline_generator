@@ -87,10 +87,15 @@ class ProcessingState:
     processed_chunks: int = 0
     failed_chunks: int = 0
     start_time: datetime = field(default_factory=datetime.now)
+    processing_start_time: datetime | None = None
     end_time: datetime | None = None
     current_phase: str = "initialization"
     errors: list[str] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
+    merge_level: int = 0  # 当前合并层级
+    merge_batch_current: int = 0  # 当前批次
+    merge_batch_total: int = 0  # 总批次数
+    merge_outlines_count: int = 0  # 当前层级的大纲数量
 
     @property
     def elapsed_time(self) -> float:

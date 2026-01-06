@@ -371,8 +371,20 @@ async def _run_job(job: Job, req: ProcessRequest):
             job.result["failed_chunks"] = info["failed_chunks"]
         if info.get("eta_seconds") is not None:
             job.result["eta_seconds"] = info["eta_seconds"]
+        if info.get("eta_confidence"):
+            job.result["eta_confidence"] = info["eta_confidence"]
+        if info.get("eta_method"):
+            job.result["eta_method"] = info["eta_method"]
         if info.get("phase"):
             job.result["phase"] = info["phase"]
+        if info.get("merge_level") is not None:
+            job.result["merge_level"] = info["merge_level"]
+        if info.get("merge_batch_current") is not None:
+            job.result["merge_batch_current"] = info["merge_batch_current"]
+        if info.get("merge_batch_total") is not None:
+            job.result["merge_batch_total"] = info["merge_batch_total"]
+        if info.get("merge_outlines_count") is not None:
+            job.result["merge_outlines_count"] = info["merge_outlines_count"]
         if info.get("last_chunk_id") is not None:
             if info.get("last_error"):
                 job.log(f"块 {info['last_chunk_id']} 失败: {info['last_error']}")

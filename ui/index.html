@@ -81,7 +81,7 @@
       margin-bottom: 24px;
     }
     @media (max-width: 900px) {
-      .grid { grid-template-columns: 1fr; }
+      .grid { grid-template-columns: 1fr; gap: 20px; }
     }
 
     /* Cards */
@@ -119,6 +119,7 @@
       flex-direction: column;
       align-items: center;
       gap: 12px;
+      width: 100%;
     }
     .upload:hover {
       border-color: var(--primary);
@@ -185,15 +186,17 @@
       background: #1e293b;
       border-radius: var(--radius-md);
       padding: 16px;
-      min-height: 600px;
-      flex: 1;
+      height: 400px;
       overflow-y: auto;
       font-family: "JetBrains Mono", monospace;
       font-size: 13px;
       line-height: 1.6;
       color: #e2e8f0;
+      flex: 1 1 auto;
+      min-height: 0;
     }
-    .log-line { display: flex; gap: 12px; margin-bottom: 4px; }
+    .log-line { display: flex; gap: 12px; margin-bottom: 4px; padding: 0; }
+    .log-line:last-child { margin-bottom: 0; }
     .log-time { color: #64748b; min-width: 65px; user-select: none; }
     .log-text { word-break: break-word; }
 
@@ -277,6 +280,404 @@
     ::-webkit-scrollbar-track { background: transparent; }
     ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
     ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+
+    /* 响应式设计 - 移动端 (<600px) */
+    @media (max-width: 599px) {
+      .app {
+        padding: 20px 16px;
+      }
+
+      .header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 16px;
+        margin-bottom: 24px;
+      }
+
+      .brand {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 8px;
+      }
+
+      .title {
+        font-size: clamp(20px, 5vw, 24px);
+      }
+
+      .badge {
+        font-size: 11px;
+        padding: 3px 8px;
+      }
+
+      .card {
+        padding: 16px;
+        border-radius: var(--radius-md);
+      }
+
+      .card h3 {
+        font-size: 16px;
+        margin-bottom: 16px;
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 8px;
+      }
+
+      .upload {
+        padding: 32px 16px;
+      }
+
+      .upload-icon {
+        font-size: 28px;
+      }
+
+      .upload-text {
+        font-size: 14px;
+      }
+
+      .upload-hint {
+        font-size: 12px;
+      }
+
+      .btn {
+        width: 100%;
+        padding: 12px 16px;
+        font-size: 14px;
+        min-height: 44px;
+      }
+
+      .btn-secondary {
+        width: 100%;
+      }
+
+      .logs {
+        height: 300px;
+        font-size: 12px;
+        padding: 12px;
+      }
+
+      .log-line {
+        flex-direction: column;
+        gap: 4px;
+        padding: 0;
+      }
+
+      .log-time {
+        min-width: auto;
+        font-size: 11px;
+      }
+
+      .log-text {
+        font-size: 12px;
+      }
+
+      .timeline {
+        margin-top: 16px;
+        padding-left: 4px;
+      }
+
+      .step {
+        padding-left: 20px;
+        padding-bottom: 16px;
+      }
+
+      .step-title {
+        font-size: 13px;
+      }
+
+      .step-desc {
+        font-size: 12px;
+      }
+
+      .chips {
+        gap: 6px;
+      }
+
+      .chip {
+        font-size: 11px;
+        padding: 3px 8px;
+      }
+
+      .text-muted {
+        font-size: 12px;
+      }
+
+      .text-primary {
+        font-size: 13px;
+      }
+
+      .collapse-header {
+        padding: 6px 0;
+      }
+
+      #envForm {
+        grid-template-columns: 1fr;
+        gap: 16px;
+      }
+
+      input, textarea {
+        font-size: 14px;
+      }
+
+      textarea {
+        min-height: 120px;
+      }
+    }
+
+    /* 响应式设计 - 平板端 (600px-900px) */
+    @media (min-width: 600px) and (max-width: 900px) {
+      .app {
+        padding: 24px 20px;
+      }
+
+      .header {
+        margin-bottom: 28px;
+      }
+
+      .brand {
+        gap: 10px;
+      }
+
+      .title {
+        font-size: clamp(22px, 4vw, 26px);
+      }
+
+      .card {
+        padding: 20px;
+      }
+
+      .card h3 {
+        font-size: 17px;
+      }
+
+      .upload {
+        padding: 36px 18px;
+      }
+
+      .upload-icon {
+        font-size: 30px;
+      }
+
+      .btn {
+        padding: 11px 18px;
+        font-size: 14px;
+      }
+
+      .logs {
+        height: 400px;
+        font-size: 12px;
+        padding: 14px;
+      }
+
+      .log-line {
+        gap: 10px;
+        padding: 0;
+      }
+
+      .log-time {
+        min-width: 60px;
+        font-size: 12px;
+      }
+
+      .log-text {
+        font-size: 12px;
+      }
+
+      .timeline {
+        margin-top: 20px;
+      }
+
+      .step {
+        padding-left: 22px;
+        padding-bottom: 20px;
+      }
+
+      .step-title {
+        font-size: 13px;
+      }
+
+      .step-desc {
+        font-size: 12px;
+      }
+
+      .chips {
+        gap: 7px;
+      }
+
+      .chip {
+        font-size: 11px;
+        padding: 4px 9px;
+      }
+
+      #envForm {
+        grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+        gap: 18px;
+      }
+
+      input, textarea {
+        font-size: 14px;
+      }
+
+      textarea {
+        min-height: 150px;
+      }
+    }
+
+    /* 响应式设计 - 桌面端 (>900px) */
+    @media (min-width: 901px) {
+      .app {
+        padding: clamp(32px, 4vh, 48px) clamp(20px, 3vw, 32px);
+      }
+
+      .grid {
+        gap: clamp(20px, 2vw, 28px);
+      }
+
+      .card h3 {
+        font-size: clamp(17px, 1.2vw, 19px);
+      }
+
+      .logs {
+        height: clamp(400px, 40vh, 500px);
+        font-size: 13px;
+        padding: 16px;
+      }
+
+      .title {
+        font-size: clamp(24px, 2.5vw, 32px);
+      }
+
+      .upload {
+        padding: clamp(32px, 4vh, 48px) clamp(16px, 2vw, 24px);
+      }
+
+      .btn {
+        padding: clamp(10px, 1.2vh, 12px) clamp(16px, 2vw, 24px);
+        font-size: clamp(13px, 0.9vw, 15px);
+      }
+
+      .step-title {
+        font-size: clamp(13px, 0.9vw, 15px);
+      }
+
+      .step-desc {
+        font-size: clamp(12px, 0.85vw, 14px);
+      }
+
+      .chip {
+        font-size: clamp(11px, 0.8vw, 13px);
+      }
+
+      input, textarea {
+        font-size: clamp(13px, 0.9vw, 15px);
+      }
+    }
+
+    /* 优化弹性布局 */
+    @media (max-width: 900px) {
+      .grid {
+        display: flex;
+        flex-direction: column;
+      }
+
+      .grid > .card {
+        width: 100%;
+      }
+    }
+
+    /* 横屏模式优化 */
+    @media (max-width: 900px) and (orientation: landscape) {
+      .logs {
+        height: 250px;
+      }
+
+      .app {
+        padding: 16px;
+      }
+
+      .card {
+        padding: 14px;
+      }
+    }
+
+    /* 触摸目标优化 */
+    @media (hover: none) and (pointer: coarse) {
+      .btn, .upload, input, textarea {
+        min-height: 44px;
+        min-width: 44px;
+      }
+
+      .chip {
+        min-height: 32px;
+        display: inline-flex;
+        align-items: center;
+      }
+    }
+
+    /* 按钮组响应式优化 */
+    .button-group {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    @media (max-width: 599px) {
+      .button-group {
+        flex-direction: column;
+        gap: 8px;
+      }
+
+      .button-group .btn {
+        width: 100%;
+        min-width: auto;
+      }
+    }
+
+    @media (min-width: 600px) and (max-width: 900px) {
+      .button-group {
+        gap: 10px;
+      }
+
+      .button-group .btn {
+        min-width: 140px;
+      }
+    }
+
+    /* 防止横向滚动 */
+    html, body {
+      overflow-x: hidden;
+    }
+
+    .app, .card, .upload, .logs {
+      max-width: 100%;
+      overflow-wrap: break-word;
+      word-wrap: break-word;
+    }
+
+    /* 优化长文本换行 */
+    .log-text, .step-desc, .upload-text, .upload-hint {
+      word-break: break-word;
+      overflow-wrap: break-word;
+      hyphens: auto;
+    }
+
+    /* 响应式进度条 */
+    @media (max-width: 599px) {
+      .progress-container {
+        height: 6px;
+        margin: 12px 0 10px;
+      }
+
+      .flex-between {
+        font-size: 12px;
+      }
+    }
+
+    @media (min-width: 600px) and (max-width: 900px) {
+      .progress-container {
+        height: 7px;
+        margin: 14px 0 11px;
+      }
+    }
   </style>
 </head>
 <body>
@@ -308,11 +709,11 @@
 
         <div class="chips" id="metaChips"></div>
 
-        <div style="display:flex; gap:12px; margin-top:24px;">
-          <button class="btn btn-primary" id="runBtn" style="flex:1;">
+        <div style="display:flex; gap:12px; margin-top:24px; flex-wrap:wrap;" class="button-group">
+          <button class="btn btn-primary" id="runBtn" style="flex:1; min-width:200px;">
             <span>🚀</span> 开始生成大纲
           </button>
-          <button class="btn btn-secondary" id="estimateBtn">
+          <button class="btn btn-secondary" id="estimateBtn" style="flex:1; min-width:150px;">
             <span>📊</span> 预测 Token
           </button>
         </div>
@@ -333,6 +734,13 @@
         <div class="flex-between">
           <span class="text-muted" id="chunkText">块: 0 / 0</span>
           <span class="text-muted" id="etaText">剩余: --</span>
+        </div>
+        <div class="flex-between" id="mergeInfo" style="display:none; margin-top:8px;">
+          <span class="text-muted" id="mergeLevelText">合并层级: 0</span>
+          <span class="text-muted" id="mergeBatchText">批次: 0 / 0</span>
+        </div>
+        <div class="flex-between" id="mergeDetail" style="display:none;">
+          <span class="text-muted" id="mergeOutlinesText">大纲数: 0</span>
         </div>
 
         <div style="height:1px; background:var(--border); margin: 24px 0;"></div>
@@ -362,8 +770,8 @@
       <div class="collapse-body" id="envSection">
         <div id="envForm" style="display:grid; grid-template-columns:repeat(auto-fit, minmax(300px, 1fr)); gap:20px;"></div>
         
-        <div style="display:flex; gap:12px; margin-top:24px; justify-content:flex-end;">
-          <button class="btn btn-secondary" id="reloadEnvBtn">🔄 刷新配置</button>
+        <div style="display:flex; gap:12px; margin-top:24px; justify-content:flex-end; flex-wrap:wrap;" class="button-group">
+          <button class="btn btn-secondary" id="reloadEnvBtn" style="min-width:150px;">🔄 刷新配置</button>
         </div>
       </div>
     </div>
@@ -371,6 +779,40 @@
 
   <script>
     const API_BASE = 'http://localhost:8000';
+    
+    // 全局错误处理
+    window.addEventListener('error', (event) => {
+      const errorMsg = `错误: ${event.message} (${event.filename}:${event.lineno})`;
+      console.error('全局错误:', event);
+      addLog(errorMsg);
+    });
+    
+    window.addEventListener('unhandledrejection', (event) => {
+      const errorMsg = `未处理的Promise错误: ${event.reason}`;
+      console.error('未处理的Promise拒绝:', event);
+      addLog(errorMsg);
+    });
+    
+    // 带超时的fetch函数
+    async function fetchWithTimeout(url, options = {}, timeout = 30000) {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), timeout);
+      
+      try {
+        const response = await fetch(url, {
+          ...options,
+          signal: controller.signal
+        });
+        clearTimeout(timeoutId);
+        return response;
+      } catch (error) {
+        clearTimeout(timeoutId);
+        if (error.name === 'AbortError') {
+          throw new Error(`请求超时 (${timeout/1000}秒)`);
+        }
+        throw error;
+      }
+    }
     const fileInput = document.getElementById('fileInput');
     const fileStatus = document.getElementById('fileStatus');
     const metaChips = document.getElementById('metaChips');
@@ -382,6 +824,11 @@
     const logBox = document.getElementById('logBox');
     const steps = document.getElementById('steps');
     const modelChips = document.getElementById('modelChips');
+    const mergeInfo = document.getElementById('mergeInfo');
+    const mergeDetail = document.getElementById('mergeDetail');
+    const mergeLevelText = document.getElementById('mergeLevelText');
+    const mergeBatchText = document.getElementById('mergeBatchText');
+    const mergeOutlinesText = document.getElementById('mergeOutlinesText');
 
     const envForm = document.getElementById('envForm');
     const reloadEnvBtn = document.getElementById('reloadEnvBtn');
@@ -431,6 +878,19 @@
     fileInput.addEventListener('change', async () => {
       const file = fileInput.files[0];
       if (!file) return;
+      
+      // 文件大小验证 (100MB限制)
+      const maxSize = 100 * 1024 * 1024; // 100MB
+      if (file.size > maxSize) {
+        addLog(`错误: 文件大小超过限制 (${(file.size/1024/1024).toFixed(2)}MB > 100MB)`);
+        fileStatus.textContent = '文件过大';
+        fileStatus.style.color = '#ef4444';
+        fileStatus.style.borderColor = '#ef4444';
+        fileStatus.style.background = 'rgba(239, 68, 68, 0.1)';
+        fileInput.value = '';
+        return;
+      }
+      
       fileStatus.textContent = file.name;
       fileStatus.style.color = 'var(--primary)';
       fileStatus.style.borderColor = 'var(--primary)';
@@ -445,7 +905,7 @@
       const form = new FormData();
       form.append('file', file);
       try {
-        const res = await fetch(API_BASE + '/upload', { method: 'POST', body: form });
+        const res = await fetchWithTimeout(API_BASE + '/upload', { method: 'POST', body: form }, 60000);
         if (!res.ok) throw new Error(await res.text());
         const data = await res.json();
         serverFilePath = data.file_path;
@@ -464,67 +924,99 @@
         addLog('请先上传文件');
         return;
       }
+      
+      const runBtn = document.getElementById('runBtn');
+      const originalBtnText = runBtn.innerHTML;
+      
+      // 禁用按钮并显示加载状态
+      runBtn.disabled = true;
+      runBtn.innerHTML = '<span>⏳</span> 处理中...';
+      
       addLog('开始处理...');
       statusText.textContent = '处理中';
       try {
-        const res = await fetch(API_BASE + '/process', {
+        const res = await fetchWithTimeout(API_BASE + '/process', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ file_path: serverFilePath, resume: true })
         });
         if (!res.ok) throw new Error(await res.text());
         const data = await res.json();
-        pollJob(data.job_id);
+        pollJob(data.job_id, originalBtnText);
       } catch (e) {
         addLog('启动失败: ' + e);
+        // 恢复按钮状态
+        runBtn.disabled = false;
+        runBtn.innerHTML = originalBtnText;
       }
     }
 
-    async function pollJob(jobId) {
+    async function pollJob(jobId, originalBtnText) {
       setSteps([{ title: '后台运行', desc: '正在处理...' }]);
       lastLogIndex = 0;
       const timer = setInterval(async () => {
-        const res = await fetch(API_BASE + '/jobs/' + jobId);
-        if (!res.ok) return;
-        const job = await res.json();
-        const pct = Math.round((job.progress || 0) * 100);
-        progressBar.style.width = pct + '%';
-        progressText.textContent = pct + '%';
-        const phaseMap = { loading: '读取中', processing: '处理中', merging: '合并中', saving: '保存中', completed: '完成', failed: '失败' };
-        const phaseText = job.result && job.result.phase ? (phaseMap[job.result.phase] || job.result.phase) : '处理中';
-        statusText.textContent = job.status === 'success' ? '完成' : (job.status === 'error' ? '错误' : phaseText);
+        try {
+          const res = await fetchWithTimeout(API_BASE + '/jobs/' + jobId);
+          if (!res.ok) return;
+          const job = await res.json();
+          const pct = Math.round((job.progress || 0) * 100);
+          progressBar.style.width = pct + '%';
+          progressText.textContent = pct + '%';
+          const phaseMap = { loading: '读取中', processing: '处理中', merging: '合并中', saving: '保存中', completed: '完成', failed: '失败' };
+          const phaseText = job.result && job.result.phase ? (phaseMap[job.result.phase] || job.result.phase) : '处理中';
+          statusText.textContent = job.status === 'success' ? '完成' : (job.status === 'error' ? '错误' : phaseText);
 
-        const summary = job.result?.chunk_count || job.result?.total_chunks || 0;
-        const done = job.result?.completed_chunks ?? Math.round(summary * (job.progress || 0));
-        const failed = job.result?.failed_chunks || 0;
-        const finished = Math.min(done + failed, summary);
-        chunkText.textContent = failed ? `块: ${finished} / ${summary}（失败 ${failed}）` : `块: ${finished} / ${summary}`;
+          const summary = job.result?.chunk_count || job.result?.total_chunks || 0;
+          const done = job.result?.completed_chunks ?? Math.round(summary * (job.progress || 0));
+          const failed = job.result?.failed_chunks || 0;
+          const finished = Math.min(done + failed, summary);
+          chunkText.textContent = failed ? `块: ${finished} / ${summary}（失败 ${failed}）` : `块: ${finished} / ${summary}`;
 
-        if (typeof job.result?.eta_seconds === 'number') {
-          const minutes = Math.max(0, Math.ceil(job.result.eta_seconds / 60));
-          etaText.textContent = `预计剩余: ${minutes} 分钟`;
-        } else {
-          etaText.textContent = '预计剩余: --';
-        }
-
-        const logOffset = job.log_offset || 0;
-        const logCount = logOffset + (job.logs ? job.logs.length : 0);
-        if (job.logs && logCount > lastLogIndex) {
-          const startIndex = Math.max(0, lastLogIndex - logOffset);
-          if (lastLogIndex > 0 && lastLogIndex < logOffset) {
-            addLog('日志已截断，展示最新 200 条');
+          if (typeof job.result?.eta_seconds === 'number') {
+            const minutes = Math.max(0, Math.ceil(job.result.eta_seconds / 60));
+            etaText.textContent = `预计剩余: ${minutes} 分钟`;
+          } else {
+            etaText.textContent = '预计剩余: --';
           }
-          job.logs.slice(startIndex).forEach(addLog);
-          lastLogIndex = logCount;
-        }
 
-        if (job.status === 'success' || job.status === 'error') {
-          clearInterval(timer);
-          progressBar.style.width = '100%';
-          progressText.textContent = '100%';
-          chunkText.textContent = `块: ${summary} / ${summary}`;
-          addLog(job.status === 'success' ? '处理完成 ✅' : ('错误: ' + job.message));
-          setSteps([{ title: job.status === 'success' ? '完成' : '失败', desc: job.message || '已结束' }]);
+          // 更新合并信息
+          if (job.result && job.result.phase === 'merging' && job.result.merge_level > 0) {
+            mergeInfo.style.display = 'flex';
+            mergeDetail.style.display = 'flex';
+            mergeLevelText.textContent = `合并层级: ${job.result.merge_level}`;
+            mergeBatchText.textContent = `批次: ${job.result.merge_batch_current} / ${job.result.merge_batch_total}`;
+            mergeOutlinesText.textContent = `大纲数: ${job.result.merge_outlines_count}`;
+          } else {
+            mergeInfo.style.display = 'none';
+            mergeDetail.style.display = 'none';
+          }
+
+          const logOffset = job.log_offset || 0;
+          const logCount = logOffset + (job.logs ? job.logs.length : 0);
+          if (job.logs && logCount > lastLogIndex) {
+            const startIndex = Math.max(0, lastLogIndex - logOffset);
+            if (lastLogIndex > 0 && lastLogIndex < logOffset) {
+              addLog('日志已截断，展示最新 200 条');
+            }
+            job.logs.slice(startIndex).forEach(addLog);
+            lastLogIndex = logCount;
+          }
+
+          if (job.status === 'success' || job.status === 'error') {
+            clearInterval(timer);
+            progressBar.style.width = '100%';
+            progressText.textContent = '100%';
+            chunkText.textContent = `块: ${summary} / ${summary}`;
+            addLog(job.status === 'success' ? '处理完成 ✅' : ('错误: ' + job.message));
+            setSteps([{ title: job.status === 'success' ? '完成' : '失败', desc: job.message || '已结束' }]);
+            
+            // 恢复按钮状态
+            const runBtn = document.getElementById('runBtn');
+            runBtn.disabled = false;
+            runBtn.innerHTML = originalBtnText;
+          }
+        } catch (e) {
+          // 忽略轮询错误，继续下一次轮询
         }
       }, 2000);
     }
@@ -621,7 +1113,7 @@
 
     async function loadEnv() {
       try {
-        const res = await fetch(API_BASE + '/env');
+        const res = await fetchWithTimeout(API_BASE + '/env');
         const data = await res.json();
         renderEnvForm(data.env || {});
         addLog('已加载 .env 配置');
@@ -668,7 +1160,7 @@
       }
       addLog('请求预测 Token...');
       try {
-        const res = await fetch(API_BASE + '/estimate?file_path=' + encodeURIComponent(serverFilePath));
+        const res = await fetchWithTimeout(API_BASE + '/estimate?file_path=' + encodeURIComponent(serverFilePath));
         if (!res.ok) throw new Error(await res.text());
         const data = await res.json();
         addLog(`Token 预测: 总计 ${data.total_estimated} | 原始 ${data.total_tokens} | 分块 ${data.chunk_tokens} | 响应估算 ${data.chunk_responses} | 合并估算 ${data.merge_tokens}`);
