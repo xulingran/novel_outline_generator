@@ -23,7 +23,15 @@ def test_get_env():
     assert response.status_code == 200
     data = response.json()
     assert "env" in data
-    assert "masked" in data
+    # 只返回掩码后的数据，不返回原始数据
+    env_data = data["env"]
+    # 验证API密钥已被掩码处理
+    if "OPENAI_API_KEY" in env_data:
+        masked_key = env_data["OPENAI_API_KEY"]
+        # 掩码后的密钥应该以 * 开头
+        assert masked_key.startswith("*")
+        # 掩码后的密钥不应该以 sk- 开头（原始格式）
+        assert not masked_key.startswith("sk-")
 
 
 def test_upload_file_success():

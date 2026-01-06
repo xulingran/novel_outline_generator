@@ -4,6 +4,7 @@ LLM服务模块
 """
 
 import asyncio
+import atexit
 import inspect
 import logging
 import random
@@ -161,6 +162,7 @@ class OpenAIService(LLMService):
 
     _http_client: httpx.AsyncClient | None = None
     _proxy_clients: dict[str, httpx.AsyncClient] = {}
+    _cleanup_registered: bool = False
 
     @classmethod
     def get_http_client(cls, proxy_url: str | None = None) -> httpx.AsyncClient:
@@ -204,6 +206,11 @@ class OpenAIService(LLMService):
 
     def _init_client(self) -> None:
         """初始化OpenAI客户端"""
+        # 注册清理函数（只注册一次）
+        if not OpenAIService._cleanup_registered:
+            atexit.register(self._cleanup_on_exit)
+            OpenAIService._cleanup_registered = True
+
         try:
             from openai import AsyncOpenAI
 
@@ -225,6 +232,19 @@ class OpenAIService(LLMService):
             raise APIKeyError("未安装openai库，请运行: pip install openai") from e
         except Exception as e:
             raise APIKeyError(f"OpenAI API配置失败: {str(e)}") from e
+
+    def _cleanup_on_exit(self) -> None:
+        """程序退出时清理资源（同步方法）"""
+        logger.debug("程序退出，清理OpenAI HTTP客户端资源")
+        try:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            try:
+                loop.run_until_complete(self.close_http_clients())
+            finally:
+                loop.close()
+        except Exception as e:
+            logger.warning(f"退出时清理HTTP客户端失败: {e}")
 
     async def _call_api(self, prompt: str, **kwargs) -> LLMResponse:
         """调用OpenAI API"""

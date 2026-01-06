@@ -10,6 +10,7 @@ FastAPI 后端接口：
 """
 
 import asyncio
+import logging
 import os
 import shutil
 import time
@@ -26,6 +27,8 @@ from pydantic import BaseModel
 
 from services.novel_processing_service import NovelProcessingService
 from services.token_estimator import estimate_tokens
+
+logger = logging.getLogger(__name__)
 
 ENV_PATH = Path(".env")
 UPLOAD_DIR = Path("outputs/uploads")
@@ -161,8 +164,63 @@ class Job:
 
 
 JOBS: dict[str, Job] = {}
-# 最大保留的job数量，防止内存泄漏
 MAX_JOBS = 100
+MAX_RUNNING_JOBS = 20
+JOB_MAX_AGE_HOURS = 24
+_cleanup_task: asyncio.Task | None = None
+
+
+async def _periodic_job_cleanup() -> None:
+    """定期清理过期和过多的job任务"""
+    while True:
+        try:
+            await asyncio.sleep(60)  # 每60秒检查一次
+            cleanup_expired_jobs()
+            cleanup_excess_jobs()
+        except asyncio.CancelledError:
+            break
+        except Exception as e:
+            logger.warning(f"定期清理job失败: {e}")
+
+
+def startup_cleanup_task() -> None:
+    """启动后台清理任务"""
+    global _cleanup_task
+    if _cleanup_task is None or _cleanup_task.done():
+        _cleanup_task = asyncio.create_task(_periodic_job_cleanup())
+
+
+def cleanup_expired_jobs() -> None:
+    """清理超过最大存活时间的job"""
+    cutoff_time = time.time() - JOB_MAX_AGE_HOURS * 3600
+    expired_ids = [job_id for job_id, job in JOBS.items() if job.created_at < cutoff_time]
+    for job_id in expired_ids:
+        del JOBS[job_id]
+    if expired_ids:
+        logger.debug(f"清理了 {len(expired_ids)} 个过期job")
+
+
+def cleanup_excess_jobs() -> None:
+    """清理过多的job，防止内存泄漏"""
+    if len(JOBS) <= MAX_JOBS:
+        return
+
+    over_limit = len(JOBS) - MAX_JOBS
+
+    def _by_age(statuses):
+        return sorted(
+            ((job_id, job) for job_id, job in JOBS.items() if job.status in statuses),
+            key=lambda x: x[1].created_at,
+        )
+
+    for statuses in (("success", "error"), ("pending",), ("running",)):
+        if over_limit <= 0:
+            break
+        for job_id, _ in _by_age(statuses):
+            if over_limit <= 0:
+                break
+            del JOBS[job_id]
+            over_limit -= 1
 
 
 def cleanup_old_jobs():
@@ -235,8 +293,16 @@ def cleanup_uploads(protected_paths: set[Path] | None = None) -> int:
 
 
 @asynccontextmanager
-async def lifespan(_: FastAPI):
+async def lifespan(app: FastAPI):
+    startup_cleanup_task()
     yield
+    global _cleanup_task
+    if _cleanup_task:
+        _cleanup_task.cancel()
+        try:
+            await _cleanup_task
+        except asyncio.CancelledError:
+            pass
     from services.llm_service import OpenAIService
 
     await OpenAIService.close_http_clients()
@@ -255,8 +321,9 @@ app.add_middleware(
 @app.get("/env")
 def get_env() -> dict[str, Any]:
     data = load_env_file()
+    # 只返回掩码后的数据，防止API密钥泄露
     masked = {k: mask_value(k, v) for k, v in data.items()}
-    return {"env": data, "masked": masked}
+    return {"env": masked}
 
 
 @app.post("/upload")
@@ -273,8 +340,13 @@ async def upload_file(request: Request, file: UploadFile = UPLOAD_FILE_PARAM):
     suffix = Path(file.filename).suffix.lower()
     if suffix not in (".txt", ".md"):
         raise HTTPException(status_code=400, detail="仅支持.txt 或 .md 文件")
+
+    # 使用安全文件名，防止路径遍历攻击
+    from validators import sanitize_filename
+
+    safe_filename = sanitize_filename(file.filename)
     UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
-    dest = UPLOAD_DIR / file.filename
+    dest = UPLOAD_DIR / safe_filename
     content = await file.read()
     if len(content) > 100 * 1024 * 1024:
         raise HTTPException(status_code=400, detail="文件过大，限制100MB")
