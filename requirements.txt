@@ -10,7 +10,10 @@ google-generativeai>=0.3.0
 # 智谱清言API 支持（可选，仅在 API_PROVIDER="zhipu" 时需要）
 zhipuai>=2.0.0
 
+# AiHubMix API 支持（可选，仅在 API_PROVIDER="aihubmix" 时需要）
+requests>=2.28.0
 
+ 
 # Web API
 fastapi>=0.115.0
 uvicorn>=0.23.0

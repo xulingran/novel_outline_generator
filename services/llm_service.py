@@ -472,6 +472,137 @@ class ZhipuService(LLMService):
             raise APIError(f"智谱API错误: {str(e)}", is_retryable=True) from e
 
 
+class AiHubMixService(LLMService):
+    """AiHubMix服务实现"""
+
+    def _init_client(self) -> None:
+        """初始化AiHubMix客户端"""
+        try:
+            import os
+
+            # 从环境变量或配置获取API密钥
+            api_key = self.api_config.api_key
+            if not api_key:
+                api_key = os.getenv("AIHUBMIX_API_KEY")
+
+            # 使用硬编码的APP-Code
+            app_code = "JAAE1452"
+
+            # 获取API基础URL
+            base_url = getattr(self.api_config, "base_url", None)
+            if not base_url:
+                base_url = os.getenv("AIHUBMIX_API_BASE", "https://aihubmix.com/v1")
+
+            # 获取模型名称
+            model_name = getattr(self.api_config, "model_name", None)
+            if not model_name:
+                model_name = os.getenv("AIHUBMIX_MODEL", "gpt-3.5-turbo")
+
+            if not api_key:
+                raise APIKeyError("未设置AIHUBMIX_API_KEY环境变量")
+
+            self.api_key = api_key
+            self.app_code = app_code
+            self.base_url = base_url
+            self.model_name = model_name
+
+            logger.info(f"AiHubMix API客户端初始化成功 (模型: {self.model_name})")
+
+        except ImportError as e:
+            raise APIKeyError("未安装requests库，请运行: pip install requests") from e
+        except Exception as e:
+            raise APIKeyError(f"AiHubMix API配置失败: {str(e)}") from e
+
+    async def _call_api(self, prompt: str, **kwargs) -> LLMResponse:
+        """调用AiHubMix API"""
+        import requests
+
+        try:
+            # 构建请求头
+            headers = {
+                "Authorization": f"Bearer {self.api_key}",
+                "APP-Code": self.app_code,
+                "Content-Type": "application/json",
+            }
+
+            # 构建请求体
+            payload = {
+                "model": self.model_name,
+                "messages": [{"role": "user", "content": prompt}],
+                **kwargs,
+            }
+
+            # 在线程池中执行同步HTTP请求
+            loop = asyncio.get_running_loop()
+            response = await loop.run_in_executor(
+                None,
+                lambda: requests.post(
+                    f"{self.base_url}/chat/completions",
+                    headers=headers,
+                    json=payload,
+                    timeout=60,
+                ),
+            )
+
+            # 检查HTTP状态码
+            response.raise_for_status()
+
+            # 解析响应
+            data = response.json()
+
+            # 提取内容和使用信息
+            content = data["choices"][0]["message"]["content"]
+            token_usage = None
+            if "usage" in data:
+                token_usage = data["usage"]
+
+            return LLMResponse(
+                content=content,
+                token_usage=token_usage,
+                model=data.get("model"),
+                finish_reason=data["choices"][0].get("finish_reason"),
+            )
+
+        except requests.exceptions.HTTPError as e:
+            error_str = str(e).lower()
+            status_code = e.response.status_code if e.response else None
+
+            # 检查特定错误类型
+            if status_code == 401 or "unauthorized" in error_str or "invalid" in error_str:
+                raise APIKeyError("API密钥无效或已过期") from e
+
+            if status_code == 429 or "rate" in error_str and "limit" in error_str:
+                # 尝试从响应头提取重试时间
+                retry_after = None
+                if e.response and "retry-after" in e.response.headers:
+                    try:
+                        retry_after = int(e.response.headers["retry-after"])
+                    except (ValueError, TypeError):
+                        pass
+                raise RateLimitError("API速率限制", retry_after=retry_after) from e
+
+            if status_code == 402 or "quota" in error_str or "exceeded" in error_str:
+                raise APIError("API配额已用尽", is_retryable=False) from e
+
+            # 其他HTTP错误
+            raise APIError(f"AiHubMix API错误: {str(e)}", is_retryable=True) from e
+
+        except requests.exceptions.Timeout as e:
+            raise APIError("API请求超时", is_retryable=True) from e
+
+        except requests.exceptions.ConnectionError as e:
+            raise APIError("API连接失败", is_retryable=True) from e
+
+        except requests.exceptions.RequestException as e:
+            raise APIError(f"AiHubMix API请求错误: {str(e)}", is_retryable=True) from e
+
+        except KeyError as e:
+            raise APIError(f"API响应格式错误: 缺少字段 {str(e)}", is_retryable=True) from e
+
+        except Exception as e:
+            raise APIError(f"AiHubMix API错误: {str(e)}", is_retryable=True) from e
+
+
 def create_llm_service() -> LLMService:
     """工厂函数：创建LLM服务实例"""
     api_config = get_api_config()
@@ -482,5 +613,7 @@ def create_llm_service() -> LLMService:
         return GeminiService()
     elif api_config.provider == "zhipu":
         return ZhipuService()
+    elif api_config.provider == "aihubmix":
+        return AiHubMixService()
     else:
         raise ValueError(f"不支持的API提供商: {api_config.provider}")

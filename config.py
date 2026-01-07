@@ -44,6 +44,13 @@ class APIConfig:
         default_factory=lambda: os.getenv("ZHIPU_API_BASE", "https://open.bigmodel.cn/api/paas/v4")
     )
     zhipu_model: str = field(default_factory=lambda: os.getenv("ZHIPU_MODEL", "glm-4-flash"))
+    aihubmix_api_key: str | None = field(default_factory=lambda: os.getenv("AIHUBMIX_API_KEY"))
+    aihubmix_model: str = field(
+        default_factory=lambda: os.getenv("AIHUBMIX_MODEL", "gpt-3.5-turbo")
+    )
+    aihubmix_api_base: str | None = field(
+        default_factory=lambda: os.getenv("AIHUBMIX_API_BASE", "https://aihubmix.com/v1")
+    )
     _validated: bool = field(default=False, init=False)
 
     def validate(self) -> None:
@@ -51,9 +58,9 @@ class APIConfig:
         if self._validated:
             return
 
-        if self.provider not in ["openai", "gemini", "zhipu"]:
+        if self.provider not in ["openai", "gemini", "zhipu", "aihubmix"]:
             raise ConfigurationError(
-                f"不支持的API提供商: {self.provider}. 支持的提供商: openai, gemini, zhipu"
+                f"不支持的API提供商: {self.provider}. 支持的提供商: openai, gemini, zhipu, aihubmix"
             )
 
         if self.provider == "openai":
@@ -90,6 +97,17 @@ class APIConfig:
                     "当前值看起来像是占位符，请在 .env 文件中填入真实的 API Key"
                 )
 
+        if self.provider == "aihubmix":
+            if (
+                not self.aihubmix_api_key
+                or "your_" in self.aihubmix_api_key.lower()
+                or "here" in self.aihubmix_api_key.lower()
+            ):
+                raise ConfigurationError(
+                    "使用AiHubMix API时必须设置AIHUBMIX_API_KEY环境变量。\n"
+                    "当前值看起来像是占位符，请在 .env 文件中填入真实的 API Key"
+                )
+
         self._validated = True
 
     @property
@@ -106,10 +124,14 @@ class APIConfig:
             if not self.gemini_key:
                 raise APIKeyError("Gemini API密钥未配置")
             return self.gemini_key
-        else:  # zhipu
+        elif self.provider == "zhipu":
             if not self.zhipu_key:
                 raise APIKeyError("智谱API密钥未配置")
             return self.zhipu_key
+        else:  # aihubmix
+            if not self.aihubmix_api_key:
+                raise APIKeyError("AiHubMix API密钥未配置")
+            return self.aihubmix_api_key
 
     @property
     def base_url(self) -> str | None:
@@ -118,6 +140,8 @@ class APIConfig:
             return self.openai_base
         elif self.provider == "zhipu":
             return self.zhipu_base
+        elif self.provider == "aihubmix":
+            return self.aihubmix_api_base
         else:
             return None
 
@@ -128,8 +152,10 @@ class APIConfig:
             return self.openai_model
         elif self.provider == "gemini":
             return self.gemini_model
-        else:  # zhipu
+        elif self.provider == "zhipu":
             return self.zhipu_model
+        else:  # aihubmix
+            return self.aihubmix_model
 
 
 @dataclass

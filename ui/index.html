@@ -1042,6 +1042,10 @@
         fields: ['ZHIPU_API_KEY', 'ZHIPU_MODEL', 'ZHIPU_API_BASE']
       },
       {
+        title: 'AiHubMix API 配置',
+        fields: ['AIHUBMIX_API_KEY', 'AIHUBMIX_MODEL', 'AIHUBMIX_API_BASE']
+      },
+      {
         title: '处理参数',
         fields: ['MODEL_MAX_TOKENS', 'TARGET_TOKENS_PER_CHUNK', 'PARALLEL_LIMIT', 'MAX_RETRY', 'LOG_EVERY']
       },
@@ -1121,7 +1125,7 @@
         const env = data.env || {};
         setModelInfo({
           provider: env.API_PROVIDER,
-          model: env.OPENAI_MODEL || env.GEMINI_MODEL || env.ZHIPU_MODEL,
+          model: env.OPENAI_MODEL || env.GEMINI_MODEL || env.ZHIPU_MODEL || env.AIHUBMIX_MODEL,
           parallel: env.PARALLEL_LIMIT
         });
       } catch (e) {

@@ -31,9 +31,10 @@ def create_env_file():
     print("1. OpenAI (推荐，需要国外网络或代理)")
     print("2. 智谱清言 (国产，易用)")
     print("3. Google Gemini (需要国外网络或代理)")
+    print("4. AiHubMix (国产，易用)")
 
     while True:
-        choice = input("\n请选择 (1/2/3): ").strip()
+        choice = input("\n请选择 (1/2/3/4): ").strip()
         if choice == "1":
             api_provider = "openai"
             api_key_var = "OPENAI_API_KEY"
@@ -52,8 +53,14 @@ def create_env_file():
             api_model = "gemini-2.5-flash"
             api_base_comment = "# GEMINI_API_BASE=https://generativelanguage.googleapis.com"
             break
+        elif choice == "4":
+            api_provider = "aihubmix"
+            api_key_var = "AIHUBMIX_API_KEY"
+            api_model = "gpt-3.5-turbo"
+            api_base_comment = "AIHUBMIX_API_BASE=https://aihubmix.com/v1"
+            break
         else:
-            print("无效选择，请输入 1、2 或 3")
+            print("无效选择，请输入 1、2、3 或 4")
 
     # 获取API密钥
     print(f"\n请输入你的 {api_provider.upper()} API 密钥:")
@@ -98,6 +105,13 @@ GEMINI_SAFETY_SETTINGS=BLOCK_ONLY_HIGH
 {api_key_var}={api_key if api_key else 'your_zhipu_api_key_here'}
 {api_base_comment}
 ZHIPU_MODEL={api_model}
+
+"""
+    elif api_provider == "aihubmix":
+        env_content += f"""# AiHubMix API配置
+{api_key_var}={api_key if api_key else 'your_aihubmix_api_key_here'}
+{api_base_comment}
+AIHUBMIX_MODEL={api_model}
 
 """
 
@@ -169,6 +183,9 @@ def show_help():
   3. Google Gemini - 需要国外网络或代理
      获取密钥: https://makersuite.google.com/app/apikey
 
+  4. AiHubMix - 国内可直接使用
+     获取密钥: https://aihubmix.com/
+
 配置文件说明:
   .env - 环境变量配置文件（不要提交到版本控制）
 
@@ -182,6 +199,10 @@ def show_help():
   OPENAI_API_KEY=your_api_key_here
   USE_PROXY=true
   PROXY_URL=http://127.0.0.1:7890
+
+  # 使用AiHubMix
+  API_PROVIDER=aihubmix
+  AIHUBMIX_API_KEY=your_api_key_here
 """
     )
 
