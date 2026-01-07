@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 class TextSplitter:
     """智能文本分割器"""
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.processing_config: ProcessingConfig = get_processing_config()
         self.encoder = get_encoder()
         self._sentence_end_tokens: set[int] | None = None
