@@ -1,13 +1,15 @@
-﻿## 小说大纲生成工具
+## 小说大纲生成工具
 
 支持命令行与 Web 界面，使用LLM大模型自动分块、生成和合并大纲。
 
 ## 功能概览
-- 多模型：OpenAI / 智谱 / Gemini，支持代理、中转URL。
-- 自动分块，逐块生成大纲并递归合并总纲。
-- Web UI：上传文件、查看进度与日志、查看环境配置。
-- 支持断点恢复、失败重试、并发处理。
-- 处理完成后自动清理中间文件与上传缓存。
+- **多模型支持**：OpenAI / 智谱 / Gemini / AiHubMix，支持代理、中转URL
+- **智能分块**：按章节/段落/Token数量自动分块
+- **递归合并**：逐块生成大纲，递归合并为完整总纲
+- **进度追踪**：实时 ETA 估算、合并进度显示
+- **Web UI**：上传文件、查看进度与日志、查看环境配置
+- **断点恢复**：支持失败重试、中断恢复
+- **代码质量**：Ruff、Black、Mypy 自动检查
 
 ## 环境准备
 
@@ -30,10 +32,7 @@ uv venv
 source .venv/bin/activate
 
 # 安装项目依赖
-uv pip install openai tiktoken httpx python-dotenv google-generativeai zhipuai fastapi uvicorn python-multipart
-
-# 安装开发依赖（可选）
-uv pip install pytest pytest-asyncio
+uv pip install -e ".[dev]"
 ```
 
 ### 3. 配置环境变量
@@ -55,6 +54,14 @@ python create_env.py
 - 修改配置后需要**重启服务**才能生效
 - 详细配置说明请参考：[API 配置指南](docs/API_CONFIGURATION.md)
 
+**API 提供商选择：**
+| 提供商 | 环境变量 | 必要配置 |
+|--------|----------|----------|
+| OpenAI | `API_PROVIDER=openai` | `OPENAI_API_KEY`, `OPENAI_API_BASE`(可选) |
+| 智谱 | `API_PROVIDER=zhipu` | `ZHIPU_API_KEY` |
+| Gemini | `API_PROVIDER=gemini` | `GEMINI_API_KEY` |
+| AiHubMix | `API_PROVIDER=aihubmix` | `AIHUBMIX_API_KEY`, `AIHUBMIX_APP_CODE` |
+
 **常见问题：**
 - 如遇到 `401 Unauthorized` 错误，说明 API Key 未正确配置
 - 使用中转 API 时，需同时配置 `OPENAI_API_BASE` 为中转地址
@@ -72,9 +79,37 @@ python main.py
 按提示选择2，处理新文件，输入 txt/md 路径
 
 ### Web UI
-在`main.py`中选择1使用webui
-浏览器自动打开` ui/index.html`
-**Web 界面支持上传、进度日志、Token 预估、查看环境配置。**
+在 `main.py` 中选择1启动 Web 服务
+浏览器自动打开 `http://localhost:8000`
+
+**Web 界面功能：**
+- 文件上传与处理
+- 实时进度日志
+- Token 消耗预估
+- 环境配置查看
+
+## 开发指南
+
+### 代码质量检查
+```bash
+# Ruff 检查
+uv run ruff check . --fix
+
+# Black 格式化
+uv run black .
+
+# Mypy 类型检查
+uv run mypy .
+
+# 运行测试
+uv run pytest tests/ -v
+```
+
+### Git Hooks（自动检查）
+```bash
+# 安装 pre-commit
+uv run pre-commit install
+```
 
 ## uv 常用命令
 
@@ -82,21 +117,30 @@ python main.py
 |------|------|
 | `uv venv` | 创建虚拟环境 |
 | `uv pip install <package>` | 安装包 |
+| `uv pip install -e ".[dev]"` | 安装项目及开发依赖 |
+| `uv run <command>` | 在虚拟环境中运行命令 |
 | `uv pip freeze` | 查看已安装的包 |
-| `uv pip freeze > requirements.lock` | 锁定依赖版本 |
-| `uv pip sync requirements.lock` | 从锁定文件同步依赖 |
 
 ## 目录结构
 ```
-- main.py：命令行入口，选择 CLI/Web。
-- web_api.py：FastAPI 后端接口。
-- ui/index.html：Web 前端界面。
-- services/：分块、LLM 调用、进度管理、文件处理等。
-- models/：数据模型与状态。
-- prompts.py：提示词模板与自定义支持。
-- outputs/：输出目录（已在 .gitignore）。
-- pyproject.toml：项目配置和依赖管理。
-- requirements.lock：依赖版本锁定文件。
+├── main.py                 # 命令行入口，选择 CLI/Web
+├── web_api.py              # FastAPI 后端接口
+├── create_env.py           # 配置创建工具
+├── ui/                     # Web 前端资源
+│   └── index.html
+├── services/               # 核心服务
+│   ├── llm_service.py      # LLM 调用抽象层
+│   ├── novel_processing_service.py  # 小说处理主逻辑
+│   ├── progress_service.py # 进度管理
+│   └── eta_estimator.py    # ETA 估算
+├── models/                 # 数据模型
+│   └── processing_state.py # 处理状态
+├── splitter.py             # 文本分块
+├── tokenizer.py            # Token 计数
+├── prompts.py              # 提示词模板
+├── config.py               # 配置管理
+├── pyproject.toml          # 项目配置和依赖
+└── requirements.txt        # 依赖列表
 ```
 
 ## 许可证
