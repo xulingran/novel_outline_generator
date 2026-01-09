@@ -207,7 +207,7 @@ def safe_read_text(
     file_path: str | Path,
     encoding: str = "utf-8",
     fallback_encodings: list[str] | None = None,
-) -> str:
+) -> tuple[str, str]:
     """安全读取文本文件，支持多种编码
 
     Args:
@@ -216,7 +216,7 @@ def safe_read_text(
         fallback_encodings: 备选编码列表
 
     Returns:
-        str: 文件内容
+        Tuple[str, str]: (文件内容, 实际使用的编码)
     """
     file_path = Path(file_path)
 
@@ -233,7 +233,7 @@ def safe_read_text(
             with open(file_path, encoding=enc) as f:
                 content = f.read()
             logger.debug(f"成功读取文件 {file_path}，使用编码: {enc}")
-            return content
+            return content, enc
         except UnicodeDecodeError as e:
             last_error = e
             logger.debug(f"编码 {enc} 失败: {e}")

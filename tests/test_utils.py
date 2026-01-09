@@ -96,8 +96,9 @@ class TestSafeReadText:
             temp_path = f.name
 
         try:
-            result = safe_read_text(temp_path)
-            assert result == "Hello World"
+            content, encoding = safe_read_text(temp_path)
+            assert content == "Hello World"
+            assert encoding == "utf-8"
         finally:
             Path(temp_path).unlink()
 

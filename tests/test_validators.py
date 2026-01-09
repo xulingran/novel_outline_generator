@@ -71,6 +71,8 @@ class TestValidateApiProvider:
         assert validate_api_provider("OPENAI") == "openai"
         assert validate_api_provider("gemini") == "gemini"
         assert validate_api_provider("zhipu") == "zhipu"
+        assert validate_api_provider("aihubmix") == "aihubmix"
+        assert validate_api_provider("AIHUBMIX") == "aihubmix"
 
     def test_invalid_provider(self):
         """Invalid provider should raise exception"""

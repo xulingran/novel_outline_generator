@@ -35,3 +35,21 @@ node_modules/
 .coverage
 htmlcov/
 .pytest_cache/
+
+# Python linters cache
+.mypy_cache/
+.ruff_cache/
+.dmypy.json
+dmypy.json
+
+# AI tools cache
+.claude/
+.trae/
+
+# Additional Python tools
+.coverage.*
+.tox/
+.hypothesis/
+
+# OS files
+Thumbs.db

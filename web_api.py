@@ -1,6 +1,6 @@
 """
 FastAPI 后端接口：
-- /env   GET/POST 读取与更新 .env（可视化配置编辑）
+- /env   GET 读取 .env（可视化配置查看）
 - /upload POST 上传文本文件
 - /process POST 启动小说处理（基于 NovelProcessingService）
 - /jobs/{job_id} GET 查询处理状态
@@ -56,32 +56,6 @@ def _load_cors_origins() -> list[str]:
 
 CORS_ORIGINS = _load_cors_origins()
 
-ALLOWED_KEYS = {
-    "API_PROVIDER",
-    "OPENAI_API_KEY",
-    "OPENAI_MODEL",
-    "OPENAI_API_BASE",
-    "GEMINI_API_KEY",
-    "GEMINI_MODEL",
-    "GEMINI_SAFETY_SETTINGS",
-    "ZHIPU_API_KEY",
-    "ZHIPU_MODEL",
-    "ZHIPU_API_BASE",
-    "AIHUBMIX_API_KEY",
-    "AIHUBMIX_MODEL",
-    "AIHUBMIX_API_BASE",
-    "MODEL_MAX_TOKENS",
-    "TARGET_TOKENS_PER_CHUNK",
-    "PARALLEL_LIMIT",
-    "MAX_RETRY",
-    "LOG_EVERY",
-    "LOG_LEVEL",
-    "USE_PROXY",
-    "PROXY_URL",
-    "CORS_ORIGINS",
-    "OUTLINE_PROMPT_TEMPLATE",
-}
-
 
 class RateLimiter:
     """简单内存限流器，按 IP 在时间窗口内计数。"""
@@ -115,17 +89,6 @@ def load_env_file() -> dict[str, str]:
         key, value = line.split("=", 1)
         data[key.strip()] = value.strip()
     return data
-
-
-def save_env_file(updates: dict[str, str]) -> None:
-    existing = load_env_file()
-    existing.update(updates)
-    for key, value in updates.items():
-        os.environ[key] = value
-    lines: list[str] = []
-    for k, v in existing.items():
-        lines.append(f"{k}={v}")
-    ENV_PATH.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
 def mask_value(key: str, value: str) -> str:
@@ -168,7 +131,6 @@ class Job:
 
 JOBS: dict[str, Job] = {}
 MAX_JOBS = 100
-MAX_RUNNING_JOBS = 20
 JOB_MAX_AGE_HOURS = 24
 _cleanup_task: asyncio.Task | None = None
 
@@ -208,30 +170,6 @@ def cleanup_excess_jobs() -> None:
     if len(JOBS) <= MAX_JOBS:
         return
 
-    over_limit = len(JOBS) - MAX_JOBS
-
-    def _by_age(statuses):
-        return sorted(
-            ((job_id, job) for job_id, job in JOBS.items() if job.status in statuses),
-            key=lambda x: x[1].created_at,
-        )
-
-    for statuses in (("success", "error"), ("pending",), ("running",)):
-        if over_limit <= 0:
-            break
-        for job_id, _ in _by_age(statuses):
-            if over_limit <= 0:
-                break
-            del JOBS[job_id]
-            over_limit -= 1
-
-
-def cleanup_old_jobs():
-    """清理旧的 job 记录，确保 JOBS 不会无限增长"""
-    if len(JOBS) <= MAX_JOBS:
-        return
-
-    # 优先清理已结束的任务，其次未开始的，最后才是仍在运行的
     over_limit = len(JOBS) - MAX_JOBS
 
     def _by_age(statuses):
@@ -462,7 +400,7 @@ async def start_process(request: Request, req: ProcessRequest):
         raise HTTPException(status_code=404, detail="文件不存在")
 
     # 清理旧job
-    cleanup_old_jobs()
+    cleanup_excess_jobs()
 
     job_id = str(uuid.uuid4())
     job = Job(id=job_id, file_path=req.file_path)

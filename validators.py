@@ -7,6 +7,7 @@ import os
 import re
 from pathlib import Path
 
+from config import SUPPORTED_API_PROVIDERS
 from exceptions import FileValidationError
 
 
@@ -155,9 +156,9 @@ def validate_api_provider(provider: str) -> str:
         raise FileValidationError("API提供商不能为空")
 
     provider = provider.lower()
-    if provider not in ["openai", "gemini", "zhipu"]:
+    if provider not in SUPPORTED_API_PROVIDERS:
         raise FileValidationError(
-            f"不支持的API提供商: {provider}. 支持的提供商: openai, gemini, zhipu"
+            f"不支持的API提供商: {provider}. 支持的提供商: {', '.join(SUPPORTED_API_PROVIDERS)}"
         )
 
     return provider

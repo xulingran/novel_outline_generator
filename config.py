@@ -26,6 +26,10 @@ except ImportError:
                     os.environ[key.strip()] = value.strip()
 
 
+# 支持的API提供商列表
+SUPPORTED_API_PROVIDERS = ["openai", "gemini", "zhipu", "aihubmix"]
+
+
 @dataclass
 class APIConfig:
     """API配置类"""
@@ -58,9 +62,9 @@ class APIConfig:
         if self._validated:
             return
 
-        if self.provider not in ["openai", "gemini", "zhipu", "aihubmix"]:
+        if self.provider not in SUPPORTED_API_PROVIDERS:
             raise ConfigurationError(
-                f"不支持的API提供商: {self.provider}. 支持的提供商: openai, gemini, zhipu, aihubmix"
+                f"不支持的API提供商: {self.provider}. 支持的提供商: {', '.join(SUPPORTED_API_PROVIDERS)}"
             )
 
         if self.provider == "openai":
@@ -330,7 +334,7 @@ def create_env_file():
                 """# 小说大纲生成工具环境变量配置
 # 复制此文件并填入你的API密钥
 
-# API提供商选择: openai, gemini 或 zhipu
+# API提供商选择: openai, gemini, zhipu 或 aihubmix
 API_PROVIDER=openai
 
 # OpenAI API配置
@@ -347,6 +351,11 @@ OPENAI_MODEL=gpt-4o-mini
 # ZHIPU_API_KEY=your_zhipu_api_key_here
 # ZHIPU_API_BASE=https://open.bigmodel.cn/api/paas/v4
 # ZHIPU_MODEL=glm-4-flash
+
+# AiHubMix API配置（使用时取消注释并配置）
+# AIHUBMIX_API_KEY=your_aihubmix_api_key_here
+# AIHUBMIX_MODEL=gpt-3.5-turbo
+# AIHUBMIX_API_BASE=https://aihubmix.com/v1
 
 # 处理参数（可选）
 MODEL_MAX_TOKENS=200000

@@ -117,6 +117,14 @@ class TestProgressData:
         assert hash1 == hash2
         assert len(hash1) == 32  # MD5 hex digest
 
+    def test_calculate_chunks_hash_order_sensitive(self):
+        """测试块哈希对顺序敏感"""
+        chunks1 = ["chunk1", "chunk2", "chunk3"]
+        chunks2 = ["chunk3", "chunk2", "chunk1"]
+        hash1 = ProgressData.calculate_chunks_hash(chunks1)
+        hash2 = ProgressData.calculate_chunks_hash(chunks2)
+        assert hash1 != hash2  # 不同顺序应产生不同哈希
+
 
 class TestProcessingState:
     """ProcessingState 测试类"""

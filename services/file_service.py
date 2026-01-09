@@ -49,7 +49,7 @@ class FileService:
             file_path: 文件路径
 
         Returns:
-            Tuple[str, str]: (文件内容, 使用的编码)
+            Tuple[str, str]: (文件内容, 实际使用的编码)
 
         Raises:
             FileNotFoundError: 文件不存在
@@ -64,13 +64,13 @@ class FileService:
         # 使用备选编码列表
         fallback_encodings = self.processing_config.encodings[1:]  # 跳过第一个编码
         try:
-            content = safe_read_text(
+            content, actual_encoding = safe_read_text(
                 file_path,
                 encoding=self.processing_config.encodings[0],
                 fallback_encodings=fallback_encodings,
             )
-            logger.info(f"成功读取文件: {file_path}")
-            return content, self.processing_config.encodings[0]
+            logger.info(f"成功读取文件: {file_path}，使用编码: {actual_encoding}")
+            return content, actual_encoding
         except UnicodeDecodeError as e:
             raise EncodingError(
                 f"无法读取文件 {file_path}，已尝试编码: {', '.join(self.processing_config.encodings)}"

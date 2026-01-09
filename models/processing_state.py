@@ -3,6 +3,7 @@
 """
 
 import hashlib
+import json
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any
@@ -73,8 +74,8 @@ class ProgressData:
 
     @staticmethod
     def calculate_chunks_hash(chunks: list[str]) -> str:
-        """计算文本块的哈希值"""
-        content = str(sorted(chunks))
+        """计算文本块的哈希值（保持块顺序）"""
+        content = json.dumps(chunks, ensure_ascii=False)
         return hashlib.md5(content.encode("utf-8")).hexdigest()
 
 
