@@ -315,34 +315,6 @@ def get_file_info(file_path: str | Path) -> dict[str, Any]:
     }
 
 
-def cleanup_old_backups(directory: str | Path, pattern: str = "*.bak", max_files: int = 10) -> None:
-    """清理旧的备份文件
-
-    Args:
-        directory: 目录路径
-        pattern: 文件模式
-        max_files: 保留的最大文件数
-    """
-    directory = Path(directory)
-
-    if not directory.exists():
-        return
-
-    # 查找备份文件
-    backup_files = list(directory.glob(pattern))
-
-    # 按修改时间排序（最新的在前）
-    backup_files.sort(key=lambda f: f.stat().st_mtime, reverse=True)
-
-    # 删除多余的备份
-    for old_backup in backup_files[max_files:]:
-        try:
-            old_backup.unlink()
-            logger.debug(f"删除旧备份: {old_backup}")
-        except Exception as e:
-            logger.warning(f"删除旧备份失败: {old_backup}, 错误: {e}")
-
-
 class ProgressTracker:
     """进度跟踪器（带批量更新功能）"""
 
@@ -363,8 +335,8 @@ class ProgressTracker:
         if not self.pending_updates:
             return
 
-        # 这里可以添加实际的保存逻辑
-        # 例如：将更新合并并写入进度文件
+        # 记录批量更新并清空队列
+        # 如需持久化保存，可在此处扩展文件写入逻辑
         self.logger.debug(f"批量更新进度: {len(self.pending_updates)} 项")
         self.pending_updates.clear()
 

@@ -25,6 +25,7 @@ from fastapi import FastAPI, File, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
+from config import init_config
 from services.novel_processing_service import NovelProcessingService
 from services.token_estimator import estimate_tokens
 
@@ -235,6 +236,8 @@ def cleanup_uploads(protected_paths: set[Path] | None = None) -> int:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # Load configuration on startup (without creating .env file as side effect)
+    init_config(create_env_if_missing=False)
     startup_cleanup_task()
     yield
     global _cleanup_task

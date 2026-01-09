@@ -8,7 +8,7 @@ import logging
 import webbrowser
 from pathlib import Path
 
-from config import get_api_config, get_processing_config, get_txt_file
+from config import get_api_config, get_processing_config, get_txt_file, init_config
 from exceptions import APIKeyError, ConfigurationError, NovelOutlineError
 from services.file_service import FileService
 from services.novel_processing_service import NovelProcessingService
@@ -215,12 +215,9 @@ class NovelOutlineApp:
             return False
 
         # 检查进度是否匹配
-        # 注意：这里需要先读取文件并分割才能计算chunks_hash
-        # 为了避免重复读取，如果进度数据中的文件路径和当前文件路径不一致，直接返回False
+        # 简单的文件路径匹配检查，详细的hash验证在process_novel中进行
         if progress_data.txt_file != file_path:
             return False
-
-        # 简单的文件路径匹配检查，详细的hash验证在process_novel中进行
 
         # 显示进度信息
         summary = self.progress_service.get_progress_summary(progress_data)
@@ -257,6 +254,8 @@ class NovelOutlineApp:
 
 async def main():
     """主入口函数"""
+    # 初始化配置（加载 .env 文件并检查 API 密钥）
+    init_config()
     app = NovelOutlineApp()
     await app.run()
 
