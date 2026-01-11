@@ -247,6 +247,11 @@ async def lifespan(app: FastAPI):
     # Load configuration on startup (without creating .env file as side effect)
     init_config(create_env_if_missing=False)
     startup_cleanup_task()
+
+    # Initialize the queue callback
+    queue = get_global_queue()
+    queue.set_callback(run_queue_task)
+
     yield
     global _cleanup_task
     if _cleanup_task:
@@ -485,6 +490,11 @@ async def run_queue_task(task: QueueTask) -> None:
         service = NovelProcessingService(
             progress_callback=handle_progress, cancel_event=task.cancel_event
         )
+        # 检查是否强制完成
+        if task.should_force_complete:
+            service.force_complete = True
+            logger.info(f"任务 {task.id} 启用强制完成模式")
+
         result = await service.process_novel(task.file_path, resume=True)
         task.result.update(result)
         task.progress = 1.0
@@ -505,9 +515,16 @@ async def run_queue_task(task: QueueTask) -> None:
         task.log("处理完成")
 
     except asyncio.CancelledError:
-        task.status = "cancelled"
-        task.message = "任务被取消"
-        task.log("任务被取消")
+        # 如果是强制完成模式，继续处理已有结果
+        if task.should_force_complete and len(task.result.get("outlines", [])) > 0:
+            logger.info(f"任务 {task.id} 强制完成模式：继续合并已有结果")
+            task.status = "success"
+            task.message = "强制完成（部分结果已合并）"
+            task.log("强制完成：将合并已有部分结果")
+        else:
+            task.status = "cancelled"
+            task.message = "任务被取消"
+            task.log("任务被取消")
     except Exception as e:  # noqa: BLE001
         task.status = "error"
         task.message = str(e)
@@ -631,6 +648,21 @@ async def clear_queue():
     queue = get_global_queue()
     count = await queue.clear_queue()
     return {"success": True, "cancelled_count": count}
+
+
+@app.post("/queue/force-complete/{task_id}")
+async def force_complete_queue_task(request: Request, task_id: str):
+    """强制完成任务（忽略未完成的块，直接合并已有结果）"""
+    client_host = request.client.host if request.client else "unknown"
+    rate_limiter.check_rate_limit(client_host, 10, 60)
+
+    queue = get_global_queue()
+    success = await queue.force_complete_task(task_id)
+
+    if not success:
+        raise HTTPException(status_code=404, detail="任务不存在或无法强制完成")
+
+    return {"success": True, "message": "已强制完成，将合并已有结果"}
 
 
 @app.get("/queue/stats")

@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class QueueTask:
-    """队列中的任务"""
+    """队列任务数据模型"""
 
     id: str
     file_path: str
@@ -25,12 +25,15 @@ class QueueTask:
     progress: float = 0.0
     result: dict[str, Any] = field(default_factory=dict)
     logs: list[str] = field(default_factory=list)
+    cancel_event: asyncio.Event = field(default_factory=asyncio.Event)
+    should_force_complete: bool = False  # 是否强制完成（忽略未完成的块）
+    started_at: float | None = None
+    completed_at: float | None = None
     log_offset: int = 0
     token_logged: bool = False
     created_at: float = field(default_factory=time.time)
-    started_at: float = 0.0
-    completed_at: float = 0.0
-    cancel_event: asyncio.Event = field(default_factory=asyncio.Event)
+    merge_progress_logged: bool = False
+    token_logged_displayed: bool = False
 
     def log(self, text: str) -> None:
         """添加日志"""
@@ -45,6 +48,11 @@ class QueueTask:
         self.status = "cancelled"
         self.message = "用户取消"
         self.cancel_event.set()
+
+    def force_complete(self) -> None:
+        """强制完成任务（忽略未完成的块）"""
+        self.should_force_complete = True
+        self.message = "强制完成中"
 
     def is_cancelled(self) -> bool:
         """检查是否被取消"""
@@ -65,6 +73,7 @@ class TaskQueue:
         self._lock = asyncio.Lock()
         self._processor_task: asyncio.Task | None = None
         self._run_queue_task_callback = run_queue_task_callback
+        self._completed_tasks: deque[QueueTask] = deque()  # 保留已完成的任务
 
     async def add_task(self, file_path: str) -> str:
         """
@@ -119,6 +128,10 @@ class TaskQueue:
             for task in self._running_tasks.values():
                 tasks.append(self._task_to_dict(task))
 
+            # 已完成的任务（保留最近10个）
+            for task in list(self._completed_tasks)[-10:]:
+                tasks.append(self._task_to_dict(task))
+
             return tasks
 
     async def cancel_task(self, task_id: str) -> bool:
@@ -148,8 +161,27 @@ class TaskQueue:
                     logger.info(f"取消队列中的任务: {task_id}")
                     return True
 
-            logger.warning(f"任务不存在或无法取消: {task_id}")
-            return False
+        return False
+
+    async def force_complete_task(self, task_id: str) -> bool:
+        """
+        强制完成任务（忽略未完成的块，直接合并已有结果）
+
+        Args:
+            task_id: 任务ID
+
+        Returns:
+            是否成功触发强制完成
+        """
+        async with self._lock:
+            # 只对运行中的任务支持强制完成
+            if task_id in self._running_tasks:
+                task = self._running_tasks[task_id]
+                task.force_complete()  # 设置标志并触发取消事件
+                logger.info(f"强制完成任务: {task_id}（将合并已有部分结果）")
+                return True
+
+        return False
 
     async def clear_queue(self) -> int:
         """
@@ -180,6 +212,10 @@ class TaskQueue:
                 "running": running_count,
                 "total": pending_count + running_count,
             }
+
+    def set_callback(self, callback) -> None:
+        """设置任务处理回调函数"""
+        self._run_queue_task_callback = callback
 
     async def stop(self) -> None:
         """停止队列处理器"""
@@ -243,9 +279,16 @@ class TaskQueue:
         finally:
             task.completed_at = time.time()
 
-            async with self._lock:
-                if task.id in self._running_tasks:
-                    del self._running_tasks[task.id]
+            # 从运行任务列表中移除
+            if task.id in self._running_tasks:
+                del self._running_tasks[task.id]
+
+            # 添加到已完成列表（success/error/cancelled）
+            if task.status in ("success", "error", "cancelled"):
+                self._completed_tasks.append(task)
+                # 只保留最近的20个已完成任务
+                if len(self._completed_tasks) > 20:
+                    self._completed_tasks.popleft()
 
             logger.info(f"任务 {task.id} 处理完成，状态: {task.status}")
 

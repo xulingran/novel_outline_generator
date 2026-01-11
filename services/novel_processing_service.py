@@ -46,6 +46,8 @@ class NovelProcessingService:
         self.total_prompt_tokens = 0
         self.total_completion_tokens = 0
         self.total_tokens = 0
+        # 强制完成标志
+        self.force_complete: bool = False
         # ETA 估算器
         self.eta_estimator = ETAEstimator(
             window_size=20,
@@ -80,7 +82,7 @@ class NovelProcessingService:
 
         try:
             # 1. 读取和分割文本
-            text, _ = await self._load_and_validate_file(file_path)
+            text, encoding = await self._load_and_validate_file(file_path)
             chunks = self._split_text_into_chunks(text)
             self.processing_state.total_chunks = len(chunks)
             if not chunks:
@@ -88,7 +90,7 @@ class NovelProcessingService:
             self._emit_progress()
 
             # 2. 处理或恢复进度
-            outlines = await self._handle_progress_resume(file_path, chunks, resume)
+            outlines = await self._handle_progress_resume(file_path, chunks, resume, encoding)
 
             # 3. 处理文本块
             if outlines is None:
@@ -197,7 +199,7 @@ class NovelProcessingService:
             raise ProcessingError(f"分割文本失败: {str(e)}") from e
 
     async def _handle_progress_resume(
-        self, file_path: str, chunks: list[TextChunk], resume: bool
+        self, file_path: str, chunks: list[TextChunk], resume: bool, encoding: str = "utf-8"
     ) -> list[dict[str, Any]] | None:
         """处理进度恢复逻辑"""
         if not resume:
@@ -208,8 +210,10 @@ class NovelProcessingService:
         if not progress_data:
             return None
 
-        # 计算当前哈希
-        chunks_hash = ProgressData.calculate_chunks_hash([c.content for c in chunks])
+        # 计算当前哈希（考虑编码）
+        chunks_hash = ProgressData.calculate_chunks_hash(
+            [c.content for c in chunks], encoding=encoding
+        )
 
         # 验证进度是否有效
         if not self.progress_service.is_progress_valid(
@@ -271,8 +275,12 @@ class NovelProcessingService:
                 else:
                     successful_outlines.append(cast(dict[str, Any], result))
 
+            # 检查是否强制完成（忽略未完成的块）
             if cancelled_error is not None:
-                raise cancelled_error
+                if self.force_complete:
+                    logger.info("强制完成模式：忽略未完成的块，继续合并已有结果")
+                else:
+                    raise cancelled_error
 
         except asyncio.CancelledError:
             raise

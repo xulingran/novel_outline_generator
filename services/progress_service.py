@@ -141,9 +141,19 @@ class ProgressService:
         if not progress_data:
             return False
 
-        if progress_data.txt_file != current_file:
-            logger.debug("Progress file path mismatch")
-            return False
+        # 标准化文件路径后比较
+        try:
+            saved_path = Path(progress_data.txt_file).resolve()
+            current_path = Path(current_file).resolve()
+            if saved_path != current_path:
+                logger.debug("Progress file path mismatch")
+                return False
+        except Exception as e:
+            # 如果路径解析失败，使用原始字符串比较
+            logger.debug("Path resolution failed, using string comparison: %s", e)
+            if progress_data.txt_file != current_file:
+                logger.debug("Progress file path mismatch")
+                return False
 
         if progress_data.total_chunks != len(current_chunks):
             logger.debug("Progress chunk count mismatch")

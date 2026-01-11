@@ -19,7 +19,8 @@ class ProgressData:
     completed_indices: set[int]
     outlines: list[dict[str, Any]]
     last_update: datetime
-    chunks_hash: str
+    chunks_hash: str  # 用于验证进度是否有效
+    encoding: str = "utf-8"  # 文件编码
     processing_times: list[float] = field(default_factory=list)
     errors: list[dict[str, Any]] = field(default_factory=list)
 
@@ -53,6 +54,7 @@ class ProgressData:
             "outlines": self.outlines,
             "last_update": self.last_update.isoformat(),
             "chunks_hash": self.chunks_hash,
+            "encoding": self.encoding,
             "processing_times": self.processing_times,
             "errors": self.errors,
         }
@@ -68,15 +70,18 @@ class ProgressData:
             outlines=data.get("outlines", []),
             last_update=datetime.fromisoformat(data.get("last_update", datetime.now().isoformat())),
             chunks_hash=data.get("chunks_hash", ""),
+            encoding=data.get("encoding", "utf-8"),  # 默认utf-8
             processing_times=data.get("processing_times", []),
             errors=data.get("errors", []),
         )
 
     @staticmethod
-    def calculate_chunks_hash(chunks: list[str]) -> str:
-        """计算文本块的哈希值（保持块顺序）"""
-        content = json.dumps(chunks, ensure_ascii=False)
-        return hashlib.md5(content.encode("utf-8")).hexdigest()
+    def calculate_chunks_hash(chunks: list[str], encoding: str = "utf-8") -> str:
+        """计算文本块的哈希值（保持块顺序和编码）"""
+        content = json.dumps(chunks, ensure_ascii=False, sort_keys=False)
+        # 将编码信息纳入哈希计算，确保不同编码不会产生相同哈希
+        data = f"{encoding}:{content}"
+        return hashlib.md5(data.encode("utf-8")).hexdigest()
 
 
 @dataclass

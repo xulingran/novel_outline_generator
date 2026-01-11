@@ -72,7 +72,7 @@ def atomic_write_json(
 
     # 创建备份
     if backup and file_path.exists():
-        backup_path = file_path.with_suffix(f'.{datetime.now().strftime("%Y%m%d_%H%M%S")}.bak')
+        backup_path = file_path.with_suffix(f".{datetime.now().strftime('%Y%m%d_%H%M%S')}.bak")
         try:
             shutil.copy2(file_path, backup_path)
             logger.debug(f"创建备份文件: {backup_path}")
@@ -86,7 +86,7 @@ def atomic_write_json(
 
     try:
         with os.fdopen(temp_fd, "w", encoding="utf-8") as f:
-            json.dump(data, f, ensure_ascii=False, indent=indent)
+            json.dump(data, f, ensure_ascii=False, indent=indent, sort_keys=True)
             f.flush()
             os.fsync(f.fileno())  # 强制写入磁盘
 
@@ -123,7 +123,7 @@ def atomic_write_text(
 
     # 创建备份
     if backup and file_path.exists():
-        backup_path = file_path.with_suffix(f'.{datetime.now().strftime("%Y%m%d_%H%M%S")}.bak')
+        backup_path = file_path.with_suffix(f".{datetime.now().strftime('%Y%m%d_%H%M%S')}.bak")
         try:
             shutil.copy2(file_path, backup_path)
             logger.debug(f"创建备份文件: {backup_path}")
@@ -188,7 +188,7 @@ def safe_read_json(
 
         if backup_on_corruption:
             backup_path = file_path.with_suffix(
-                f'.corrupt_{datetime.now().strftime("%Y%m%d_%H%M%S")}'
+                f".corrupt_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
             )
             try:
                 shutil.copy2(file_path, backup_path)

@@ -4,46 +4,65 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Novel Outline Studio</title>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400&display=swap" rel="stylesheet">
   <style>
     :root {
-      --primary: #4f46e5;
-      --primary-hover: #4338ca;
-      --primary-light: #eef2ff;
-      
+      --primary: #1e293b;
+      --primary-hover: #334155;
+      --primary-light: #f1f5f9;
+
       --bg-body: #f8fafc;
       --bg-card: #ffffff;
       --bg-input: #f1f5f9;
-      
-      --text-main: #0f172a;
+
+      --text-main: #1e293b;
       --text-secondary: #64748b;
       --text-tertiary: #94a3b8;
-      
+
       --border: #e2e8f0;
-      --radius-lg: 16px;
-      --radius-md: 12px;
-      --radius-sm: 8px;
-      
+
+      --success: #10b981;
+      --success-light: #dcfce7;
+      --warning: #f59e0b;
+      --warning-light: #fef3c7;
+      --info: #3b82f6;
+      --info-light: #e0f2fe;
+
+      --radius-sm: 0.375rem;
+      --radius-md: 0.5rem;
+      --radius-lg: 0.75rem;
+      --radius-full: 9999px;
+
+      --spacing-1: 0.25rem;
+      --spacing-2: 0.5rem;
+      --spacing-3: 0.75rem;
+      --spacing-4: 1rem;
+      --spacing-5: 1.5rem;
+      --spacing-6: 2rem;
+      --spacing-7: 2.5rem;
+      --spacing-8: 3rem;
+
       --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
       --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
     }
 
     * { box-sizing: border-box; outline: none; }
-    
+
     body {
       margin: 0;
       min-height: 100vh;
-      font-family: "Inter", system-ui, -apple-system, sans-serif;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
       color: var(--text-main);
       background-color: var(--bg-body);
       -webkit-font-smoothing: antialiased;
+      font-size: 0.875rem;
+      line-height: 1.5;
       padding-bottom: 60px;
     }
 
     .app {
       max-width: 1200px;
       margin: 0 auto;
-      padding: 40px 24px;
+      padding: var(--spacing-6) var(--spacing-4);
     }
 
     /* Header */
@@ -51,37 +70,49 @@
       display: flex;
       align-items: center;
       justify-content: space-between;
-      margin-bottom: 32px;
+      margin-bottom: var(--spacing-6);
+      padding: var(--spacing-3) 0;
+      border-bottom: 1px solid var(--border);
     }
     .brand {
       display: flex;
       align-items: center;
-      gap: 12px;
+      gap: var(--spacing-3);
     }
     .title {
-      font-size: 28px;
-      font-weight: 700;
+      font-size: 1rem;
+      font-weight: 600;
       color: var(--text-main);
-      letter-spacing: -0.02em;
+      line-height: 1.5;
     }
     .badge {
-      padding: 4px 10px;
-      border-radius: 99px;
-      background: var(--primary-light);
-      color: var(--primary);
-      font-size: 12px;
-      font-weight: 600;
+      padding: var(--spacing-1) var(--spacing-2);
+      border-radius: var(--radius-md);
+      background: var(--success);
+      color: white;
+      font-size: 0.75rem;
+      font-weight: 500;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+    .badge::before {
+      content: "";
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: white;
     }
 
     /* Grid */
     .grid {
       display: grid;
       grid-template-columns: 400px 1fr;
-      gap: 24px;
-      margin-bottom: 24px;
+      gap: var(--spacing-4);
+      margin-bottom: var(--spacing-4);
     }
     @media (max-width: 900px) {
-      .grid { grid-template-columns: 1fr; gap: 20px; }
+      .grid { grid-template-columns: 1fr; gap: var(--spacing-4); }
     }
 
     /* Cards */
@@ -89,7 +120,7 @@
       background: var(--bg-card);
       border: 1px solid var(--border);
       border-radius: var(--radius-lg);
-      padding: 24px;
+      padding: var(--spacing-4);
       box-shadow: var(--shadow-sm);
       transition: box-shadow 0.2s ease;
     }
@@ -97,28 +128,29 @@
       box-shadow: var(--shadow-md);
     }
     .card h3 {
-      margin: 0 0 20px;
-      font-size: 18px;
+      margin: 0 0 var(--spacing-4);
+      font-size: 1rem;
       font-weight: 600;
       color: var(--text-main);
       display: flex;
       align-items: center;
       justify-content: space-between;
+      line-height: 1.5;
     }
 
     /* Upload */
     .upload {
       border: 2px dashed var(--border);
       border-radius: var(--radius-md);
-      padding: 40px 20px;
+      padding: var(--spacing-6);
       text-align: center;
       cursor: pointer;
       transition: all 0.2s ease;
-      background: var(--bg-body);
+      background: var(--bg-card);
       display: flex;
       flex-direction: column;
       align-items: center;
-      gap: 12px;
+      gap: var(--spacing-2);
       width: 100%;
     }
     .upload:hover {
@@ -126,86 +158,86 @@
       background: var(--primary-light);
     }
     .upload input { display: none; }
-    .upload-icon { font-size: 32px; margin-bottom: 4px; }
-    .upload-text { font-weight: 500; color: var(--text-main); }
-    .upload-hint { font-size: 13px; color: var(--text-secondary); }
+    .upload-icon { font-size: 1.5rem; color: var(--text-secondary); }
+    .upload-text { font-weight: 500; color: var(--text-secondary); }
+    .upload-hint { font-size: 0.75rem; color: var(--text-tertiary); }
 
     /* Buttons */
     .btn {
-      padding: 10px 20px;
+      padding: var(--spacing-2) var(--spacing-3);
       border-radius: var(--radius-md);
       border: 1px solid transparent;
       font-family: inherit;
-      font-weight: 600;
-      font-size: 14px;
+      font-weight: 500;
+      font-size: 0.875rem;
       cursor: pointer;
       transition: all 0.2s;
       display: inline-flex;
       align-items: center;
       justify-content: center;
-      gap: 8px;
+      gap: var(--spacing-2);
     }
     .btn-primary {
       background: var(--primary);
       color: white;
-      box-shadow: 0 2px 4px rgba(79, 70, 229, 0.2);
     }
     .btn-primary:hover {
       background: var(--primary-hover);
-      transform: translateY(-1px);
-      box-shadow: 0 4px 6px rgba(79, 70, 229, 0.3);
     }
     .btn-secondary {
-      background: white;
-      border-color: var(--border);
-      color: var(--text-main);
+      background: transparent;
+      border-color: var(--primary);
+      color: var(--primary);
     }
     .btn-secondary:hover {
-      background: var(--bg-body);
-      border-color: var(--text-tertiary);
+      background: var(--primary-light);
     }
 
     /* Progress */
     .progress-container {
-      background: var(--bg-input);
-      border-radius: 99px;
-      height: 8px;
+      background: var(--border);
+      border-radius: var(--radius-full);
+      height: 0.25rem;
       overflow: hidden;
-      margin: 16px 0 12px;
+      margin: var(--spacing-3) 0 var(--spacing-2);
     }
     .progress-bar {
       height: 100%;
-      background: var(--primary);
+      background: var(--info);
       width: 0%;
       transition: width 0.3s ease;
-      border-radius: 99px;
+      border-radius: var(--radius-full);
     }
-    
+
     /* Logs */
     .logs {
-      background: #1e293b;
+      background: var(--bg-card);
       border-radius: var(--radius-md);
-      padding: 16px;
+      padding: var(--spacing-4);
       height: 400px;
       overflow-y: auto;
-      font-family: "JetBrains Mono", monospace;
-      font-size: 13px;
-      line-height: 1.6;
-      color: #e2e8f0;
+      font-family: "Courier New", monospace;
+      font-size: 0.75rem;
+      line-height: 1.5;
+      color: var(--text-main);
       flex: 1 1 auto;
       min-height: 0;
+      border: 1px solid var(--border);
     }
-    .log-line { display: flex; gap: 12px; margin-bottom: 4px; padding: 0; }
+    .log-line { display: flex; gap: var(--spacing-2); margin-bottom: var(--spacing-1); padding: 0; }
     .log-line:last-child { margin-bottom: 0; }
-    .log-time { color: #64748b; min-width: 65px; user-select: none; }
+    .log-time { color: var(--text-tertiary); min-width: 65px; user-select: none; }
     .log-text { word-break: break-word; }
+    .log-text .highlight-success { color: var(--success); }
+    .log-text .highlight-warning { color: var(--warning); }
+    .log-error .log-text { color: var(--danger); }
 
     /* Timeline */
-    .timeline { margin-top: 24px; padding-left: 8px; }
+    .timeline { margin-top: var(--spacing-4); padding-left: var(--spacing-2); }
     .step {
       position: relative;
-      padding-left: 24px;
-      padding-bottom: 24px;
+      padding-left: var(--spacing-5);
+      padding-bottom: var(--spacing-5);
       border-left: 2px solid var(--border);
     }
     .step:last-child { border-left-color: transparent; padding-bottom: 0; }
@@ -219,102 +251,102 @@
       border: 2px solid var(--text-tertiary);
       transition: all 0.3s;
     }
-    .step-title { font-weight: 600; font-size: 14px; color: var(--text-main); margin-bottom: 2px; }
-    .step-desc { font-size: 13px; color: var(--text-secondary); }
+    .step-title { font-weight: 600; font-size: 0.875rem; color: var(--text-main); margin-bottom: 2px; line-height: 1.5; }
+    .step-desc { font-size: 0.875rem; color: var(--text-secondary); line-height: 1.5; }
 
     /* Chips */
-    .chips { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 16px; }
+    .chips { display: flex; gap: var(--spacing-2); flex-wrap: wrap; margin-top: var(--spacing-3); }
     .chip {
-      padding: 4px 10px;
-      border-radius: 6px;
+      padding: var(--spacing-1) var(--spacing-2);
+      border-radius: var(--radius-sm);
       background: var(--bg-input);
       color: var(--text-secondary);
-      font-size: 12px;
+      font-size: 0.75rem;
       font-weight: 500;
     }
 
     /* Queue Items */
     .queue-item {
-      padding: 12px;
-      margin-bottom: 8px;
+      padding: var(--spacing-3);
+      margin-bottom: var(--spacing-2);
       border-radius: var(--radius-sm);
-      background: var(--bg-body);
-      border: 1px solid var(--border);
+      background: var(--bg-card);
+      border-bottom: 1px solid var(--border);
       transition: all 0.2s;
     }
     .queue-item:hover {
-      border-color: var(--primary);
-    }
-    .queue-item.running {
-      border-color: var(--primary);
       background: var(--primary-light);
     }
+    .queue-item.running {
+      background: var(--info-light);
+      border-color: var(--info);
+    }
     .queue-item.success {
-      border-color: #10b981;
-      background: #d1fae5;
+      background: var(--success-light);
+      border-color: var(--success);
     }
     .queue-item.error {
-      border-color: #ef4444;
       background: #fee2e2;
+      border-color: #ef4444;
     }
     .queue-item.cancelled {
-      border-color: #f59e0b;
-      background: #fef3c7;
+      background: var(--warning-light);
+      border-color: var(--warning);
     }
     .queue-item-header {
       display: flex;
       justify-content: space-between;
       align-items: center;
-      margin-bottom: 8px;
+      margin-bottom: var(--spacing-2);
     }
     .queue-item-title {
-      font-weight: 600;
-      font-size: 13px;
+      font-weight: 500;
+      font-size: 0.875rem;
       color: var(--text-main);
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
     }
     .queue-item-status {
-      font-size: 11px;
-      padding: 2px 8px;
-      border-radius: 4px;
-      font-weight: 600;
+      font-size: 0.75rem;
+      padding: var(--spacing-1) var(--spacing-2);
+      border-radius: var(--radius-sm);
+      font-weight: 500;
     }
     .queue-item-status.pending {
-      background: var(--bg-input);
-      color: var(--text-secondary);
+      background: var(--warning-light);
+      color: #92400e;
     }
     .queue-item-status.running {
-      background: var(--primary);
-      color: white;
+      background: var(--info-light);
+      color: #0369a1;
     }
     .queue-item-status.success {
-      background: #10b981;
-      color: white;
+      background: var(--success-light);
+      color: #166534;
     }
     .queue-item-status.error {
-      background: #ef4444;
-      color: white;
+      background: #fee2e2;
+      color: #991b1b;
     }
     .queue-item-status.cancelled {
-      background: #f59e0b;
-      color: white;
+      background: var(--warning-light);
+      color: #92400e;
     }
     .queue-item-progress {
-      font-size: 12px;
-      color: var(--text-secondary);
-      margin-bottom: 8px;
+      font-size: 0.75rem;
+      color: var(--text-tertiary);
+      margin-bottom: var(--spacing-2);
     }
     .queue-item-actions {
       display: flex;
-      gap: 8px;
+      gap: var(--spacing-2);
       justify-content: flex-end;
     }
     .queue-item-btn {
-      padding: 4px 10px;
-      font-size: 11px;
-      border-radius: 4px;
+      padding: var(--spacing-1) var(--spacing-2);
+      font-size: 0.75rem;
+      border-radius: var(--radius-sm);
     }
 
     /* Form & Env */
@@ -323,17 +355,17 @@
       align-items: center;
       justify-content: space-between;
       cursor: pointer;
-      padding: 8px 0;
+      padding: var(--spacing-2) 0;
     }
     .collapse-icon { transition: transform 0.3s; color: var(--text-secondary); }
     .card.collapsed .collapse-icon { transform: rotate(-90deg); }
-    
+
     .collapse-body {
       max-height: 2000px;
       opacity: 1;
       overflow: hidden;
       transition: all 0.4s ease;
-      margin-top: 16px;
+      margin-top: var(--spacing-3);
     }
     .card.collapsed .collapse-body {
       max-height: 0;
@@ -347,6 +379,7 @@
       color: var(--text-main) !important;
       border-radius: var(--radius-sm) !important;
       font-family: inherit;
+      font-size: 0.875rem;
       transition: border-color 0.2s;
     }
     input:focus, textarea:focus {
@@ -356,249 +389,122 @@
 
     /* Utils */
     .flex-between { display: flex; justify-content: space-between; align-items: center; }
-    .text-muted { color: var(--text-secondary); font-size: 13px; }
+    .text-muted { color: var(--text-tertiary); font-size: 0.75rem; }
     .text-primary { color: var(--primary); font-weight: 600; }
-    
+
     /* Scrollbar */
     ::-webkit-scrollbar { width: 8px; height: 8px; }
     ::-webkit-scrollbar-track { background: transparent; }
     ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
     ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
 
-    /* 响应式设计 - 移动端 (<600px) */
+    /* Responsive Design */
     @media (max-width: 599px) {
       .app {
-        padding: 20px 16px;
+        padding: var(--spacing-4) var(--spacing-3);
       }
 
       .header {
         flex-direction: column;
         align-items: flex-start;
-        gap: 16px;
-        margin-bottom: 24px;
+        gap: var(--spacing-3);
       }
 
       .brand {
         flex-direction: column;
         align-items: flex-start;
-        gap: 8px;
-      }
-
-      .title {
-        font-size: clamp(20px, 5vw, 24px);
-      }
-
-      .badge {
-        font-size: 11px;
-        padding: 3px 8px;
+        gap: var(--spacing-2);
       }
 
       .card {
-        padding: 16px;
-        border-radius: var(--radius-md);
+        padding: var(--spacing-3);
       }
 
       .card h3 {
-        font-size: 16px;
-        margin-bottom: 16px;
+        font-size: 1rem;
+        margin-bottom: var(--spacing-3);
         flex-direction: column;
         align-items: flex-start;
-        gap: 8px;
+        gap: var(--spacing-2);
       }
 
       .upload {
-        padding: 32px 16px;
-      }
-
-      .upload-icon {
-        font-size: 28px;
-      }
-
-      .upload-text {
-        font-size: 14px;
-      }
-
-      .upload-hint {
-        font-size: 12px;
+        padding: var(--spacing-5);
       }
 
       .btn {
         width: 100%;
-        padding: 12px 16px;
-        font-size: 14px;
+        padding: var(--spacing-2) var(--spacing-3);
+        font-size: 0.875rem;
         min-height: 44px;
-      }
-
-      .btn-secondary {
-        width: 100%;
       }
 
       .logs {
         height: 300px;
-        font-size: 12px;
-        padding: 12px;
+        font-size: 0.75rem;
+        padding: var(--spacing-3);
       }
 
       .log-line {
         flex-direction: column;
-        gap: 4px;
-        padding: 0;
-      }
-
-      .log-time {
-        min-width: auto;
-        font-size: 11px;
-      }
-
-      .log-text {
-        font-size: 12px;
+        gap: var(--spacing-1);
       }
 
       .timeline {
-        margin-top: 16px;
-        padding-left: 4px;
+        margin-top: var(--spacing-3);
       }
 
       .step {
-        padding-left: 20px;
-        padding-bottom: 16px;
-      }
-
-      .step-title {
-        font-size: 13px;
-      }
-
-      .step-desc {
-        font-size: 12px;
+        padding-left: var(--spacing-4);
+        padding-bottom: var(--spacing-3);
       }
 
       .chips {
-        gap: 6px;
+        gap: var(--spacing-1);
       }
 
-      .chip {
-        font-size: 11px;
-        padding: 3px 8px;
-      }
-
-      .text-muted {
-        font-size: 12px;
-      }
-
-      .text-primary {
-        font-size: 13px;
-      }
-
-      .collapse-header {
-        padding: 6px 0;
-      }
-
-      #envForm {
-        grid-template-columns: 1fr;
-        gap: 16px;
-      }
-
-      input, textarea {
-        font-size: 14px;
-      }
-
-      textarea {
-        min-height: 120px;
+      .progress-container {
+        height: 0.25rem;
+        margin: var(--spacing-2) 0 var(--spacing-2);
       }
     }
 
-    /* 响应式设计 - 平板端 (600px-900px) */
     @media (min-width: 600px) and (max-width: 900px) {
       .app {
-        padding: 24px 20px;
-      }
-
-      .header {
-        margin-bottom: 28px;
-      }
-
-      .brand {
-        gap: 10px;
-      }
-
-      .title {
-        font-size: clamp(22px, 4vw, 26px);
+        padding: var(--spacing-5) var(--spacing-4);
       }
 
       .card {
-        padding: 20px;
+        padding: var(--spacing-4);
       }
 
       .card h3 {
-        font-size: 17px;
+        font-size: 1rem;
       }
 
       .upload {
-        padding: 36px 18px;
-      }
-
-      .upload-icon {
-        font-size: 30px;
+        padding: var(--spacing-6);
       }
 
       .btn {
-        padding: 11px 18px;
-        font-size: 14px;
+        padding: var(--spacing-2) var(--spacing-3);
+        font-size: 0.875rem;
       }
 
       .logs {
         height: 400px;
-        font-size: 12px;
-        padding: 14px;
+        font-size: 0.75rem;
+        padding: var(--spacing-4);
       }
 
-      .log-line {
-        gap: 10px;
-        padding: 0;
-      }
-
-      .log-time {
-        min-width: 60px;
-        font-size: 12px;
-      }
-
-      .log-text {
-        font-size: 12px;
-      }
-
-      .timeline {
-        margin-top: 20px;
-      }
-
-      .step {
-        padding-left: 22px;
-        padding-bottom: 20px;
-      }
-
-      .step-title {
-        font-size: 13px;
-      }
-
-      .step-desc {
-        font-size: 12px;
-      }
-
-      .chips {
-        gap: 7px;
-      }
-
-      .chip {
-        font-size: 11px;
-        padding: 4px 9px;
+      .progress-container {
+        height: 0.25rem;
+        margin: var(--spacing-3) 0 var(--spacing-2);
       }
 
       #envForm {
         grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-        gap: 18px;
-      }
-
-      input, textarea {
-        font-size: 14px;
+        gap: var(--spacing-4);
       }
 
       textarea {
@@ -606,57 +512,44 @@
       }
     }
 
-    /* 响应式设计 - 桌面端 (>900px) */
     @media (min-width: 901px) {
       .app {
-        padding: clamp(32px, 4vh, 48px) clamp(20px, 3vw, 32px);
+        padding: clamp(32px, 4vh, 48px) clamp(var(--spacing-4), 3vw, var(--spacing-6));
       }
 
       .grid {
-        gap: clamp(20px, 2vw, 28px);
+        gap: clamp(var(--spacing-4), 2vw, var(--spacing-6));
       }
 
       .card h3 {
-        font-size: clamp(17px, 1.2vw, 19px);
+        font-size: clamp(1rem, 1.2vw, 1.125rem);
       }
 
       .logs {
         height: clamp(400px, 40vh, 500px);
-        font-size: 13px;
-        padding: 16px;
+        font-size: 0.75rem;
+        padding: var(--spacing-4);
       }
 
       .title {
-        font-size: clamp(24px, 2.5vw, 32px);
+        font-size: clamp(1rem, 2.5vw, 1.125rem);
       }
 
       .upload {
-        padding: clamp(32px, 4vh, 48px) clamp(16px, 2vw, 24px);
+        padding: clamp(var(--spacing-5), 4vh, var(--spacing-6)) clamp(var(--spacing-3), 2vw, var(--spacing-4));
       }
 
       .btn {
-        padding: clamp(10px, 1.2vh, 12px) clamp(16px, 2vw, 24px);
-        font-size: clamp(13px, 0.9vw, 15px);
+        padding: clamp(var(--spacing-2), 1.2vh, var(--spacing-2)) clamp(var(--spacing-3), 2vw, var(--spacing-3));
+        font-size: clamp(0.875rem, 0.9vw, 0.875rem);
       }
 
-      .step-title {
-        font-size: clamp(13px, 0.9vw, 15px);
-      }
-
-      .step-desc {
-        font-size: clamp(12px, 0.85vw, 14px);
-      }
-
-      .chip {
-        font-size: clamp(11px, 0.8vw, 13px);
-      }
-
-      input, textarea {
-        font-size: clamp(13px, 0.9vw, 15px);
+      textarea {
+        min-height: 150px;
       }
     }
 
-    /* 优化弹性布局 */
+    /* Optimize flexible layout */
     @media (max-width: 900px) {
       .grid {
         display: flex;
@@ -668,22 +561,22 @@
       }
     }
 
-    /* 横屏模式优化 */
+    /* Landscape mode optimization */
     @media (max-width: 900px) and (orientation: landscape) {
       .logs {
         height: 250px;
       }
 
       .app {
-        padding: 16px;
+        padding: var(--spacing-3);
       }
 
       .card {
-        padding: 14px;
+        padding: var(--spacing-3);
       }
     }
 
-    /* 触摸目标优化 */
+    /* Touch target optimization */
     @media (hover: none) and (pointer: coarse) {
       .btn, .upload, input, textarea {
         min-height: 44px;
@@ -697,17 +590,17 @@
       }
     }
 
-    /* 按钮组响应式优化 */
+    /* Button group responsive optimization */
     .button-group {
       display: flex;
-      gap: 12px;
+      gap: var(--spacing-2);
       flex-wrap: wrap;
     }
 
     @media (max-width: 599px) {
       .button-group {
         flex-direction: column;
-        gap: 8px;
+        gap: var(--spacing-2);
       }
 
       .button-group .btn {
@@ -718,7 +611,7 @@
 
     @media (min-width: 600px) and (max-width: 900px) {
       .button-group {
-        gap: 10px;
+        gap: var(--spacing-2);
       }
 
       .button-group .btn {
@@ -726,7 +619,7 @@
       }
     }
 
-    /* 防止横向滚动 */
+    /* Prevent horizontal scrolling */
     html, body {
       overflow-x: hidden;
     }
@@ -737,29 +630,16 @@
       word-wrap: break-word;
     }
 
-    /* 优化长文本换行 */
+    /* Optimize long text wrapping */
     .log-text, .step-desc, .upload-text, .upload-hint {
       word-break: break-word;
       overflow-wrap: break-word;
       hyphens: auto;
     }
 
-    /* 响应式进度条 */
     @media (max-width: 599px) {
-      .progress-container {
-        height: 6px;
-        margin: 12px 0 10px;
-      }
-
       .flex-between {
-        font-size: 12px;
-      }
-    }
-
-    @media (min-width: 600px) and (max-width: 900px) {
-      .progress-container {
-        height: 7px;
-        margin: 14px 0 11px;
+        font-size: 0.75rem;
       }
     }
   </style>
@@ -778,51 +658,54 @@
 
     <div class="grid">
       <!-- Left Column -->
-      <div class="card">
-        <h3>
-          <span>📂 文件上传</span>
-          <span id="fileStatus" class="chip" style="background:var(--bg-input); color:var(--text-secondary);">未选择</span>
-        </h3>
-        
-        <label class="upload">
-          <input type="file" id="fileInput" accept=".txt,.md,.text" multiple>
-          <div class="upload-icon">📄</div>
-          <div class="upload-text">点击或拖拽上传小说文件（支持多选）</div>
-          <div class="upload-hint">支持 .txt, .md (Max 100MB)</div>
-        </label>
+      <div style="display:flex; flex-direction:column; gap:var(--spacing-4);">
+        <!-- Card 1: File Upload -->
+        <div class="card">
+          <h3>
+            <span>📂 文件上传</span>
+            <span id="fileStatus" class="chip" style="background:var(--bg-input); color:var(--text-secondary);">未选择</span>
+          </h3>
 
-        <div class="chips" id="metaChips"></div>
+          <label class="upload">
+            <input type="file" id="fileInput" accept=".txt,.md,.text" multiple>
+            <div class="upload-icon">📄</div>
+            <div class="upload-text">点击或拖拽上传小说文件（支持多选）</div>
+            <div class="upload-hint">支持 .txt, .md (Max 100MB)</div>
+          </label>
 
-        <div style="display:flex; gap:12px; margin-top:24px; flex-wrap:wrap;" class="button-group">
-          <button class="btn btn-primary" id="runBtn" style="flex:1; min-width:200px;">
-            <span>🚀</span> 开始生成大纲
-          </button>
-          <button class="btn btn-secondary" id="estimateBtn" style="flex:1; min-width:150px;">
-            <span>📊</span> 预测 Token
-          </button>
+          <div class="chips" id="metaChips"></div>
+
+          <div style="display:flex; gap:var(--spacing-3); margin-top:var(--spacing-4); flex-wrap:wrap;" class="button-group">
+            <button class="btn btn-primary" id="runBtn" style="flex:1; min-width:200px;">
+              <span>🚀</span> 开始生成大纲
+            </button>
+            <button class="btn btn-secondary" id="estimateBtn" style="flex:1; min-width:150px;">
+              <span>📊</span> 预测 Token
+            </button>
+          </div>
+
+          <div class="timeline" id="steps">
+            <div class="step">
+              <div class="step-title">等待文件</div>
+              <div class="step-desc">请先上传小说文件</div>
+            </div>
+          </div>
         </div>
 
+        <!-- Card 2: Task Queue -->
+        <div class="card">
+          <h3>
+            <span>📋 任务队列</span>
+            <button class="btn btn-secondary" id="refreshQueueBtn" style="padding:var(--spacing-1) var(--spacing-2); font-size:0.75rem;">🔄</button>
+          </h3>
 
-        <h3>
-          <span>📋 任务队列</span>
-          <button class="btn btn-secondary" id="refreshQueueBtn" style="padding:4px 10px; font-size:12px;">🔄</button>
-        </h3>
-
-        <div id="queueList" style="max-height:300px; overflow-y:auto; margin-top:12px;">
-          <div class="text-muted" style="text-align:center; padding:20px;">队列为空</div>
-        </div>
-
-        <div style="height:1px; background:var(--border); margin: 24px 0;"></div>
-
-        <div class="timeline" id="steps">
-          <div class="step">
-            <div class="step-title">等待文件</div>
-            <div class="step-desc">请先上传小说文件</div>
+          <div id="queueList" style="max-height:400px; overflow-y:auto; margin-top:var(--spacing-2);">
+            <div class="text-muted" style="text-align:center; padding:var(--spacing-4);">队列为空</div>
           </div>
         </div>
       </div>
 
-      <!-- Right Column -->
+      <!-- Right Column: Logs -->
       <div class="card" style="display:flex; flex-direction:column;">
         <h3>📜 运行日志</h3>
         <div class="logs" id="logBox"></div>
@@ -832,14 +715,14 @@
     <!-- Settings -->
     <div class="card">
       <div class="collapse-header" id="envToggle">
-        <h3 style="margin:0; font-size:16px;">⚙️ 环境配置 <span class="text-muted" style="font-weight:400; font-size:13px; margin-left:8px;">(.env - 仅查看)</span></h3>
+        <h3 style="margin:0; font-size:1rem;">⚙️ 环境配置 <span class="text-muted" style="font-weight:400; font-size:0.75rem; margin-left:var(--spacing-2);">(.env - 仅查看)</span></h3>
         <span class="collapse-icon">▼</span>
       </div>
-      
+
       <div class="collapse-body" id="envSection">
-        <div id="envForm" style="display:grid; grid-template-columns:repeat(auto-fit, minmax(300px, 1fr)); gap:20px;"></div>
-        
-        <div style="display:flex; gap:12px; margin-top:24px; justify-content:flex-end; flex-wrap:wrap;" class="button-group">
+        <div id="envForm" style="display:grid; grid-template-columns:repeat(auto-fit, minmax(300px, 1fr)); gap:var(--spacing-4);"></div>
+
+        <div style="display:flex; gap:var(--spacing-3); margin-top:var(--spacing-4); justify-content:flex-end; flex-wrap:wrap;" class="button-group">
           <button class="btn btn-secondary" id="reloadEnvBtn" style="min-width:150px;">🔄 刷新配置</button>
         </div>
       </div>
@@ -848,25 +731,25 @@
 
   <script>
     const API_BASE = 'http://localhost:8000';
-    
+
     // 全局错误处理
     window.addEventListener('error', (event) => {
       const errorMsg = `错误: ${event.message} (${event.filename}:${event.lineno})`;
       console.error('全局错误:', event);
       addLog(errorMsg);
     });
-    
+
     window.addEventListener('unhandledrejection', (event) => {
       const errorMsg = `未处理的Promise错误: ${event.reason}`;
       console.error('未处理的Promise拒绝:', event);
       addLog(errorMsg);
     });
-    
+
     // 带超时的fetch函数
     async function fetchWithTimeout(url, options = {}, timeout = 30000) {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), timeout);
-      
+
       try {
         const response = await fetch(url, {
           ...options,
@@ -914,9 +797,12 @@
       `;
     }
 
-    function addLog(text) {
+    function addLog(text, level = 'info') {
       const line = document.createElement('div');
       line.className = 'log-line';
+      if (level === 'error') {
+        line.className += ' log-error';
+      }
       const time = new Date().toLocaleTimeString();
       line.innerHTML = `<span class="log-time">${time}</span><span class="log-text">${text}</span>`;
       logBox.appendChild(line);
@@ -963,7 +849,7 @@
       fileStatus.textContent = `已选择 ${validFiles.length} 个文件`;
       fileStatus.style.color = 'var(--primary)';
       fileStatus.style.borderColor = 'var(--primary)';
-      fileStatus.style.background = 'rgba(99, 102, 241, 0.1)';
+      fileStatus.style.background = 'rgba(30, 41, 59, 0.1)';
 
       // 显示文件信息
       const totalSize = validFiles.reduce((sum, f) => sum + f.size, 0);
@@ -1094,20 +980,111 @@
     const refreshQueueBtn = document.getElementById('refreshQueueBtn');
     const queueList = document.getElementById('queueList');
 
+    // 维护每个任务的日志偏移量
+    const taskLogOffsets = new Map();
+    // 记录每个任务上一次显示的最后一条日志（用于去重）
+    const lastDisplayedLogs = new Map();
+
     async function refreshQueue() {
       try {
         const res = await fetchWithTimeout(API_BASE + '/queue/list');
         if (!res.ok) throw new Error(await res.text());
         const data = await res.json();
         renderQueue(data.tasks);
+        // 处理任务日志
+        processTaskLogs(data.tasks);
       } catch (e) {
         console.error('刷新队列失败:', e);
       }
     }
 
+    // 处理所有任务的日志
+    function processTaskLogs(tasks) {
+      if (!tasks) return;
+
+      tasks.forEach(task => {
+        const taskId = task.id;
+        const logs = task.logs || [];
+        const logOffset = task.log_offset || 0;
+        const fileName = task.file_path.split(/[\/\\]/).pop();
+        const result = task.result || {};
+
+        // 先处理 token 统计（必须在return之前）
+        const tokenUsage = result.token_usage;
+        if (tokenUsage && !task.token_logged_displayed && (task.status === 'success' || task.status === 'completed')) {
+          const promptTokens = tokenUsage.prompt_tokens || 0;
+          const completionTokens = tokenUsage.completion_tokens || 0;
+          const totalTokens = tokenUsage.total_tokens || 0;
+          const formattedPrompt = promptTokens.toLocaleString();
+          const formattedCompletion = completionTokens.toLocaleString();
+          const formattedTotal = totalTokens.toLocaleString();
+          addLog(`[${fileName}] Token统计: 输入=${formattedPrompt}, 输出=${formattedCompletion}, 总计=${formattedTotal}`);
+          task.token_logged_displayed = true;
+        }
+
+        // 跳过已完成、已取消或错误的任务的日志显示（避免重复）
+        if (task.status === 'success' || task.status === 'cancelled' || task.status === 'error') {
+          return;  // token统计已处理，现在跳过日志显示
+        }
+
+        // 初始化日志偏移量
+        if (!taskLogOffsets.has(taskId)) {
+          taskLogOffsets.set(taskId, logOffset);
+        }
+
+        const lastLogIndex = taskLogOffsets.get(taskId);
+        const totalLogs = logOffset + logs.length;
+
+        // 如果有新日志，处理并显示
+        if (totalLogs > lastLogIndex) {
+          const startIndex = Math.max(0, lastLogIndex - logOffset);
+          const newLogs = logs.slice(startIndex);
+
+          newLogs.forEach(logMsg => {
+            // 检查是否与上一条日志相同，如果相同则跳过
+            const lastLog = lastDisplayedLogs.get(taskId);
+            if (lastLog === logMsg) {
+              return; // 跳过重复的日志
+            }
+
+            // 如果是错误日志，添加错误样式
+            if (logMsg.includes('失败') || logMsg.includes('错误')) {
+              addLog(`[${fileName}] ${logMsg}`, 'error');
+            } else {
+              addLog(`[${fileName}] ${logMsg}`);
+            }
+
+            // 更新最后显示的日志
+            lastDisplayedLogs.set(taskId, logMsg);
+          });
+
+          // 更新偏移量
+          taskLogOffsets.set(taskId, totalLogs);
+        }
+
+        // 处理合并进度（只在合并阶段显示，避免重复）
+        const mergeLevel = result.merge_level;
+        const mergeBatchCurrent = result.merge_batch_current;
+        const mergeBatchTotal = result.merge_batch_total;
+        const mergeOutlinesCount = result.merge_outlines_count;
+        const phase = result.phase;
+
+        // 只在合并阶段且从未记录过时显示
+        if (phase === 'merging' && !task.merge_progress_logged) {
+          if (mergeLevel !== undefined && mergeBatchTotal !== undefined && mergeOutlinesCount !== undefined) {
+            const batchInfo = mergeBatchCurrent !== undefined
+              ? ` ${mergeBatchCurrent}/${mergeBatchTotal} 批次`
+              : '';
+            addLog(`[${fileName}] 合并层级 ${mergeLevel}:${batchInfo}, ${mergeOutlinesCount} 个大纲`);
+            task.merge_progress_logged = true;
+          }
+        }
+      });
+    }
+
     function renderQueue(tasks) {
       if (!tasks || tasks.length === 0) {
-        queueList.innerHTML = '<div class="text-muted" style="text-align:center; padding:20px;">队列为空</div>';
+        queueList.innerHTML = '<div class="text-muted" style="text-align:center; padding:var(--spacing-4);">队列为空</div>';
         return;
       }
 
@@ -1136,7 +1113,7 @@
           <div class="progress-container">
             <div class="progress-bar" style="width: ${progressPercent}%"></div>
           </div>
-          <div class="flex-between" style="margin-bottom:4px;">
+          <div class="flex-between" style="margin-bottom:var(--spacing-1);">
             <span class="text-muted">${finishedChunks} / ${totalChunks} 块</span>
             <span class="text-primary">${progressPercent}%</span>
           </div>
@@ -1145,7 +1122,7 @@
             <span class="text-muted">剩余: ${etaText}</span>
           </div>
         ` : `
-          <div class="text-muted" style="margin: 8px 0;">${getStatusText(task.status)}</div>
+          <div class="text-muted" style="margin: var(--spacing-2) 0;">${getStatusText(task.status)}</div>
         `;
 
         return `
@@ -1159,6 +1136,11 @@
               ${task.status === 'pending' || task.status === 'running' ? `
                 <button class="btn btn-secondary queue-item-btn" onclick="cancelQueueTask('${task.id}')">
                   取消
+                </button>
+              ` : ''}
+              ${task.status === 'running' ? `
+                <button class="btn btn-warning queue-item-btn" onclick="forceCompleteQueueTask('${task.id}')">
+                  忽略错误
                 </button>
               ` : ''}
             </div>
@@ -1193,8 +1175,47 @@
       }
     }
 
+    // 忽略错误任务的二次确认映射
+    const forceCompleteConfirmStates = new Map();
+
+    async function forceCompleteQueueTask(taskId) {
+      const currentState = forceCompleteConfirmStates.get(taskId) || false;
+
+      if (!currentState) {
+        // 第一次点击：显示确认文本
+        forceCompleteConfirmStates.set(taskId, true);
+        // 更新按钮文本
+        const btn = event.target;
+        const originalText = '忽略错误';
+        btn.textContent = '确认吗？';
+        btn.classList.add('btn-danger');
+        btn.classList.remove('btn-warning');
+        // 5秒后恢复原状
+        setTimeout(() => {
+          forceCompleteConfirmStates.delete(taskId);
+          btn.textContent = originalText;
+          btn.classList.remove('btn-danger');
+          btn.classList.add('btn-warning');
+        }, 5000);
+        return;
+      }
+
+      // 第二次点击：确认执行
+      forceCompleteConfirmStates.delete(taskId);
+
+      try {
+        const res = await fetchWithTimeout(API_BASE + `/queue/force-complete/${taskId}`, { method: 'POST' });
+        if (!res.ok) throw new Error(await res.text());
+        addLog('已强制完成，将合并已有结果');
+        refreshQueue();
+      } catch (e) {
+        addLog('强制完成失败: ' + e);
+      }
+    }
+
     // 暴露到全局作用域以便 HTML 中的 onclick 调用
     window.cancelQueueTask = cancelQueueTask;
+    window.forceCompleteQueueTask = forceCompleteQueueTask;
 
     refreshQueueBtn.addEventListener('click', refreshQueue);
 
@@ -1240,21 +1261,21 @@
 
     function renderEnvForm(values) {
       envForm.innerHTML = '';
-      
+
       envFieldGroups.forEach(group => {
         // 创建分组标题
         const groupTitle = document.createElement('div');
         groupTitle.style.gridColumn = '1 / -1';
-        groupTitle.style.fontSize = '14px';
+        groupTitle.style.fontSize = '0.875rem';
         groupTitle.style.fontWeight = '600';
         groupTitle.style.color = 'var(--text-main)';
-        groupTitle.style.marginTop = group === envFieldGroups[0] ? '0' : '20px';
-        groupTitle.style.marginBottom = '12px';
-        groupTitle.style.paddingBottom = '8px';
+        groupTitle.style.marginTop = group === envFieldGroups[0] ? '0' : 'var(--spacing-5)';
+        groupTitle.style.marginBottom = 'var(--spacing-3)';
+        groupTitle.style.paddingBottom = 'var(--spacing-2)';
         groupTitle.style.borderBottom = '1px solid var(--border)';
         groupTitle.textContent = group.title;
         envForm.appendChild(groupTitle);
-        
+
         // 渲染字段
         group.fields.forEach(key => {
           const isMultiline = multilineFields.has(key);
@@ -1266,7 +1287,7 @@
           }
 
           const label = document.createElement('label');
-          label.style.fontSize = '12px';
+          label.style.fontSize = '0.75rem';
           label.style.color = 'var(--text-secondary)';
           label.style.marginBottom = '6px';
           label.style.display = 'block';
@@ -1277,7 +1298,7 @@
           field.value = displayValue;
           field.readOnly = true;
           field.style.width = '100%';
-          field.style.padding = '10px 12px';
+          field.style.padding = 'var(--spacing-2) var(--spacing-3)';
           field.style.opacity = '0.7';
           field.style.cursor = 'default';
           if (isMultiline) {

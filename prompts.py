@@ -1,27 +1,38 @@
-﻿"""
+"""
 LLM提示词模板模块
 定义用于生成和处理大纲的各种提示词
 """
 
 import os
 
-DEFAULT_OUTLINE_PROMPT_TEMPLATE = """你是专业文学编辑。请对下面这段小说内容生成结构化剧情大纲。
+# 默认 prompt（标准字段名）
+DEFAULT_OUTLINE_PROMPT_TEMPLATE = """生成结构化剧情大纲（JSON）：
 
-要求：
-1. 用条理清晰的结构概括主要事件
-2. 标出人物关系变化
-3. 标出冲突与伏笔
-4. 适当压缩，突出关键信息
-5. 最终大纲用 JSON 格式输出，必须包含以下字段：
-   - "events": 主要事件列表
-   - "characters": 本段出现的主要人物列表
-   - "relationships": 人物关系列表，格式为 [["人物A", "人物B", "关系描述"], ...]
-   - "conflicts": 冲突与伏笔
+输出格式：
+{{
+  "events": ["事件1", "事件2"],
+  "characters": ["人物A", "人物B"],
+  "relationships": [["人物A", "人物B", "关系"]],
+  "conflicts": "冲突与伏笔"
+}}
 
-文本编号: {idx}
+内容#{idx}：{chunk}
+"""
 
-内容如下：
-{chunk}
+# 节省 Token 的缩写字段 prompt（推荐使用）
+COMPACT_OUTLINE_PROMPT_TEMPLATE = """生成大纲（JSON，缩写字段）：
+
+格式：{{"e":["事件"],"c":["人物"],"r":[["A","B","关系"]],"f":"冲突"}}
+
+#{idx}:{chunk}
+"""
+
+# 极简数组格式（最大程度节省）
+ARRAY_OUTLINE_PROMPT_TEMPLATE = """大纲（JSON数组）：
+
+格式：[["事件1","事件2"],["人物A","人物B"],[["A","B","关系"]],"冲突"]
+
+#{idx}:{chunk}
 """
 
 

@@ -1,4 +1,4 @@
-﻿# Python cache and virtualenvs
+# Python cache and virtualenvs
 __pycache__/
 *.py[cod]
 *.pyo
@@ -54,3 +54,14 @@ dmypy.json
 # OS files
 Thumbs.db
 /nul
+.esd10/
+
+# Python session
+.python-version
+
+# Temporary files
+*.tmp
+*.bak
+
+# AI session artifacts
+.sessions/
