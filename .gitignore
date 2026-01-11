@@ -53,3 +53,4 @@ dmypy.json
 
 # OS files
 Thumbs.db
+/nul

@@ -233,6 +233,90 @@
       font-weight: 500;
     }
 
+    /* Queue Items */
+    .queue-item {
+      padding: 12px;
+      margin-bottom: 8px;
+      border-radius: var(--radius-sm);
+      background: var(--bg-body);
+      border: 1px solid var(--border);
+      transition: all 0.2s;
+    }
+    .queue-item:hover {
+      border-color: var(--primary);
+    }
+    .queue-item.running {
+      border-color: var(--primary);
+      background: var(--primary-light);
+    }
+    .queue-item.success {
+      border-color: #10b981;
+      background: #d1fae5;
+    }
+    .queue-item.error {
+      border-color: #ef4444;
+      background: #fee2e2;
+    }
+    .queue-item.cancelled {
+      border-color: #f59e0b;
+      background: #fef3c7;
+    }
+    .queue-item-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 8px;
+    }
+    .queue-item-title {
+      font-weight: 600;
+      font-size: 13px;
+      color: var(--text-main);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .queue-item-status {
+      font-size: 11px;
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-weight: 600;
+    }
+    .queue-item-status.pending {
+      background: var(--bg-input);
+      color: var(--text-secondary);
+    }
+    .queue-item-status.running {
+      background: var(--primary);
+      color: white;
+    }
+    .queue-item-status.success {
+      background: #10b981;
+      color: white;
+    }
+    .queue-item-status.error {
+      background: #ef4444;
+      color: white;
+    }
+    .queue-item-status.cancelled {
+      background: #f59e0b;
+      color: white;
+    }
+    .queue-item-progress {
+      font-size: 12px;
+      color: var(--text-secondary);
+      margin-bottom: 8px;
+    }
+    .queue-item-actions {
+      display: flex;
+      gap: 8px;
+      justify-content: flex-end;
+    }
+    .queue-item-btn {
+      padding: 4px 10px;
+      font-size: 11px;
+      border-radius: 4px;
+    }
+
     /* Form & Env */
     .collapse-header {
       display: flex;
@@ -701,9 +785,9 @@
         </h3>
         
         <label class="upload">
-          <input type="file" id="fileInput" accept=".txt,.md,.text">
+          <input type="file" id="fileInput" accept=".txt,.md,.text" multiple>
           <div class="upload-icon">📄</div>
-          <div class="upload-text">点击或拖拽上传小说文件</div>
+          <div class="upload-text">点击或拖拽上传小说文件（支持多选）</div>
           <div class="upload-hint">支持 .txt, .md (Max 100MB)</div>
         </label>
 
@@ -718,29 +802,14 @@
           </button>
         </div>
 
-        <div style="height:1px; background:var(--border); margin: 32px 0;"></div>
 
-        <h3>⚡ 任务进度</h3>
-        
-        <div class="progress-container">
-          <div class="progress-bar" id="progressBar"></div>
-        </div>
-        
-        <div class="flex-between" style="margin-bottom:8px;">
-          <span class="text-muted" id="statusText">就绪</span>
-          <span class="text-primary" id="progressText">0%</span>
-        </div>
-        
-        <div class="flex-between">
-          <span class="text-muted" id="chunkText">块: 0 / 0</span>
-          <span class="text-muted" id="etaText">剩余: --</span>
-        </div>
-        <div class="flex-between" id="mergeInfo" style="display:none; margin-top:8px;">
-          <span class="text-muted" id="mergeLevelText">合并层级: 0</span>
-          <span class="text-muted" id="mergeBatchText">批次: 0 / 0</span>
-        </div>
-        <div class="flex-between" id="mergeDetail" style="display:none;">
-          <span class="text-muted" id="mergeOutlinesText">大纲数: 0</span>
+        <h3>
+          <span>📋 任务队列</span>
+          <button class="btn btn-secondary" id="refreshQueueBtn" style="padding:4px 10px; font-size:12px;">🔄</button>
+        </h3>
+
+        <div id="queueList" style="max-height:300px; overflow-y:auto; margin-top:12px;">
+          <div class="text-muted" style="text-align:center; padding:20px;">队列为空</div>
         </div>
 
         <div style="height:1px; background:var(--border); margin: 24px 0;"></div>
@@ -816,19 +885,9 @@
     const fileInput = document.getElementById('fileInput');
     const fileStatus = document.getElementById('fileStatus');
     const metaChips = document.getElementById('metaChips');
-    const progressBar = document.getElementById('progressBar');
-    const progressText = document.getElementById('progressText');
-    const statusText = document.getElementById('statusText');
-    const etaText = document.getElementById('etaText');
-    const chunkText = document.getElementById('chunkText');
     const logBox = document.getElementById('logBox');
     const steps = document.getElementById('steps');
     const modelChips = document.getElementById('modelChips');
-    const mergeInfo = document.getElementById('mergeInfo');
-    const mergeDetail = document.getElementById('mergeDetail');
-    const mergeLevelText = document.getElementById('mergeLevelText');
-    const mergeBatchText = document.getElementById('mergeBatchText');
-    const mergeOutlinesText = document.getElementById('mergeOutlinesText');
 
     const envForm = document.getElementById('envForm');
     const reloadEnvBtn = document.getElementById('reloadEnvBtn');
@@ -837,7 +896,6 @@
     const estimateBtn = document.getElementById('estimateBtn');
 
     let progressTimer = null;
-    let serverFilePath = '';
     let currentJobId = null;
     let envExpanded = false;
     let lastLogIndex = 0;
@@ -875,74 +933,103 @@
       });
     }
 
+    let selectedFiles = []; // 存储多个上传的文件
+
     fileInput.addEventListener('change', async () => {
-      const file = fileInput.files[0];
-      if (!file) return;
-      
-      // 文件大小验证 (100MB限制)
+      const files = Array.from(fileInput.files);
+      if (!files.length) return;
+
+      selectedFiles = []; // 清空之前的选择
+
       const maxSize = 100 * 1024 * 1024; // 100MB
-      if (file.size > maxSize) {
-        addLog(`错误: 文件大小超过限制 (${(file.size/1024/1024).toFixed(2)}MB > 100MB)`);
-        fileStatus.textContent = '文件过大';
-        fileStatus.style.color = '#ef4444';
-        fileStatus.style.borderColor = '#ef4444';
-        fileStatus.style.background = 'rgba(239, 68, 68, 0.1)';
-        fileInput.value = '';
+      const validFiles = [];
+
+      for (const file of files) {
+        // 文件大小验证
+        if (file.size > maxSize) {
+          addLog(`错误: 文件大小超过限制 (${(file.size/1024/1024).toFixed(2)}MB > 100MB): ${file.name}`);
+          continue;
+        }
+        validFiles.push(file);
+      }
+
+      if (validFiles.length === 0) {
+        addLog('没有有效的文件');
+        fileStatus.textContent = '未选择';
         return;
       }
-      
-      fileStatus.textContent = file.name;
+
+      // 更新显示
+      fileStatus.textContent = `已选择 ${validFiles.length} 个文件`;
       fileStatus.style.color = 'var(--primary)';
       fileStatus.style.borderColor = 'var(--primary)';
       fileStatus.style.background = 'rgba(99, 102, 241, 0.1)';
-      
-      metaChips.innerHTML = `
-        <span class="chip">大小: ${(file.size/1024/1024).toFixed(2)} MB</span>
-        <span class="chip">类型: ${file.type || 'text/plain'}</span>
-      `;
-      addLog(`上传文件: ${file.name}...`);
 
-      const form = new FormData();
-      form.append('file', file);
-      try {
-        const res = await fetchWithTimeout(API_BASE + '/upload', { method: 'POST', body: form }, 60000);
-        if (!res.ok) throw new Error(await res.text());
-        const data = await res.json();
-        serverFilePath = data.file_path;
-        addLog(`上传完成，服务器路径: ${serverFilePath}`);
+      // 显示文件信息
+      const totalSize = validFiles.reduce((sum, f) => sum + f.size, 0);
+      metaChips.innerHTML = `
+        <span class="chip">文件数: ${validFiles.length}</span>
+        <span class="chip">总大小: ${(totalSize/1024/1024).toFixed(2)} MB</span>
+      `;
+
+      // 上传所有文件
+      const uploadedPaths = [];
+      for (const file of validFiles) {
+        addLog(`上传文件: ${file.name}...`);
+        const form = new FormData();
+        form.append('file', file);
+        try {
+          const res = await fetchWithTimeout(API_BASE + '/upload', { method: 'POST', body: form }, 60000);
+          if (!res.ok) throw new Error(await res.text());
+          const data = await res.json();
+          uploadedPaths.push(data.file_path);
+          addLog(`上传完成: ${file.name}`);
+        } catch (e) {
+          addLog(`上传失败 ${file.name}: ${e}`);
+        }
+      }
+
+      selectedFiles = uploadedPaths;
+
+      if (uploadedPaths.length > 0) {
         setSteps([
-          { title: '已上传', desc: file.name },
+          { title: '已上传', desc: `${uploadedPaths.length} 个文件` },
           { title: '准备处理', desc: '点击开始处理' },
         ]);
-      } catch (e) {
-        addLog('上传失败: ' + e);
       }
     });
 
     async function startJob() {
-      if (!serverFilePath) {
+      if (selectedFiles.length === 0) {
         addLog('请先上传文件');
         return;
       }
-      
+
       const runBtn = document.getElementById('runBtn');
       const originalBtnText = runBtn.innerHTML;
-      
+
       // 禁用按钮并显示加载状态
       runBtn.disabled = true;
       runBtn.innerHTML = '<span>⏳</span> 处理中...';
-      
-      addLog('开始处理...');
-      statusText.textContent = '处理中';
+
+      addLog(`开始处理 ${selectedFiles.length} 个文件...`);
+
       try {
-        const res = await fetchWithTimeout(API_BASE + '/process', {
+        const res = await fetchWithTimeout(API_BASE + '/queue/add-multiple', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ file_path: serverFilePath, resume: true })
+          body: JSON.stringify({ file_paths: selectedFiles })
         });
         if (!res.ok) throw new Error(await res.text());
         const data = await res.json();
-        pollJob(data.job_id, originalBtnText);
+        addLog(`已将 ${data.count} 个文件添加到队列`);
+
+        // 刷新队列显示
+        refreshQueue();
+
+        // 恢复按钮状态
+        runBtn.disabled = false;
+        runBtn.innerHTML = originalBtnText;
       } catch (e) {
         addLog('启动失败: ' + e);
         // 恢复按钮状态
@@ -960,35 +1047,18 @@
           if (!res.ok) return;
           const job = await res.json();
           const pct = Math.round((job.progress || 0) * 100);
-          progressBar.style.width = pct + '%';
-          progressText.textContent = pct + '%';
+
           const phaseMap = { loading: '读取中', processing: '处理中', merging: '合并中', saving: '保存中', completed: '完成', failed: '失败' };
           const phaseText = job.result && job.result.phase ? (phaseMap[job.result.phase] || job.result.phase) : '处理中';
-          statusText.textContent = job.status === 'success' ? '完成' : (job.status === 'error' ? '错误' : phaseText);
 
           const summary = job.result?.chunk_count || job.result?.total_chunks || 0;
           const done = job.result?.completed_chunks ?? Math.round(summary * (job.progress || 0));
           const failed = job.result?.failed_chunks || 0;
           const finished = Math.min(done + failed, summary);
-          chunkText.textContent = failed ? `块: ${finished} / ${summary}（失败 ${failed}）` : `块: ${finished} / ${summary}`;
 
           if (typeof job.result?.eta_seconds === 'number') {
             const minutes = Math.max(0, Math.ceil(job.result.eta_seconds / 60));
-            etaText.textContent = `预计剩余: ${minutes} 分钟`;
-          } else {
-            etaText.textContent = '预计剩余: --';
-          }
-
-          // 更新合并信息
-          if (job.result && job.result.phase === 'merging' && job.result.merge_level > 0) {
-            mergeInfo.style.display = 'flex';
-            mergeDetail.style.display = 'flex';
-            mergeLevelText.textContent = `合并层级: ${job.result.merge_level}`;
-            mergeBatchText.textContent = `批次: ${job.result.merge_batch_current} / ${job.result.merge_batch_total}`;
-            mergeOutlinesText.textContent = `大纲数: ${job.result.merge_outlines_count}`;
-          } else {
-            mergeInfo.style.display = 'none';
-            mergeDetail.style.display = 'none';
+            addLog(`进度: ${finished}/${summary}块 (${pct}%) | 剩余: ${minutes}分钟`);
           }
 
           const logOffset = job.log_offset || 0;
@@ -1004,12 +1074,9 @@
 
           if (job.status === 'success' || job.status === 'error') {
             clearInterval(timer);
-            progressBar.style.width = '100%';
-            progressText.textContent = '100%';
-            chunkText.textContent = `块: ${summary} / ${summary}`;
             addLog(job.status === 'success' ? '处理完成 ✅' : ('错误: ' + job.message));
             setSteps([{ title: job.status === 'success' ? '完成' : '失败', desc: job.message || '已结束' }]);
-            
+
             // 恢复按钮状态
             const runBtn = document.getElementById('runBtn');
             runBtn.disabled = false;
@@ -1022,6 +1089,117 @@
     }
 
     document.getElementById('runBtn').addEventListener('click', () => startJob());
+
+    // 队列管理
+    const refreshQueueBtn = document.getElementById('refreshQueueBtn');
+    const queueList = document.getElementById('queueList');
+
+    async function refreshQueue() {
+      try {
+        const res = await fetchWithTimeout(API_BASE + '/queue/list');
+        if (!res.ok) throw new Error(await res.text());
+        const data = await res.json();
+        renderQueue(data.tasks);
+      } catch (e) {
+        console.error('刷新队列失败:', e);
+      }
+    }
+
+    function renderQueue(tasks) {
+      if (!tasks || tasks.length === 0) {
+        queueList.innerHTML = '<div class="text-muted" style="text-align:center; padding:20px;">队列为空</div>';
+        return;
+      }
+
+      queueList.innerHTML = tasks.map(task => {
+        const fileName = task.file_path.split(/[\/\\]/).pop();
+        const progressPercent = Math.round((task.progress || 0) * 100);
+
+        // 计算进度详情
+        const totalChunks = task.result?.chunk_count || 0;
+        const completedChunks = task.result?.completed_chunks || 0;
+        const failedChunks = task.result?.failed_chunks || 0;
+        const finishedChunks = Math.min(completedChunks + failedChunks, totalChunks);
+        const etaSeconds = task.result?.eta_seconds;
+
+        // 格式化 ETA
+        let etaText = '--';
+        if (typeof etaSeconds === 'number' && task.status === 'running') {
+          const minutes = Math.max(0, Math.ceil(etaSeconds / 60));
+          etaText = minutes >= 60
+            ? `${Math.floor(minutes / 60)}小时${minutes % 60}分钟`
+            : `${minutes}分钟`;
+        }
+
+        // 生成进度条 HTML（仅 running 状态）
+        const progressHtml = task.status === 'running' ? `
+          <div class="progress-container">
+            <div class="progress-bar" style="width: ${progressPercent}%"></div>
+          </div>
+          <div class="flex-between" style="margin-bottom:4px;">
+            <span class="text-muted">${finishedChunks} / ${totalChunks} 块</span>
+            <span class="text-primary">${progressPercent}%</span>
+          </div>
+          <div class="flex-between">
+            <span class="text-muted">${getStatusText(task.status)}</span>
+            <span class="text-muted">剩余: ${etaText}</span>
+          </div>
+        ` : `
+          <div class="text-muted" style="margin: 8px 0;">${getStatusText(task.status)}</div>
+        `;
+
+        return `
+          <div class="queue-item ${task.status}" id="queue-item-${task.id}">
+            <div class="queue-item-header">
+              <div class="queue-item-title" title="${fileName}">${fileName}</div>
+              <span class="queue-item-status ${task.status}">${getStatusText(task.status)}</span>
+            </div>
+            ${progressHtml}
+            <div class="queue-item-actions">
+              ${task.status === 'pending' || task.status === 'running' ? `
+                <button class="btn btn-secondary queue-item-btn" onclick="cancelQueueTask('${task.id}')">
+                  取消
+                </button>
+              ` : ''}
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    function getStatusText(status) {
+      const statusMap = {
+        pending: '等待中',
+        running: '运行中',
+        success: '完成',
+        error: '失败',
+        cancelled: '已取消',
+      };
+      return statusMap[status] || status;
+    }
+
+    async function cancelQueueTask(taskId) {
+      if (!confirm('确定要取消这个任务吗？')) {
+        return;
+      }
+
+      try {
+        const res = await fetchWithTimeout(API_BASE + `/queue/cancel?task_id=${taskId}`, { method: 'POST' });
+        if (!res.ok) throw new Error(await res.text());
+        addLog('任务已取消');
+        refreshQueue();
+      } catch (e) {
+        addLog('取消任务失败: ' + e);
+      }
+    }
+
+    // 暴露到全局作用域以便 HTML 中的 onclick 调用
+    window.cancelQueueTask = cancelQueueTask;
+
+    refreshQueueBtn.addEventListener('click', refreshQueue);
+
+    // 定期刷新队列
+    setInterval(refreshQueue, 3000);
 
     // env form
     const envFieldGroups = [
@@ -1158,17 +1336,16 @@
 
     // 预测 Token
     estimateBtn.addEventListener('click', async () => {
-      if (!serverFilePath) {
+      if (selectedFiles.length === 0) {
         addLog('请先上传文件');
         return;
       }
       addLog('请求预测 Token...');
       try {
-        const res = await fetchWithTimeout(API_BASE + '/estimate?file_path=' + encodeURIComponent(serverFilePath));
+        const res = await fetchWithTimeout(API_BASE + '/estimate?file_path=' + encodeURIComponent(selectedFiles[0]));
         if (!res.ok) throw new Error(await res.text());
         const data = await res.json();
         addLog(`Token 预测: 总计 ${data.total_estimated} | 原始 ${data.total_tokens} | 分块 ${data.chunk_tokens} | 响应估算 ${data.chunk_responses} | 合并估算 ${data.merge_tokens}`);
-        chunkText.textContent = `块: 0 / ${data.chunk_count}`;
       } catch (e) {
         addLog('预测失败: ' + e);
       }

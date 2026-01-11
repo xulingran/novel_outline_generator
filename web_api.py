@@ -27,6 +27,7 @@ from pydantic import BaseModel
 
 from config import init_config
 from services.novel_processing_service import NovelProcessingService
+from services.task_queue import QueueTask, get_global_queue
 from services.token_estimator import estimate_tokens
 
 logger = logging.getLogger(__name__)
@@ -78,6 +79,7 @@ class RateLimiter:
 
 rate_limiter = RateLimiter()
 UPLOAD_FILE_PARAM = File(...)
+UPLOAD_FILES_PARAM = File(...)
 
 
 def load_env_file() -> dict[str, str]:
@@ -104,6 +106,12 @@ def mask_value(key: str, value: str) -> str:
 class ProcessRequest(BaseModel):
     file_path: str
     resume: bool = True
+
+
+class MultipleFilesRequest(BaseModel):
+    """批量文件请求"""
+
+    file_paths: list[str]
 
 
 @dataclass
@@ -298,6 +306,41 @@ async def upload_file(request: Request, file: UploadFile = UPLOAD_FILE_PARAM):
     return {"file_path": str(dest)}
 
 
+# ... 其他导入 ...
+
+
+@app.post("/upload-multiple")
+async def upload_multiple_files(request: Request, files: list[UploadFile] = UPLOAD_FILES_PARAM):
+    """批量上传多个文件"""
+    client_host = request.client.host if request.client else "unknown"
+    rate_limiter.check_rate_limit(client_host, 10, 60)
+
+    from validators import sanitize_filename
+
+    UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+    uploaded_files = []
+
+    for file in files:
+        # 验证文件名存在
+        if not file.filename:
+            raise HTTPException(status_code=400, detail="文件名不能为空")
+
+        suffix = Path(file.filename).suffix.lower()
+        if suffix not in (".txt", ".md"):
+            raise HTTPException(status_code=400, detail=f"仅支持.txt 或 .md 文件: {file.filename}")
+
+        safe_filename = sanitize_filename(file.filename)
+        dest = UPLOAD_DIR / safe_filename
+        content = await file.read()
+        if len(content) > 100 * 1024 * 1024:
+            raise HTTPException(status_code=400, detail=f"文件过大，限制100MB: {file.filename}")
+
+        dest.write_bytes(content)
+        uploaded_files.append(str(dest))
+
+    return {"file_paths": uploaded_files}
+
+
 async def _run_job(job: Job, req: ProcessRequest):
     job.status = "running"
     job.file_path = req.file_path
@@ -393,6 +436,84 @@ async def _run_job(job: Job, req: ProcessRequest):
         job.log(f"错误: {e}")
 
 
+async def run_queue_task(task: QueueTask) -> None:
+    """运行队列任务（由 TaskQueue 调用）"""
+    task.log(f"开始处理文件: {task.file_path}")
+
+    def handle_progress(info: dict[str, Any]) -> None:
+        task.progress = info.get("progress", task.progress)
+        if "total_chunks" in info:
+            task.result["chunk_count"] = info["total_chunks"]
+        if "completed_chunks" in info:
+            task.result["completed_chunks"] = info["completed_chunks"]
+        if "failed_chunks" in info:
+            task.result["failed_chunks"] = info["failed_chunks"]
+        if info.get("eta_seconds") is not None:
+            task.result["eta_seconds"] = info["eta_seconds"]
+        if info.get("eta_confidence"):
+            task.result["eta_confidence"] = info["eta_confidence"]
+        if info.get("eta_method"):
+            task.result["eta_method"] = info["eta_method"]
+        if info.get("phase"):
+            task.result["phase"] = info["phase"]
+        if info.get("merge_level") is not None:
+            task.result["merge_level"] = info["merge_level"]
+        if info.get("merge_batch_current") is not None:
+            task.result["merge_batch_current"] = info["merge_batch_current"]
+        if info.get("merge_batch_total") is not None:
+            task.result["merge_batch_total"] = info["merge_batch_total"]
+        if info.get("merge_outlines_count") is not None:
+            task.result["merge_outlines_count"] = info["merge_outlines_count"]
+        if info.get("last_chunk_id") is not None:
+            if info.get("last_error"):
+                task.log(f"块 {info['last_chunk_id']} 失败: {info['last_error']}")
+            else:
+                task.log(f"块 {info['last_chunk_id']} 完成")
+        if info.get("token_usage") and not task.token_logged:
+            token_usage = info["token_usage"]
+            task.result["token_usage"] = token_usage
+            prompt_tokens = token_usage.get("prompt_tokens", 0)
+            completion_tokens = token_usage.get("completion_tokens", 0)
+            total_tokens = token_usage.get("total_tokens", 0)
+            task.log(
+                "合并完成，Token统计: "
+                f"输入={prompt_tokens:,}, 输出={completion_tokens:,}, 总计={total_tokens:,}"
+            )
+            task.token_logged = True
+
+    try:
+        service = NovelProcessingService(
+            progress_callback=handle_progress, cancel_event=task.cancel_event
+        )
+        result = await service.process_novel(task.file_path, resume=True)
+        task.result.update(result)
+        task.progress = 1.0
+        task.status = "success"
+
+        # 输出token统计
+        if "token_usage" in result and not task.token_logged:
+            token_usage = result["token_usage"]
+            prompt_tokens = token_usage.get("prompt_tokens", 0)
+            completion_tokens = token_usage.get("completion_tokens", 0)
+            total_tokens = token_usage.get("total_tokens", 0)
+
+            task.log(
+                f"Token统计: 输入={prompt_tokens:,}, 输出={completion_tokens:,}, 总计={total_tokens:,}"
+            )
+            task.token_logged = True
+
+        task.log("处理完成")
+
+    except asyncio.CancelledError:
+        task.status = "cancelled"
+        task.message = "任务被取消"
+        task.log("任务被取消")
+    except Exception as e:  # noqa: BLE001
+        task.status = "error"
+        task.message = str(e)
+        task.log(f"错误: {e}")
+
+
 @app.post("/process")
 async def start_process(request: Request, req: ProcessRequest):
     client_host = request.client.host if request.client else "unknown"
@@ -436,6 +557,88 @@ def get_job(job_id: str):
         "logs": job.logs,
         "log_offset": job.log_offset,
     }
+
+
+@app.get("/queue/list")
+async def list_queue():
+    """列出所有队列任务"""
+    queue = get_global_queue()
+    tasks = await queue.list_tasks()
+    return {"tasks": tasks}
+
+
+@app.post("/queue/add")
+async def add_to_queue(request: Request, req: ProcessRequest):
+    """添加任务到队列"""
+    client_host = request.client.host if request.client else "unknown"
+    rate_limiter.check_rate_limit(client_host, 5, 60)
+
+    if not req.file_path:
+        raise HTTPException(status_code=400, detail="file_path 不能为空")
+    if not Path(req.file_path).exists():
+        raise HTTPException(status_code=404, detail="文件不存在")
+
+    queue = get_global_queue()
+    task_id = await queue.add_task(req.file_path)
+    return {"task_id": task_id, "message": "任务已添加到队列"}
+
+
+@app.post("/queue/add-multiple")
+async def add_multiple_to_queue(request: Request, req: MultipleFilesRequest):
+    """批量添加文件到队列"""
+    client_host = request.client.host if request.client else "unknown"
+    rate_limiter.check_rate_limit(client_host, 5, 60)
+
+    if not req.file_paths:
+        raise HTTPException(status_code=400, detail="file_paths 不能为空")
+
+    queue = get_global_queue()
+    task_ids = []
+
+    for file_path in req.file_paths:
+        if not file_path:
+            raise HTTPException(status_code=400, detail="file_path 不能为空")
+        if not Path(file_path).exists():
+            raise HTTPException(status_code=404, detail=f"文件不存在: {file_path}")
+        task_id = await queue.add_task(file_path)
+        task_ids.append(task_id)
+
+    return {
+        "task_ids": task_ids,
+        "count": len(task_ids),
+        "message": f"已将 {len(task_ids)} 个文件添加到队列",
+    }
+
+
+@app.post("/queue/cancel")
+async def cancel_queue_task(request: Request, task_id: str):
+    """取消队列任务"""
+    client_host = request.client.host if request.client else "unknown"
+    rate_limiter.check_rate_limit(client_host, 10, 60)
+
+    queue = get_global_queue()
+    success = await queue.cancel_task(task_id)
+
+    if not success:
+        raise HTTPException(status_code=404, detail="任务不存在或无法取消")
+
+    return {"success": True, "message": "任务已取消"}
+
+
+@app.post("/queue/clear")
+async def clear_queue():
+    """清空队列（仅取消未开始的任务）"""
+    queue = get_global_queue()
+    count = await queue.clear_queue()
+    return {"success": True, "cancelled_count": count}
+
+
+@app.get("/queue/stats")
+async def get_queue_stats():
+    """获取队列统计信息"""
+    queue = get_global_queue()
+    stats = await queue.get_stats()
+    return stats
 
 
 if __name__ == "__main__":

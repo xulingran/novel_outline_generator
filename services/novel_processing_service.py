@@ -29,7 +29,11 @@ logger = logging.getLogger(__name__)
 class NovelProcessingService:
     """小说处理服务类"""
 
-    def __init__(self, progress_callback: Callable[[dict[str, Any]], None] | None = None):
+    def __init__(
+        self,
+        progress_callback: Callable[[dict[str, Any]], None] | None = None,
+        cancel_event: asyncio.Event | None = None,
+    ):
         self.processing_config = get_processing_config()
         self.llm_service = create_llm_service()
         self.progress_service = ProgressService()
@@ -37,6 +41,7 @@ class NovelProcessingService:
         self.processing_state: ProcessingState | None = None
         self.progress_callback = progress_callback
         self.current_progress_data: ProgressData | None = None
+        self.cancel_event = cancel_event or asyncio.Event()
         # Token统计
         self.total_prompt_tokens = 0
         self.total_completion_tokens = 0
@@ -142,6 +147,9 @@ class NovelProcessingService:
                 },
             }
 
+        except asyncio.CancelledError:
+            logger.info("Novel processing cancelled")
+            raise
         except Exception as e:
             if self.processing_state:
                 self.processing_state.fail(str(e))
@@ -249,7 +257,11 @@ class NovelProcessingService:
 
             # 处理异常
             successful_outlines: list[dict[str, Any]] = []
+            cancelled_error: asyncio.CancelledError | None = None
             for idx, result in enumerate(outlines, 1):
+                if isinstance(result, asyncio.CancelledError):
+                    cancelled_error = result
+                    continue
                 if isinstance(result, Exception):
                     logger.error(f"块 {idx} 处理失败: {result}")
                     processing_state.add_error(f"块 {idx}: {str(result)}")
@@ -259,6 +271,11 @@ class NovelProcessingService:
                 else:
                     successful_outlines.append(cast(dict[str, Any], result))
 
+            if cancelled_error is not None:
+                raise cancelled_error
+
+        except asyncio.CancelledError:
+            raise
         except Exception as e:
             raise ProcessingError(f"处理文本块失败: {str(e)}") from e
         finally:
@@ -278,6 +295,11 @@ class NovelProcessingService:
         if self.processing_state is None:
             raise ProcessingError("处理状态未初始化")
 
+        # 检查是否被取消
+        if self.cancel_event.is_set():
+            logger.info("任务已被取消")
+            raise asyncio.CancelledError()
+
         processing_state = self.processing_state
         async with sem:
             chunk_id = chunk.id
@@ -286,12 +308,22 @@ class NovelProcessingService:
             start_time = datetime.now()
 
             try:
+                # 再次检查是否被取消
+                if self.cancel_event.is_set():
+                    logger.info("任务已被取消")
+                    raise asyncio.CancelledError()
+
                 # 生成提示
                 prompt = chunk_prompt(chunk.content, chunk_id)
 
                 # 调用LLM
                 llm_response = await self.llm_service.call(prompt, chunk_id)
                 response = llm_response.content
+
+                # 检查是否被取消（在LLM调用后）
+                if self.cancel_event.is_set():
+                    logger.info("任务已被取消")
+                    raise asyncio.CancelledError()
 
                 # 累计token使用情况
                 if llm_response.token_usage:
@@ -331,6 +363,9 @@ class NovelProcessingService:
                 logger.debug(f"块 {chunk_id} 处理完成，耗时: {processing_time:.2f}秒")
                 return outline_data
 
+            except asyncio.CancelledError:
+                logger.info(f"块 {chunk_id} 处理被取消")
+                raise
             except APIError as e:
                 logger.error(f"块 {chunk_id} API调用失败: {e}")
                 processing_state.update_progress(processed=0, failed=1)
@@ -386,6 +421,11 @@ class NovelProcessingService:
         if not outlines:
             return ""
 
+        # 检查是否被取消
+        if self.cancel_event.is_set():
+            logger.info("任务已被取消")
+            raise asyncio.CancelledError()
+
         # 检查处理状态
         if self.processing_state is None:
             raise ProcessingError("处理状态未初始化")
@@ -419,6 +459,11 @@ class NovelProcessingService:
             # 直接合并
             logger.debug(f"层级 {level}: 合并 {len(outlines)} 个大纲块")
             llm_response = await self.llm_service.call(merge_prompt_text)
+
+            # 检查是否被取消（在LLM调用后）
+            if self.cancel_event.is_set():
+                logger.info("任务已被取消")
+                raise asyncio.CancelledError()
 
             # 累计token使用情况
             if llm_response.token_usage:
@@ -456,6 +501,11 @@ class NovelProcessingService:
         # 递归处理每批
         merged_batches = []
         for idx, batch in enumerate(batches, 1):
+            # 检查是否被取消
+            if self.cancel_event.is_set():
+                logger.info("任务已被取消")
+                raise asyncio.CancelledError()
+
             # 更新当前批次
             self.processing_state.merge_batch_current = idx
             self._emit_progress()
