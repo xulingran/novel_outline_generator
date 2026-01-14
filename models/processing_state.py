@@ -23,6 +23,8 @@ class ProgressData:
     encoding: str = "utf-8"  # 文件编码
     processing_times: list[float] = field(default_factory=list)
     errors: list[dict[str, Any]] = field(default_factory=list)
+    partial_indices: set[int] = field(default_factory=set)  # 部分完成的块索引
+    partial_outlines: list[dict[str, Any]] = field(default_factory=list)  # 部分完成的大纲
 
     @property
     def completion_rate(self) -> float:
@@ -57,6 +59,8 @@ class ProgressData:
             "encoding": self.encoding,
             "processing_times": self.processing_times,
             "errors": self.errors,
+            "partial_indices": sorted(self.partial_indices),
+            "partial_outlines": self.partial_outlines,
         }
 
     @classmethod
@@ -73,6 +77,8 @@ class ProgressData:
             encoding=data.get("encoding", "utf-8"),  # 默认utf-8
             processing_times=data.get("processing_times", []),
             errors=data.get("errors", []),
+            partial_indices=set(data.get("partial_indices", [])),
+            partial_outlines=data.get("partial_outlines", []),
         )
 
     @staticmethod
@@ -92,6 +98,7 @@ class ProcessingState:
     total_chunks: int
     processed_chunks: int = 0
     failed_chunks: int = 0
+    partial_chunks: int = 0  # 部分完成的块数
     start_time: datetime = field(default_factory=datetime.now)
     processing_start_time: datetime | None = None
     end_time: datetime | None = None
@@ -129,6 +136,10 @@ class ProcessingState:
         self.processed_chunks += processed
         self.failed_chunks += failed
 
+    def update_partial(self, count: int = 1) -> None:
+        """更新部分完成计数"""
+        self.partial_chunks += count
+
     def add_error(self, error: str) -> None:
         """添加错误信息"""
         self.errors.append(f"[{datetime.now().strftime('%H:%M:%S')}] {error}")
@@ -155,6 +166,7 @@ class ProcessingState:
             "total_chunks": self.total_chunks,
             "processed_chunks": self.processed_chunks,
             "failed_chunks": self.failed_chunks,
+            "partial_chunks": self.partial_chunks,
             "progress_percentage": round(self.progress_percentage, 2),
             "success_rate": round(self.success_rate, 2),
             "elapsed_time": round(self.elapsed_time, 2),

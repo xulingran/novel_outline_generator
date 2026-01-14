@@ -109,6 +109,34 @@ class TestProgressData:
         assert progress.total_chunks == 10
         assert 0 in progress.completed_indices
 
+    def test_progress_data_with_partial_fields_serialization(self):
+        """测试进度数据包含部分完成字段的序列化与反序列化"""
+        progress_data = ProgressData(
+            txt_file="test.txt",
+            total_chunks=5,
+            completed_count=3,
+            completed_indices={0, 1, 2},
+            outlines=[{"chunk_id": i, "plot": ["event1"]} for i in range(3)],
+            last_update=datetime.now(),
+            chunks_hash="abc123",
+            encoding="utf-8",
+            partial_indices={3, 4},
+            partial_outlines=[{"chunk_id": 3, "is_partial": True, "plot": ["partial_event"]}],
+        )
+
+        # 序列化
+        data_dict = progress_data.to_dict()
+        assert "partial_indices" in data_dict
+        assert data_dict["partial_indices"] == [3, 4]
+        assert "partial_outlines" in data_dict
+        assert len(data_dict["partial_outlines"]) == 1
+
+        # 反序列化
+        restored = ProgressData.from_dict(data_dict)
+        assert restored.partial_indices == {3, 4}
+        assert len(restored.partial_outlines) == 1
+        assert restored.partial_outlines[0]["is_partial"] is True
+
     def test_calculate_chunks_hash(self):
         """测试计算块哈希"""
         chunks = ["chunk1", "chunk2", "chunk3"]
@@ -184,6 +212,32 @@ class TestProcessingState:
         state.update_progress(processed=2, failed=1)
         assert state.processed_chunks == 5
         assert state.failed_chunks == 1
+
+    def test_update_partial(self):
+        """测试更新部分完成计数"""
+        state = ProcessingState(file_path="test.txt", total_chunks=10)
+        assert state.partial_chunks == 0
+        state.update_partial()
+        assert state.partial_chunks == 1
+        state.update_partial(2)
+        assert state.partial_chunks == 3
+
+    def test_partial_chunks_initialization(self):
+        """测试部分完成计数器初始化"""
+        state = ProcessingState(file_path="test.txt", total_chunks=10)
+        assert state.partial_chunks == 0
+
+    def test_get_summary_includes_partial_chunks(self):
+        """测试摘要包含部分完成计数"""
+        state = ProcessingState(file_path="test.txt", total_chunks=10)
+        state.processed_chunks = 5
+        state.failed_chunks = 1
+        state.partial_chunks = 2
+
+        summary = state.get_summary()
+        assert summary["processed_chunks"] == 5
+        assert summary["failed_chunks"] == 1
+        assert summary["partial_chunks"] == 2
 
     def test_add_error(self):
         """测试添加错误"""

@@ -1022,6 +1022,13 @@
           task.token_logged_displayed = true;
         }
 
+        // 处理部分完成信息（必须在status检查之前，否则已完成任务不会显示）
+        const partialInfo = result.partial_info;
+        if (partialInfo && !task.partial_info_logged) {
+          addLog(`[${fileName}] ${partialInfo}`, 'warning');
+          task.partial_info_logged = true;
+        }
+
         // 跳过已完成、已取消或错误的任务的日志显示（避免重复）
         if (task.status === 'success' || task.status === 'cancelled' || task.status === 'error') {
           return;  // token统计已处理，现在跳过日志显示
@@ -1079,6 +1086,12 @@
             task.merge_progress_logged = true;
           }
         }
+
+        // 处理部分完成信息
+        if (partialInfo && !task.partial_info_logged) {
+          addLog(`[${fileName}] ${partialInfo}`, 'warning');
+          task.partial_info_logged = true;
+        }
       });
     }
 
@@ -1096,7 +1109,8 @@
         const totalChunks = task.result?.chunk_count || 0;
         const completedChunks = task.result?.completed_chunks || 0;
         const failedChunks = task.result?.failed_chunks || 0;
-        const finishedChunks = Math.min(completedChunks + failedChunks, totalChunks);
+        const partialChunks = task.result?.partial_chunks || 0;
+        const finishedChunks = Math.min(completedChunks + failedChunks + partialChunks, totalChunks);
         const etaSeconds = task.result?.eta_seconds;
 
         // 格式化 ETA
@@ -1116,6 +1130,11 @@
           <div class="flex-between" style="margin-bottom:var(--spacing-1);">
             <span class="text-muted">${finishedChunks} / ${totalChunks} 块</span>
             <span class="text-primary">${progressPercent}%</span>
+          </div>
+          <div class="flex-between" style="margin-bottom:var(--spacing-1);">
+            <span class="text-muted">已完成: ${completedChunks}</span>
+            ${partialChunks > 0 ? `<span class="text-warning">部分完成: ${partialChunks}</span>` : ''}
+            ${failedChunks > 0 ? `<span class="text-error">失败: ${failedChunks}</span>` : ''}
           </div>
           <div class="flex-between">
             <span class="text-muted">${getStatusText(task.status)}</span>
@@ -1251,13 +1270,9 @@
       {
         title: '系统配置',
         fields: ['LOG_LEVEL', 'USE_PROXY', 'PROXY_URL', 'CORS_ORIGINS']
-      },
-      {
-        title: '提示词模板',
-        fields: ['OUTLINE_PROMPT_TEMPLATE']
       }
     ];
-    const multilineFields = new Set(['OUTLINE_PROMPT_TEMPLATE']);
+    const multilineFields = new Set();
 
     function renderEnvForm(values) {
       envForm.innerHTML = '';

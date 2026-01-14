@@ -7,7 +7,6 @@ import os
 from dataclasses import dataclass, field
 
 from exceptions import APIKeyError, ConfigurationError
-from prompts import DEFAULT_OUTLINE_PROMPT_TEMPLATE
 
 # 支持的API提供商列表
 SUPPORTED_API_PROVIDERS = ["openai", "gemini", "zhipu", "aihubmix"]
@@ -311,7 +310,6 @@ def create_env_file():
     """创建.env文件模板（如果不存在）"""
     env_file = ".env"
     if not os.path.exists(env_file):
-        outline_prompt_env = DEFAULT_OUTLINE_PROMPT_TEMPLATE.replace("\n", "\\n")
         with open(env_file, "w", encoding="utf-8") as f:
             f.write(
                 """# 小说大纲生成工具环境变量配置
@@ -356,11 +354,10 @@ PROXY_URL=http://127.0.0.1:7897
 
 # CORS 允许的来源（可选，多个用逗号分隔）
 # CORS_ORIGINS=http://localhost:8000,http://127.0.0.1:8000
+
+# 注意：提示词模板现已内置，使用 prompts.py 中的函数
 """
             )
-        with open(env_file, "a", encoding="utf-8") as f:
-            f.write("\n# 大纲提示词配置\n")
-            f.write(f"OUTLINE_PROMPT_TEMPLATE={outline_prompt_env}\n")
         print(f"✓ 已创建环境变量模板文件: {env_file}")
         print("  请编辑该文件并填入你的API密钥")
 
