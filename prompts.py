@@ -4,7 +4,7 @@ LLM提示词模板模块
 """
 
 
-def chunk_prompt(chunk: str, idx: int) -> str:
+def chunk_prompt(chunk: str, idx: int | str) -> str:
     """
     生成处理单个文本块的提示词（提取人物、关系、剧情）
     """

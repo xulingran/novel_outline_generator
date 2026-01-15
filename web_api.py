@@ -138,10 +138,66 @@ class Job:
             self.log_offset += overflow
 
 
-JOBS: dict[str, Job] = {}
+# 常量定义
 MAX_JOBS = 100
 JOB_MAX_AGE_HOURS = 24
+
+JOBS: dict[str, Job] = {}
 _cleanup_task: asyncio.Task | None = None
+
+
+def _update_progress_from_info(
+    info: dict[str, Any],
+    target: Job | QueueTask,
+) -> None:
+    """从进度信息更新目标对象（Job 或 QueueTask）
+
+    Args:
+        info: 进度信息字典
+        target: 目标对象（Job 或 QueueTask）
+    """
+    target.progress = info.get("progress", target.progress)
+
+    # 更新结果字典中的字段
+    result_fields = [
+        "total_chunks",
+        "completed_chunks",
+        "failed_chunks",
+        "partial_chunks",
+        "partial_info",
+        "eta_seconds",
+        "eta_confidence",
+        "eta_method",
+        "phase",
+        "merge_level",
+        "merge_batch_current",
+        "merge_batch_total",
+        "merge_outlines_count",
+    ]
+
+    for field_name in result_fields:
+        if info.get(field_name) is not None:
+            target.result[field_name] = info[field_name]
+
+    # 处理块完成/失败日志
+    if info.get("last_chunk_id") is not None:
+        if info.get("last_error"):
+            target.log(f"块 {info['last_chunk_id']} 失败: {info['last_error']}")
+        else:
+            target.log(f"块 {info['last_chunk_id']} 完成")
+
+    # 处理 token 使用统计（只记录一次）
+    if info.get("token_usage") and not target.token_logged:
+        token_usage = info["token_usage"]
+        target.result["token_usage"] = token_usage
+        prompt_tokens = token_usage.get("prompt_tokens", 0)
+        completion_tokens = token_usage.get("completion_tokens", 0)
+        total_tokens = token_usage.get("total_tokens", 0)
+        target.log(
+            "合并完成，Token统计: "
+            f"输入={prompt_tokens:,}, 输出={completion_tokens:,}, 总计={total_tokens:,}"
+        )
+        target.token_logged = True
 
 
 async def _periodic_job_cleanup() -> None:
@@ -236,9 +292,9 @@ def cleanup_uploads(protected_paths: set[Path] | None = None) -> int:
             else:
                 item.unlink()
             cleaned += 1
-        except Exception:
+        except Exception as e:
             # 忽略清理失败，避免影响主流程
-            continue
+            logger.warning(f"清理上传文件失败: {e}")
     return cleaned
 
 
@@ -354,23 +410,7 @@ async def _run_job(job: Job, req: ProcessRequest):
     job.log(f"开始处理文件: {req.file_path}")
 
     def handle_progress(info: dict[str, Any]) -> None:
-        job.progress = info.get("progress", job.progress)
-        if "total_chunks" in info:
-            job.result["chunk_count"] = info["total_chunks"]
-        if "completed_chunks" in info:
-            job.result["completed_chunks"] = info["completed_chunks"]
-        if "failed_chunks" in info:
-            job.result["failed_chunks"] = info["failed_chunks"]
-        if info.get("eta_seconds") is not None:
-            job.result["eta_seconds"] = info["eta_seconds"]
-        if info.get("eta_confidence"):
-            job.result["eta_confidence"] = info["eta_confidence"]
-        if info.get("eta_method"):
-            job.result["eta_method"] = info["eta_method"]
-        if info.get("phase"):
-            job.result["phase"] = info["phase"]
-        if info.get("merge_level") is not None:
-            job.result["merge_level"] = info["merge_level"]
+        _update_progress_from_info(info, job)
         if info.get("merge_batch_current") is not None:
             job.result["merge_batch_current"] = info["merge_batch_current"]
         if info.get("merge_batch_total") is not None:
@@ -446,45 +486,7 @@ async def run_queue_task(task: QueueTask) -> None:
     task.log(f"开始处理文件: {task.file_path}")
 
     def handle_progress(info: dict[str, Any]) -> None:
-        task.progress = info.get("progress", task.progress)
-        if "total_chunks" in info:
-            task.result["chunk_count"] = info["total_chunks"]
-        if "completed_chunks" in info:
-            task.result["completed_chunks"] = info["completed_chunks"]
-        if "failed_chunks" in info:
-            task.result["failed_chunks"] = info["failed_chunks"]
-        if info.get("eta_seconds") is not None:
-            task.result["eta_seconds"] = info["eta_seconds"]
-        if info.get("eta_confidence"):
-            task.result["eta_confidence"] = info["eta_confidence"]
-        if info.get("eta_method"):
-            task.result["eta_method"] = info["eta_method"]
-        if info.get("phase"):
-            task.result["phase"] = info["phase"]
-        if info.get("merge_level") is not None:
-            task.result["merge_level"] = info["merge_level"]
-        if info.get("merge_batch_current") is not None:
-            task.result["merge_batch_current"] = info["merge_batch_current"]
-        if info.get("merge_batch_total") is not None:
-            task.result["merge_batch_total"] = info["merge_batch_total"]
-        if info.get("merge_outlines_count") is not None:
-            task.result["merge_outlines_count"] = info["merge_outlines_count"]
-        if info.get("last_chunk_id") is not None:
-            if info.get("last_error"):
-                task.log(f"块 {info['last_chunk_id']} 失败: {info['last_error']}")
-            else:
-                task.log(f"块 {info['last_chunk_id']} 完成")
-        if info.get("token_usage") and not task.token_logged:
-            token_usage = info["token_usage"]
-            task.result["token_usage"] = token_usage
-            prompt_tokens = token_usage.get("prompt_tokens", 0)
-            completion_tokens = token_usage.get("completion_tokens", 0)
-            total_tokens = token_usage.get("total_tokens", 0)
-            task.log(
-                "合并完成，Token统计: "
-                f"输入={prompt_tokens:,}, 输出={completion_tokens:,}, 总计={total_tokens:,}"
-            )
-            task.token_logged = True
+        _update_progress_from_info(info, task)
 
     try:
         service = NovelProcessingService(

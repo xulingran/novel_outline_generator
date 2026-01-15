@@ -26,7 +26,7 @@ class TestSplitChunkIntoFive:
             service = NovelProcessingService(
                 progress_callback=MagicMock(), cancel_event=MagicMock()
             )
-            sub_chunks = service._split_chunk_into_five(chunk)
+            sub_chunks = service._split_chunk_into_sub_chunks(chunk)
 
             assert len(sub_chunks) == 5
 
@@ -58,7 +58,7 @@ class TestSplitChunkIntoFive:
             service = NovelProcessingService(
                 progress_callback=MagicMock(), cancel_event=MagicMock()
             )
-            sub_chunks = service._split_chunk_into_five(chunk)
+            sub_chunks = service._split_chunk_into_sub_chunks(chunk)
 
             assert len(sub_chunks) == 5
 
@@ -90,7 +90,7 @@ class TestSplitChunkIntoFive:
             service = NovelProcessingService(
                 progress_callback=MagicMock(), cancel_event=MagicMock()
             )
-            sub_chunks = service._split_chunk_into_five(chunk)
+            sub_chunks = service._split_chunk_into_sub_chunks(chunk)
 
             total_sub_tokens = sum(sc.token_count for sc in sub_chunks)
             # 允许一些误差，因为token计数可能有边界效应
@@ -110,7 +110,7 @@ class TestSplitChunkIntoFive:
             service = NovelProcessingService(
                 progress_callback=MagicMock(), cancel_event=MagicMock()
             )
-            sub_chunks = service._split_chunk_into_five(chunk)
+            sub_chunks = service._split_chunk_into_sub_chunks(chunk)
 
             assert len(sub_chunks) == 5
             # 21 / 5 = 4.2，前4个各4字符，最后1个5字符
@@ -536,3 +536,46 @@ class TestProcessFailingChunkAsPartial:
         last_call_args = service.progress_callback.call_args[0][0]
         assert "partial_info" in last_call_args
         assert "5块部分完成" in last_call_args["partial_info"]
+
+    def test_emit_progress_partial_weight(self):
+        """测试部分完成权重参与进度计算"""
+        from services.novel_processing_service import NovelProcessingService
+
+        with patch("services.llm_service.create_llm_service") as mock_create:
+            mock_create.return_value = MagicMock()
+
+            service = NovelProcessingService(
+                progress_callback=MagicMock(), cancel_event=MagicMock()
+            )
+            service.processing_state = ProcessingState(file_path="test.txt", total_chunks=10)
+            service.processing_state.processed_chunks = 2
+            service.processing_state.partial_chunks = 1
+
+            service.eta_estimator = MagicMock()
+            service.eta_estimator.estimate.return_value = {
+                "eta_seconds": None,
+                "confidence": None,
+                "method": None,
+            }
+
+            progress_data = ProgressData(
+                txt_file="test.txt",
+                total_chunks=10,
+                completed_count=2,
+                completed_indices={1, 2},
+                outlines=[],
+                last_update=datetime.now(),
+                chunks_hash="abc123",
+            )
+            progress_data.partial_indices.add(5)
+            progress_data.partial_outlines = [
+                {"original_chunk_id": 5},
+                {"original_chunk_id": 5},
+                {"original_chunk_id": 5},
+            ]
+            service.current_progress_data = progress_data
+
+            service._emit_progress()
+
+            last_call_args = service.progress_callback.call_args[0][0]
+            assert last_call_args["progress"] == pytest.approx((2 + 3 / 5) / 10)

@@ -3,10 +3,13 @@
 使用环境变量管理配置，提高安全性
 """
 
+import logging
 import os
 from dataclasses import dataclass, field
 
 from exceptions import APIKeyError, ConfigurationError
+
+logger = logging.getLogger(__name__)
 
 # 支持的API提供商列表
 SUPPORTED_API_PROVIDERS = ["openai", "gemini", "zhipu", "aihubmix"]
@@ -268,8 +271,9 @@ try:
     API_BASE = _api_cfg.base_url
     MODEL_NAME = _api_cfg.model_name
     GEMINI_SAFETY_SETTINGS = _api_cfg.gemini_safety
-except Exception:
+except Exception as e:
     # 如果配置加载失败，使用默认值（向后兼容）
+    logger.warning(f"加载API配置失败，使用默认值: {e}")
     API_PROVIDER = "openai"
     API_BASE = None
     MODEL_NAME = "gpt-4o-mini"
@@ -384,7 +388,8 @@ def _refresh_config_cache() -> None:
         API_BASE = api_cfg.base_url
         MODEL_NAME = api_cfg.model_name
         GEMINI_SAFETY_SETTINGS = api_cfg.gemini_safety
-    except Exception:
+    except Exception as e:
+        logger.warning(f"刷新API配置失败，使用默认值: {e}")
         API_PROVIDER = "openai"
         API_BASE = None
         MODEL_NAME = "gpt-4o-mini"

@@ -1,11 +1,11 @@
-# PROJECT KNOWLEDGE BASE
+# TESTS/ KNOWLEDGE BASE
 
-**Generated:** 2026-01-11
-**Commit:** 9a57cdb
-**Branch:** main
+**Generated:** 2026-01-14
+**Commit:** 50ea618
+**Branch:** dev
 
 ## OVERVIEW
-Pytest test suite with async support covering all modules (11 test files).
+Pytest test suite with async support covering all modules (12 test files, 151 tests).
 
 ## WHERE TO LOOK
 | Category | Test Files | Coverage |
@@ -15,6 +15,7 @@ Pytest test suite with async support covering all modules (11 test files).
 | **Core Processing** | `test_eta_estimator.py`, `test_task_queue.py`, `test_progress_service.py` | Time estimation, async queue management, state persistence |
 | **Text Processing** | `test_splitter.py`, `test_tokenizer.py` | Chunking logic, token counting, sentence detection |
 | **Validation/Config** | `test_validators.py`, `test_processing_state.py` | Path validation, API provider check, data models |
+| **Partial Completion** | `test_partial_completion.py`, `test_resume_processing.py` | Chunk splitting fallback, partial outline merging, resume logic |
 | **Utilities** | `test_utils.py` | Helper functions, logging |
 
 ## CONVENTIONS
@@ -37,6 +38,7 @@ Pytest test suite with async support covering all modules (11 test files).
 **Fixture Usage:**
 - Module-level fixtures for common test setup
 - Queue tests: Use `queue()` fixture returning `TaskQueue(max_concurrent=1)`
+- Async mock side effects for dynamic behavior
 
 ## ANTI-PATTERNS
 

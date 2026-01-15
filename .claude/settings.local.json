@@ -1,3 +1,10 @@
 {
+  "permissions": {
+    "allow": [
+      "Bash(.venv/Scripts/python -m ruff check . --fix)",
+      "Bash(.venv/Scripts/python -m black .)",
+      "Bash(.venv/Scripts/python -m pytest tests/ -v --tb=short)"
+    ]
+  },
   "outputStyle": "default"
 }

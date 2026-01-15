@@ -111,7 +111,7 @@ class LLMService(ABC):
         """调用API的具体实现"""
         pass
 
-    async def call(self, prompt: str, chunk_id: int | None = None) -> LLMResponse:
+    async def call(self, prompt: str, chunk_id: int | str | None = None) -> LLMResponse:
         """统一的调用接口，返回完整的响应对象（包含token使用情况）"""
         chunk_info = f" [块 {chunk_id}]" if chunk_id else ""
 

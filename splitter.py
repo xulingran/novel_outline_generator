@@ -32,8 +32,8 @@ class TextSplitter:
                 try:
                     encoded = self.encoder.encode(char)
                     tokens.update(encoded)
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug(f"无法编码字符 '{char}': {e}")
             self._sentence_end_tokens = tokens
         return self._sentence_end_tokens
 
@@ -207,8 +207,8 @@ class TextSplitter:
             for i in range(end - 1, search_start - 1, -1):
                 if tokens[i] in space_tokens:
                     return i + 1
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug(f"无法找到空格分割点: {e}")
 
         # 如果都没找到，返回原始end
         return end

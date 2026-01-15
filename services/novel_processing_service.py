@@ -60,6 +60,31 @@ class NovelProcessingService:
         )
         self.eta_estimator.set_parallel_limit(self.processing_config.parallel_limit)
 
+    def _accumulate_token_usage(
+        self, token_usage: dict[str, int] | None, context: str = ""
+    ) -> None:
+        """累加token使用情况
+
+        Args:
+            token_usage: LLM响应中的token使用情况
+            context: 日志上下文信息（如块ID）
+        """
+        if not token_usage:
+            return
+
+        prompt_tokens = token_usage.get("prompt_tokens", 0) or 0
+        completion_tokens = token_usage.get("completion_tokens", 0) or 0
+        total_tokens = token_usage.get("total_tokens", 0) or 0
+
+        self.total_prompt_tokens += prompt_tokens
+        self.total_completion_tokens += completion_tokens
+        self.total_tokens += total_tokens
+
+        context_str = f" {context}" if context else ""
+        logger.debug(
+            f"Token使用{context_str}: 输入={prompt_tokens}, 输出={completion_tokens}, 总计={total_tokens}"
+        )
+
     async def process_novel(
         self, file_path: str, output_dir: str | None = None, resume: bool = True
     ) -> dict[str, Any]:
@@ -94,11 +119,39 @@ class NovelProcessingService:
             self._emit_progress()
 
             # 2. 处理或恢复进度
-            outlines = await self._handle_progress_resume(file_path, chunks, resume, encoding)
+            progress_data = await self._handle_progress_resume(file_path, chunks, resume, encoding)
 
             # 3. 处理文本块
-            if outlines is None:
+            if progress_data is None:
                 outlines = await self._process_chunks(chunks)
+            else:
+                outlines = list(progress_data.outlines)
+                # 解析失败 chunk IDs（errors 存储为 [{"chunk_id": N, "error": "...", "timestamp": "..."}, ...]）
+                failed_ids = {
+                    error["chunk_id"]
+                    for error in progress_data.errors
+                    if isinstance(error, dict) and "chunk_id" in error
+                }
+                completed_ids = (
+                    progress_data.completed_indices | progress_data.partial_indices | failed_ids
+                )
+                remaining_chunks = [chunk for chunk in chunks if chunk.id not in completed_ids]
+                if remaining_chunks:
+                    logger.info(f"恢复进度: 剩余 {len(remaining_chunks)} 个块待处理")
+                    new_outlines = await self._process_chunks(
+                        remaining_chunks,
+                        progress_data=progress_data,
+                        total_chunks=len(chunks),
+                    )
+                    outlines.extend(new_outlines)
+                else:
+                    logger.info("恢复进度: 所有块已处理，直接进入合并")
+                    self.progress_service.finalize_progress(progress_data)
+
+            if outlines:
+                outlines.sort(
+                    key=lambda item: (item.get("chunk_id", 0) if isinstance(item, dict) else 0)
+                )
 
             # 4. 合并大纲
             self.processing_state.current_phase = "merging"
@@ -208,7 +261,7 @@ class NovelProcessingService:
         chunks: list[TextChunk],
         resume: bool,
         encoding: str,
-    ) -> list[dict[str, Any]] | None:
+    ) -> ProgressData | None:
         """Handle progress resume or initialization"""
         if not resume:
             return None
@@ -237,6 +290,11 @@ class NovelProcessingService:
             from collections import defaultdict
 
             partial_grouped: dict[int, list[dict[str, Any]]] = defaultdict(list)
+            existing_chunk_ids = {
+                outline.get("chunk_id")
+                for outline in progress_data.outlines
+                if isinstance(outline, dict)
+            }
             for outline in progress_data.partial_outlines:
                 chunk_id = outline.get("original_chunk_id") or outline.get("chunk_id")
                 if chunk_id in progress_data.partial_indices:
@@ -244,34 +302,52 @@ class NovelProcessingService:
 
             # 合并每个块的小块大纲
             for chunk_id, sub_outlines in partial_grouped.items():
+                if chunk_id in existing_chunk_ids:
+                    continue
                 merged = self._merge_partial_outlines(sub_outlines, chunk_id)
                 progress_data.outlines.append(merged)
+                existing_chunk_ids.add(chunk_id)
                 logger.debug(f"恢复时合并块 {chunk_id} 的 {len(sub_outlines)} 个小块大纲")
+
+        if self.processing_state:
+            self.processing_state.processed_chunks = progress_data.completed_count
+            self.processing_state.partial_chunks = len(progress_data.partial_indices)
+            self.processing_state.failed_chunks = len(progress_data.errors)
+            self.processing_state.total_chunks = progress_data.total_chunks
+
+        self.current_progress_data = progress_data
+        self._emit_progress()
 
         logger.info(
             f"恢复进度: 完全完成 {progress_data.completed_count}/{progress_data.total_chunks}, "
             f"部分完成 {len(progress_data.partial_indices)} 个块"
         )
-        return progress_data.outlines
+        return progress_data
 
-    async def _process_chunks(self, chunks: list[TextChunk]) -> list[dict[str, Any]]:
+    async def _process_chunks(
+        self,
+        chunks: list[TextChunk],
+        progress_data: ProgressData | None = None,
+        total_chunks: int | None = None,
+    ) -> list[dict[str, Any]]:
         """处理所有文本块"""
         if self.processing_state is None:
             raise ProcessingError("处理状态未初始化")
 
         processing_state = self.processing_state
         processing_state.current_phase = "processing"
-        processing_state.total_chunks = len(chunks)
+        processing_state.total_chunks = total_chunks if total_chunks is not None else len(chunks)
         processing_state.processing_start_time = datetime.now()
         self.eta_estimator.start_processing()
         self._emit_progress()
 
         # 创建进度数据
-        progress_data = self.progress_service.create_progress(
-            processing_state.file_path,
-            len(chunks),
-            ProgressData.calculate_chunks_hash([c.content for c in chunks]),
-        )
+        if progress_data is None:
+            progress_data = self.progress_service.create_progress(
+                processing_state.file_path,
+                len(chunks),
+                ProgressData.calculate_chunks_hash([c.content for c in chunks]),
+            )
         self.current_progress_data = progress_data
 
         # 使用信号量控制并发
@@ -284,6 +360,7 @@ class NovelProcessingService:
             tasks.append(task)
 
         # 等待所有任务完成
+        completed_successfully = False
         try:
             outlines = await asyncio.gather(*tasks, return_exceptions=True)
 
@@ -310,13 +387,21 @@ class NovelProcessingService:
                 else:
                     raise cancelled_error
 
+            completed_successfully = True
         except asyncio.CancelledError:
             raise
         except Exception as e:
             raise ProcessingError(f"处理文本块失败: {str(e)}") from e
         finally:
-            # 保存最终进度
-            self.progress_service.finalize_progress(progress_data)
+            if completed_successfully:
+                # 保存最终进度并清理（仅在成功完成时）
+                self.progress_service.finalize_progress(progress_data)
+            else:
+                # 保留进度文件，便于恢复
+                try:
+                    self.progress_service.save_progress(progress_data)
+                except Exception as e:  # noqa: BLE001
+                    logger.error("Failed to persist progress after interruption: %s", e)
 
         # 按chunk_id排序
         successful_outlines.sort(key=lambda x: x.get("chunk_id", 0))
@@ -365,20 +450,7 @@ class NovelProcessingService:
                         raise asyncio.CancelledError()
 
                     # 累计token使用情况
-                    if llm_response.token_usage:
-                        prompt_tokens = llm_response.token_usage.get("prompt_tokens", 0) or 0
-                        completion_tokens = (
-                            llm_response.token_usage.get("completion_tokens", 0) or 0
-                        )
-                        total_tokens = llm_response.token_usage.get("total_tokens", 0) or 0
-
-                        self.total_prompt_tokens += prompt_tokens
-                        self.total_completion_tokens += completion_tokens
-                        self.total_tokens += total_tokens
-
-                        logger.debug(
-                            f"块 {chunk_id} Token使用: 输入={prompt_tokens}, 输出={completion_tokens}, 总计={total_tokens}"
-                        )
+                    self._accumulate_token_usage(llm_response.token_usage, f"块 {chunk_id}")
 
                     # 尝试解析JSON响应
                     outline_data = self._parse_llm_response(response, chunk_id)
@@ -474,7 +546,7 @@ class NovelProcessingService:
         chunk_id = chunk.id
 
         # 拆分为多个小块
-        sub_chunks = self._split_chunk_into_five(chunk)
+        sub_chunks = self._split_chunk_into_sub_chunks(chunk)
         logger.info(f"块 {chunk_id} 已拆分为 {len(sub_chunks)} 个小块")
 
         # 处理每个小块
@@ -490,30 +562,17 @@ class NovelProcessingService:
                 start_time = datetime.now()
 
                 # 生成提示
-                prompt = chunk_prompt(sub_chunk.content, chunk_id)
+                prompt = chunk_prompt(sub_chunk.content, sub_chunk_id)
 
                 # 调用LLM（使用唯一标识符以便追踪）
-                llm_response = await self.llm_service.call(prompt, chunk_id)
+                llm_response = await self.llm_service.call(prompt, sub_chunk_id)
                 response = llm_response.content
 
                 # 累计token使用情况
-                if llm_response.token_usage:
-                    prompt_tokens = llm_response.token_usage.get("prompt_tokens", 0) or 0
-                    completion_tokens = llm_response.token_usage.get("completion_tokens", 0) or 0
-                    total_tokens = llm_response.token_usage.get("total_tokens", 0) or 0
-
-                    self.total_prompt_tokens += prompt_tokens
-                    self.total_completion_tokens += completion_tokens
-                    self.total_tokens += total_tokens
-
-                    # 记录子块级别的token使用情况
-                    logger.debug(
-                        f"子块 {sub_chunk_id} Token使用: 输入={prompt_tokens}, "
-                        f"输出={completion_tokens}, 总计={total_tokens}"
-                    )
+                self._accumulate_token_usage(llm_response.token_usage, f"子块 {sub_chunk_id}")
 
                 # 解析响应
-                sub_outline = self._parse_llm_response(response, chunk_id)
+                sub_outline = self._parse_llm_response(response, sub_chunk_id)
 
                 # 记录处理时间和子块元数据
                 processing_time = (datetime.now() - start_time).total_seconds()
@@ -560,8 +619,8 @@ class NovelProcessingService:
 
         return successful_sub_outlines
 
-    def _split_chunk_into_five(self, chunk: TextChunk) -> list[TextChunk]:
-        """将一个块拆分为多个小块"""
+    def _split_chunk_into_sub_chunks(self, chunk: TextChunk) -> list[TextChunk]:
+        """将一个块拆分为多个小块（数量由SUB_CHUNK_COUNT常量决定）"""
         text = chunk.content
         total_length = len(text)
         chunk_size = total_length // SUB_CHUNK_COUNT
@@ -642,7 +701,7 @@ class NovelProcessingService:
 
         return merged_outline
 
-    def _parse_llm_response(self, response: str, chunk_id: int) -> dict[str, Any]:
+    def _parse_llm_response(self, response: str, chunk_id: int | str) -> dict[str, Any]:
         """解析LLM响应"""
         import json
         import re
@@ -730,18 +789,7 @@ class NovelProcessingService:
                 raise asyncio.CancelledError()
 
             # 累计token使用情况
-            if llm_response.token_usage:
-                prompt_tokens = llm_response.token_usage.get("prompt_tokens", 0) or 0
-                completion_tokens = llm_response.token_usage.get("completion_tokens", 0) or 0
-                total_tokens = llm_response.token_usage.get("total_tokens", 0) or 0
-
-                self.total_prompt_tokens += prompt_tokens
-                self.total_completion_tokens += completion_tokens
-                self.total_tokens += total_tokens
-
-                logger.debug(
-                    f"合并 Token使用: 输入={prompt_tokens}, 输出={completion_tokens}, 总计={total_tokens}"
-                )
+            self._accumulate_token_usage(llm_response.token_usage, "合并")
 
             # 减少合并层级
             self.processing_state.merge_level -= 1
@@ -926,6 +974,6 @@ class NovelProcessingService:
 
         try:
             self.progress_callback(payload)
-        except Exception:
+        except Exception as e:
             # 避免外部回调异常中断主流程
-            logger.debug("Progress callback failed", exc_info=True)
+            logger.debug(f"Progress callback failed: {e}")

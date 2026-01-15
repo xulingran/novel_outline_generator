@@ -1,17 +1,17 @@
 # SERVICES/ KNOWLEDGE BASE
 
-**Generated:** 2026-01-11
-**Commit:** 9a57cdb
-**Branch:** main
+**Generated:** 2026-01-14
+**Commit:** 50ea618
+**Branch:** dev
 
 ## OVERVIEW
-Business logic layer: LLM abstraction, core orchestration, async queue, progress tracking, ETA estimation.
+Business logic layer: LLM abstraction, core orchestration, async queue, progress tracking, ETA estimation, partial chunk completion.
 
 ## STRUCTURE
 ```
 services/
 ├── llm_service.py              # Base LLMService + 4 provider impls + CircuitBreaker
-├── novel_processing_service.py  # Orchestration: Split → Generate → Merge
+├── novel_processing_service.py  # Orchestration: Split → Generate → Merge + partial completion
 ├── task_queue.py               # Async queue for batch processing
 ├── progress_service.py         # Persistence + backup recovery
 ├── eta_estimator.py            # Time estimation (moving avg + outlier rejection)
@@ -27,6 +27,7 @@ services/
 | API call flow | `llm_service.py::call_llm()` | CircuitBreaker check → HTTP → retry |
 | Split logic | `novel_processing_service.py::_split_text_into_chunks()` | Delegates to `splitter.py` |
 | Parallel generation | `novel_processing_service.py::_process_chunks()` | Semaphore-limited |
+| Partial completion | `novel_processing_service.py::_split_chunk_into_five()` | Failed chunks → 5 sub-chunks |
 | Progress persistence | `progress_service.py::save_progress()` | JSON + backup |
 | ETA calculation | `eta_estimator.py::estimate_remaining()` | Windowed average |
 | Queue management | `task_queue.py::TaskQueue` | asyncio.Queue with status tracking |
@@ -52,6 +53,12 @@ services/
 - Batch progress updates (ProgressTracker with `batch_size=5`)
 - Always call `_emit_progress()` after state changes
 - Save progress after each completed chunk
+
+**Partial Completion Pattern:**
+- Failed chunks: Split into 5 sub-chunks (`SUB_CHUNK_COUNT`)
+- Partial results: Mark with `is_partial: true`, store `partial_outlines`
+- Resume: Merge partial outlines on recovery
+- Token counting: Accumulate across both full chunks and sub-chunks
 
 ## ANTI-PATTERNS (Forbidden)
 

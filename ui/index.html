@@ -730,9 +730,7 @@
   </div>
 
   <script>
-    const API_BASE = 'http://localhost:8000';
-
-    // 全局错误处理
+    // 全局错误处理（必须在最外层，以便捕获所有错误）
     window.addEventListener('error', (event) => {
       const errorMsg = `错误: ${event.message} (${event.filename}:${event.lineno})`;
       console.error('全局错误:', event);
@@ -745,8 +743,18 @@
       addLog(errorMsg);
     });
 
-    // 带超时的fetch函数
-    async function fetchWithTimeout(url, options = {}, timeout = 30000) {
+    // 使用 IIFE 封装，减少全局变量污染
+    (function() {
+      'use strict';
+
+      const API_BASE = 'http://localhost:8000';
+
+      // ========================================
+      // 模块 1: 工具函数
+      // ========================================
+
+      // 带超时的fetch函数
+      async function fetchWithTimeout(url, options = {}, timeout = 30000) {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), timeout);
 
@@ -797,7 +805,11 @@
       `;
     }
 
-    function addLog(text, level = 'info') {
+      // ========================================
+      // 模块 2: UI 渲染函数
+      // ========================================
+
+      function addLog(text, level = 'info') {
       const line = document.createElement('div');
       line.className = 'log-line';
       if (level === 'error') {
@@ -807,6 +819,55 @@
       line.innerHTML = `<span class="log-time">${time}</span><span class="log-text">${text}</span>`;
       logBox.appendChild(line);
       logBox.scrollTop = logBox.scrollHeight;
+    }
+
+    // 工具函数：计算进度百分比
+    function formatProgressPercent(progress) {
+      return Math.round((progress || 0) * 100);
+    }
+
+    // 工具函数：分类和格式化错误信息
+    function formatError(error, context) {
+      const errorStr = String(error);
+      
+      // 网络错误
+      if (errorStr.includes('Failed to fetch') || errorStr.includes('NetworkError') || errorStr.includes('Network request failed')) {
+        return `${context}: 网络连接失败，请检查网络或服务器状态`;
+      }
+      
+      // 超时错误
+      if (errorStr.includes('超时') || errorStr.includes('timeout') || errorStr.includes('Timeout')) {
+        return `${context}: 请求超时，请稍后重试`;
+      }
+      
+      // 服务器错误 (4xx, 5xx)
+      if (errorStr.includes('401') || errorStr.includes('Unauthorized')) {
+        return `${context}: 认证失败，请检查 API 配置`;
+      }
+      if (errorStr.includes('403') || errorStr.includes('Forbidden')) {
+        return `${context}: 无权限访问`;
+      }
+      if (errorStr.includes('404') || errorStr.includes('Not Found')) {
+        return `${context}: 资源不存在`;
+      }
+      if (errorStr.includes('429') || errorStr.includes('Too Many Requests')) {
+        return `${context}: 请求过于频繁，请稍后重试`;
+      }
+      if (errorStr.includes('500') || errorStr.includes('Internal Server Error')) {
+        return `${context}: 服务器内部错误`;
+      }
+      
+      // 文件相关错误
+      if (errorStr.includes('size') || errorStr.includes('大小')) {
+        return `${context}: 文件大小超过限制`;
+      }
+      if (errorStr.includes('type') || errorStr.includes('格式') || errorStr.includes('format')) {
+        return `${context}: 不支持的文件格式`;
+      }
+      
+      // 默认返回原始错误，但移除技术细节
+      const simplifiedError = errorStr.split('\n')[0].substring(0, 200);
+      return `${context}: ${simplifiedError}`;
     }
 
     function setSteps(list) {
@@ -819,9 +880,13 @@
       });
     }
 
-    let selectedFiles = []; // 存储多个上传的文件
+      let selectedFiles = []; // 存储多个上传的文件
 
-    fileInput.addEventListener('change', async () => {
+      // ========================================
+      // 模块 3: 事件处理器
+      // ========================================
+
+      fileInput.addEventListener('change', async () => {
       const files = Array.from(fileInput.files);
       if (!files.length) return;
 
@@ -871,7 +936,7 @@
           uploadedPaths.push(data.file_path);
           addLog(`上传完成: ${file.name}`);
         } catch (e) {
-          addLog(`上传失败 ${file.name}: ${e}`);
+          addLog(formatError(e, `上传失败: ${file.name}`));
         }
       }
 
@@ -884,6 +949,10 @@
         ]);
       }
     });
+
+    // ========================================
+    // 模块 4: 任务管理
+    // ========================================
 
     async function startJob() {
       if (selectedFiles.length === 0) {
@@ -917,7 +986,7 @@
         runBtn.disabled = false;
         runBtn.innerHTML = originalBtnText;
       } catch (e) {
-        addLog('启动失败: ' + e);
+        addLog(formatError(e, '启动失败'));
         // 恢复按钮状态
         runBtn.disabled = false;
         runBtn.innerHTML = originalBtnText;
@@ -932,7 +1001,7 @@
           const res = await fetchWithTimeout(API_BASE + '/jobs/' + jobId);
           if (!res.ok) return;
           const job = await res.json();
-          const pct = Math.round((job.progress || 0) * 100);
+          const pct = formatProgressPercent(job.progress);
 
           const phaseMap = { loading: '读取中', processing: '处理中', merging: '合并中', saving: '保存中', completed: '完成', failed: '失败' };
           const phaseText = job.result && job.result.phase ? (phaseMap[job.result.phase] || job.result.phase) : '处理中';
@@ -984,6 +1053,10 @@
     const taskLogOffsets = new Map();
     // 记录每个任务上一次显示的最后一条日志（用于去重）
     const lastDisplayedLogs = new Map();
+
+    // ========================================
+    // 模块 5: 队列管理
+    // ========================================
 
     async function refreshQueue() {
       try {
@@ -1086,12 +1159,6 @@
             task.merge_progress_logged = true;
           }
         }
-
-        // 处理部分完成信息
-        if (partialInfo && !task.partial_info_logged) {
-          addLog(`[${fileName}] ${partialInfo}`, 'warning');
-          task.partial_info_logged = true;
-        }
       });
     }
 
@@ -1103,14 +1170,15 @@
 
       queueList.innerHTML = tasks.map(task => {
         const fileName = task.file_path.split(/[\/\\]/).pop();
-        const progressPercent = Math.round((task.progress || 0) * 100);
+        const progressPercent = formatProgressPercent(task.progress);
 
         // 计算进度详情
         const totalChunks = task.result?.chunk_count || 0;
         const completedChunks = task.result?.completed_chunks || 0;
         const failedChunks = task.result?.failed_chunks || 0;
         const partialChunks = task.result?.partial_chunks || 0;
-        const finishedChunks = Math.min(completedChunks + failedChunks + partialChunks, totalChunks);
+        // 统一使用 completed_chunks + failed_chunks 计算有效块数 (与 pollJob 保持一致)
+        const effectiveChunks = Math.min(completedChunks + failedChunks, totalChunks);
         const etaSeconds = task.result?.eta_seconds;
 
         // 格式化 ETA
@@ -1128,7 +1196,7 @@
             <div class="progress-bar" style="width: ${progressPercent}%"></div>
           </div>
           <div class="flex-between" style="margin-bottom:var(--spacing-1);">
-            <span class="text-muted">${finishedChunks} / ${totalChunks} 块</span>
+            <span class="text-muted">${effectiveChunks} / ${totalChunks} 块</span>
             <span class="text-primary">${progressPercent}%</span>
           </div>
           <div class="flex-between" style="margin-bottom:var(--spacing-1);">
@@ -1158,7 +1226,7 @@
                 </button>
               ` : ''}
               ${task.status === 'running' ? `
-                <button class="btn btn-warning queue-item-btn" onclick="forceCompleteQueueTask('${task.id}')">
+                <button class="btn btn-warning queue-item-btn" onclick="forceCompleteQueueTask('${task.id}', event)">
                   忽略错误
                 </button>
               ` : ''}
@@ -1179,6 +1247,10 @@
       return statusMap[status] || status;
     }
 
+    // ========================================
+    // 模块 6: 队列操作
+    // ========================================
+
     async function cancelQueueTask(taskId) {
       if (!confirm('确定要取消这个任务吗？')) {
         return;
@@ -1190,14 +1262,14 @@
         addLog('任务已取消');
         refreshQueue();
       } catch (e) {
-        addLog('取消任务失败: ' + e);
+        addLog(formatError(e, '取消任务失败'));
       }
     }
 
     // 忽略错误任务的二次确认映射
     const forceCompleteConfirmStates = new Map();
 
-    async function forceCompleteQueueTask(taskId) {
+    async function forceCompleteQueueTask(taskId, event) {
       const currentState = forceCompleteConfirmStates.get(taskId) || false;
 
       if (!currentState) {
@@ -1228,13 +1300,9 @@
         addLog('已强制完成，将合并已有结果');
         refreshQueue();
       } catch (e) {
-        addLog('强制完成失败: ' + e);
+        addLog(formatError(e, '强制完成失败'));
       }
     }
-
-    // 暴露到全局作用域以便 HTML 中的 onclick 调用
-    window.cancelQueueTask = cancelQueueTask;
-    window.forceCompleteQueueTask = forceCompleteQueueTask;
 
     refreshQueueBtn.addEventListener('click', refreshQueue);
 
@@ -1329,6 +1397,10 @@
       });
     }
 
+    // ========================================
+    // 模块 7: 配置管理
+    // ========================================
+
     async function loadEnv() {
       try {
         const res = await fetchWithTimeout(API_BASE + '/env');
@@ -1343,7 +1415,7 @@
           parallel: env.PARALLEL_LIMIT
         });
       } catch (e) {
-        addLog('加载 .env 配置失败: ' + e);
+        addLog(formatError(e, '加载 .env 配置失败'));
       }
     }
 
@@ -1383,13 +1455,18 @@
         const data = await res.json();
         addLog(`Token 预测: 总计 ${data.total_estimated} | 原始 ${data.total_tokens} | 分块 ${data.chunk_tokens} | 响应估算 ${data.chunk_responses} | 合并估算 ${data.merge_tokens}`);
       } catch (e) {
-        addLog('预测失败: ' + e);
+        addLog(formatError(e, '预测失败'));
       }
     });
 
     setModelInfo(mockModelInfo);
     addLog('就绪。选择文件并开始处理。');
     loadEnv();
+    })();
+
+    // 暴露必要的函数到全局作用域以便 HTML 中的 onclick 调用
+    window.cancelQueueTask = cancelQueueTask;
+    window.forceCompleteQueueTask = forceCompleteQueueTask;
   </script>
 </body>
 </html>

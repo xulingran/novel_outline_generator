@@ -55,7 +55,9 @@ class FileService:
             EncodingError: 所有编码都失败
         """
         file_path = validate_file_path(
-            file_path, allowed_extensions=[".txt", ".md", ".text"], max_size_mb=100  # 限制100MB
+            file_path,
+            allowed_extensions=[".txt", ".md", ".text"],
+            max_size_mb=100,  # 限制100MB
         )
 
         logger.debug(f"尝试读取文件: {file_path}")
@@ -181,7 +183,8 @@ class FileService:
         """
         try:
             return Path(file_path).stat().st_size
-        except Exception:
+        except Exception as e:
+            logger.debug(f"获取文件大小失败: {e}")
             return 0
 
     def get_file_info(self, file_path: str | Path) -> dict:

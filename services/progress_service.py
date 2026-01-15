@@ -93,8 +93,8 @@ class ProgressService:
             logger.error("Failed to recover progress: %s", e)
             try:
                 progress_path.unlink()
-            except Exception:
-                pass
+            except Exception as cleanup_err:
+                logger.debug(f"清理损坏的进度文件失败: {cleanup_err}")
 
     def create_progress(self, txt_file: str, total_chunks: int, chunks_hash: str) -> ProgressData:
         """Create a new progress record."""
