@@ -7,7 +7,6 @@ Tests progress tracking, persistence, and recovery functionality.
 import json
 from datetime import datetime
 from pathlib import Path
-from unittest.mock import MagicMock, patch
 
 import pytest
 

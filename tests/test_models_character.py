@@ -17,7 +17,7 @@ class TestRelationship:
             character_b="人物2",
             description="朋友",
             weight=2,
-            contexts=["第一章", "第二章"]
+            contexts=["第一章", "第二章"],
         )
         assert rel.character_a == "人物1"
         assert rel.character_b == "人物2"
@@ -27,39 +27,23 @@ class TestRelationship:
 
     def test_relationship_with_defaults(self):
         """测试使用默认值的Relationship"""
-        rel = Relationship(
-            character_a="人物1",
-            character_b="人物2",
-            description="朋友"
-        )
+        rel = Relationship(character_a="人物1", character_b="人物2", description="朋友")
         assert rel.weight == 1
         assert rel.contexts == []
 
     def test_relationship_with_same_characters_raises_error(self):
         """测试创建两端相同人物的Relationship应抛出异常"""
         with pytest.raises(ValueError, match="人物关系的两端不能是同一个人"):
-            Relationship(
-                character_a="人物1",
-                character_b="人物1",
-                description="自恋"
-            )
+            Relationship(character_a="人物1", character_b="人物1", description="自恋")
 
     def test_relationship_str_representation(self):
         """测试Relationship的字符串表示"""
-        rel = Relationship(
-            character_a="人物1",
-            character_b="人物2",
-            description="朋友"
-        )
+        rel = Relationship(character_a="人物1", character_b="人物2", description="朋友")
         assert str(rel) == "人物1 - 人物2: 朋友"
 
     def test_add_context(self):
         """测试添加关系上下文"""
-        rel = Relationship(
-            character_a="人物1",
-            character_b="人物2",
-            description="朋友"
-        )
+        rel = Relationship(character_a="人物1", character_b="人物2", description="朋友")
         rel.add_context("第一章")
         assert rel.contexts == ["第一章"]
         rel.add_context("第二章")
@@ -67,32 +51,20 @@ class TestRelationship:
 
     def test_add_context_duplicate(self):
         """测试添加重复的上下文"""
-        rel = Relationship(
-            character_a="人物1",
-            character_b="人物2",
-            description="朋友"
-        )
+        rel = Relationship(character_a="人物1", character_b="人物2", description="朋友")
         rel.add_context("第一章")
         rel.add_context("第一章")  # 重复添加
         assert rel.contexts == ["第一章"]
 
     def test_add_context_empty_string(self):
         """测试添加空字符串上下文"""
-        rel = Relationship(
-            character_a="人物1",
-            character_b="人物2",
-            description="朋友"
-        )
+        rel = Relationship(character_a="人物1", character_b="人物2", description="朋友")
         rel.add_context("")
         assert rel.contexts == []
 
     def test_add_context_none(self):
         """测试添加None上下文"""
-        rel = Relationship(
-            character_a="人物1",
-            character_b="人物2",
-            description="朋友"
-        )
+        rel = Relationship(character_a="人物1", character_b="人物2", description="朋友")
         rel.add_context(None)
         assert rel.contexts == []
 
@@ -101,49 +73,32 @@ class TestRelationship:
         rel = Relationship(
             character_a="人物2",  # 字母顺序在后面
             character_b="人物1",  # 字母顺序在前面
-            description="朋友"
+            description="朋友",
         )
         pair = rel.pair
         assert pair == ("人物1", "人物2")
 
     def test_pair_property_already_sorted(self):
         """测试已经排序的pair属性"""
-        rel = Relationship(
-            character_a="人物1",
-            character_b="人物2",
-            description="朋友"
-        )
+        rel = Relationship(character_a="人物1", character_b="人物2", description="朋友")
         pair = rel.pair
         assert pair == ("人物1", "人物2")
 
     def test_pair_property_with_numbers(self):
         """测试包含数字的字符"""
-        rel = Relationship(
-            character_a="人物2",
-            character_b="人物10",
-            description="朋友"
-        )
+        rel = Relationship(character_a="人物2", character_b="人物10", description="朋友")
         pair = rel.pair
         # 字符串排序，"10" < "2"
         assert pair == ("人物10", "人物2")
 
     def test_relationship_weight(self):
         """测试关系权重"""
-        rel = Relationship(
-            character_a="人物1",
-            character_b="人物2",
-            description="朋友",
-            weight=5
-        )
+        rel = Relationship(character_a="人物1", character_b="人物2", description="朋友", weight=5)
         assert rel.weight == 5
 
     def test_relationship_description(self):
         """测试关系描述"""
-        rel = Relationship(
-            character_a="人物1",
-            character_b="人物2",
-            description="最好的朋友"
-        )
+        rel = Relationship(character_a="人物1", character_b="人物2", description="最好的朋友")
         assert rel.description == "最好的朋友"
 
 
@@ -159,7 +114,7 @@ class TestCharacter:
             appearances=[1, 2, 3],
             first_appearance=1,
             relationship_count=2,
-            importance_score=0.8
+            importance_score=0.8,
         )
         assert char.name == "人物1"
         assert char.aliases == ["别名1", "别名2"]
@@ -182,10 +137,7 @@ class TestCharacter:
 
     def test_character_str_representation(self):
         """测试Character的字符串表示"""
-        char = Character(
-            name="人物1",
-            appearances=[1, 2, 3]
-        )
+        char = Character(name="人物1", appearances=[1, 2, 3])
         assert str(char) == "Character(人物1, appearances=3)"
 
     def test_character_str_representation_no_appearances(self):
@@ -305,10 +257,7 @@ class TestCharacter:
 
     def test_total_appearances_property(self):
         """测试total_appearances属性"""
-        char = Character(
-            name="人物1",
-            appearances=[1, 2, 3, 4, 5]
-        )
+        char = Character(name="人物1", appearances=[1, 2, 3, 4, 5])
         assert char.total_appearances == 5
 
     def test_total_appearances_empty(self):
@@ -322,7 +271,7 @@ class TestCharacter:
             name="人物1",
             appearances=[1, 2, 3],
             relationship_count=2,
-            descriptions=["描述1", "描述2"]
+            descriptions=["描述1", "描述2"],
         )
         score = char.calculate_importance(0)
         assert score == 0.0
@@ -334,7 +283,7 @@ class TestCharacter:
             name="人物1",
             appearances=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
             relationship_count=5,
-            descriptions=["描述1", "描述2", "描述3"]
+            descriptions=["描述1", "描述2", "描述3"],
         )
         # 出现在10个块中的10个，频率=1.0
         # 关系数5，关系因子=min(5/10, 1.0)=0.5
@@ -347,10 +296,7 @@ class TestCharacter:
     def test_calculate_importance_low_frequency(self):
         """测试低频率出现的重要性计算"""
         char = Character(
-            name="人物1",
-            appearances=[5],  # 只出现1次
-            relationship_count=0,
-            descriptions=["描述1"]
+            name="人物1", appearances=[5], relationship_count=0, descriptions=["描述1"]  # 只出现1次
         )
         # 出现在10个块中的1个，频率=0.1
         # 关系数0，关系因子=0.0
@@ -366,7 +312,7 @@ class TestCharacter:
             name="人物1",
             appearances=[1, 2, 3, 4, 5],  # 出现在10个块中的5个
             relationship_count=3,
-            descriptions=["描述1", "描述2"]
+            descriptions=["描述1", "描述2"],
         )
         # 频率=5/10=0.5
         # 关系因子=min(3/10, 1.0)=0.3
@@ -382,7 +328,7 @@ class TestCharacter:
             name="人物1",
             appearances=[1, 2, 3],
             relationship_count=15,  # 超过10
-            descriptions=["描述1", "描述2", "描述3"]
+            descriptions=["描述1", "描述2", "描述3"],
         )
         # 关系因子=min(15/10, 1.0)=1.0
         score = char.calculate_importance(10)
@@ -396,7 +342,7 @@ class TestCharacter:
             name="人物1",
             appearances=[1, 2, 3],
             relationship_count=2,
-            descriptions=["描述1", "描述2", "描述3", "描述4", "描述5", "描述6", "描述7"]  # 超过5
+            descriptions=["描述1", "描述2", "描述3", "描述4", "描述5", "描述6", "描述7"],  # 超过5
         )
         # 描述因子=min(7/5, 1.0)=1.0
         score = char.calculate_importance(10)
@@ -406,10 +352,7 @@ class TestCharacter:
 
     def test_calculate_importance_updates_score(self):
         """测试calculate_importance更新importance_score"""
-        char = Character(
-            name="人物1",
-            appearances=[1, 2, 3]
-        )
+        char = Character(name="人物1", appearances=[1, 2, 3])
         assert char.importance_score == 0.0
         char.calculate_importance(10)
         assert char.importance_score > 0.0

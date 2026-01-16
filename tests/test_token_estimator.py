@@ -2,8 +2,6 @@
 测试Token估算服务
 """
 
-from pathlib import Path
-
 import pytest
 
 from services.token_estimator import estimate_tokens
@@ -19,6 +17,7 @@ class TestEstimateTokens:
 
         # 空文件会抛出ProcessingError
         from exceptions import ProcessingError
+
         with pytest.raises(ProcessingError, match="文本内容为空"):
             estimate_tokens(str(empty_file))
 
@@ -104,11 +103,7 @@ class TestEstimateTokens:
 
         result = estimate_tokens(str(test_file))
 
-        expected_total = (
-            result["chunk_tokens"] +
-            result["chunk_responses"] +
-            result["merge_tokens"]
-        )
+        expected_total = result["chunk_tokens"] + result["chunk_responses"] + result["merge_tokens"]
         assert result["total_estimated"] == expected_total
 
     def test_estimate_tokens_chunk_count(self, tmp_path):

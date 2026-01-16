@@ -198,11 +198,7 @@ class TestAPIError:
 
     def test_api_error_with_all_parameters(self):
         """测试APIError带有所有参数"""
-        error = APIError(
-            "API调用失败",
-            error_code="401",
-            is_retryable=False
-        )
+        error = APIError("API调用失败", error_code="401", is_retryable=False)
         assert error.message == "API调用失败"
         assert error.error_code == "401"
         assert error.is_retryable is False

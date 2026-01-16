@@ -21,7 +21,7 @@ class TestTextChunk:
             token_count=100,
             start_position=0,
             end_position=100,
-            chapter_title="第一章"
+            chapter_title="第一章",
         )
         assert chunk.id == 1
         assert chunk.content == "测试内容"
@@ -33,22 +33,14 @@ class TestTextChunk:
     def test_text_chunk_without_chapter_title(self):
         """测试没有章节标题的TextChunk"""
         chunk = TextChunk(
-            id=1,
-            content="测试内容",
-            token_count=100,
-            start_position=0,
-            end_position=100
+            id=1, content="测试内容", token_count=100, start_position=0, end_position=100
         )
         assert chunk.chapter_title is None
 
     def test_text_chunk_str_representation(self):
         """测试TextChunk的字符串表示"""
         chunk = TextChunk(
-            id=1,
-            content="测试内容",
-            token_count=100,
-            start_position=0,
-            end_position=100
+            id=1, content="测试内容", token_count=100, start_position=0, end_position=100
         )
         assert str(chunk) == "TextChunk(id=1, tokens=100)"
 
@@ -64,7 +56,7 @@ class TestOutlineData:
             characters=["人物1", "人物2"],
             relationships=[["人物1", "人物2", "朋友"]],
             raw_response="测试响应",
-            processing_time=1.5
+            processing_time=1.5,
         )
         assert outline.chunk_id == 1
         assert outline.plot == ["剧情1", "剧情2"]
@@ -95,7 +87,7 @@ class TestOutlineData:
             relationships=[["人物1", "人物2", "朋友"]],
             raw_response="响应",
             processing_time=1.5,
-            created_at=now
+            created_at=now,
         )
         result = outline.to_dict()
         assert result["chunk_id"] == 1
@@ -123,7 +115,7 @@ class TestOutlineData:
             "characters": ["人物1"],
             "relationships": [["人物1", "人物2", "朋友"]],
             "processing_time": 1.5,
-            "created_at": "2024-01-01T12:00:00"
+            "created_at": "2024-01-01T12:00:00",
         }
         outline = OutlineData.from_dict(data)
         assert outline.chunk_id == 1
@@ -139,7 +131,7 @@ class TestOutlineData:
             "chunk_id": 1,
             "events": ["剧情1", "剧情2"],  # 使用旧字段名
             "characters": ["人物1"],
-            "relationships": []
+            "relationships": [],
         }
         outline = OutlineData.from_dict(data)
         assert outline.plot == ["剧情1", "剧情2"]
@@ -157,10 +149,7 @@ class TestOutlineData:
 
     def test_from_dict_with_none_created_at(self):
         """测试从字典创建（created_at为None）"""
-        data = {
-            "chunk_id": 1,
-            "created_at": None
-        }
+        data = {"chunk_id": 1, "created_at": None}
         outline = OutlineData.from_dict(data)
         # from_dict方法会检查created_at是否在data中且不为None
         # 如果created_at为None，它会保持datetime.now()的默认值
@@ -175,27 +164,17 @@ class TestOutlineData:
 
     def test_validate_complete_outline(self):
         """测试验证完整大纲"""
-        outline = OutlineData(
-            chunk_id=1,
-            plot=["剧情1"],
-            characters=["人物1"]
-        )
+        outline = OutlineData(chunk_id=1, plot=["剧情1"], characters=["人物1"])
         assert outline.validate(allow_partial=False) is True
 
     def test_validate_with_only_plot(self):
         """测试验证只有剧情的大纲"""
-        outline = OutlineData(
-            chunk_id=1,
-            plot=["剧情1"]
-        )
+        outline = OutlineData(chunk_id=1, plot=["剧情1"])
         assert outline.validate(allow_partial=False) is True
 
     def test_validate_with_only_characters(self):
         """测试验证只有人物的大纲"""
-        outline = OutlineData(
-            chunk_id=1,
-            characters=["人物1"]
-        )
+        outline = OutlineData(chunk_id=1, characters=["人物1"])
         assert outline.validate(allow_partial=False) is True
 
     def test_validate_empty_outline(self):
@@ -210,26 +189,17 @@ class TestOutlineData:
 
     def test_validate_partial_with_plot(self):
         """测试验证部分完成大纲（有剧情）"""
-        outline = OutlineData(
-            chunk_id=1,
-            plot=["剧情1"]
-        )
+        outline = OutlineData(chunk_id=1, plot=["剧情1"])
         assert outline.validate(allow_partial=True) is True
 
     def test_validate_partial_with_characters(self):
         """测试验证部分完成大纲（有人物）"""
-        outline = OutlineData(
-            chunk_id=1,
-            characters=["人物1"]
-        )
+        outline = OutlineData(chunk_id=1, characters=["人物1"])
         assert outline.validate(allow_partial=True) is True
 
     def test_validate_partial_with_relationships(self):
         """测试验证部分完成大纲（有关系）"""
-        outline = OutlineData(
-            chunk_id=1,
-            relationships=[["人物1", "人物2", "朋友"]]
-        )
+        outline = OutlineData(chunk_id=1, relationships=[["人物1", "人物2", "朋友"]])
         assert outline.validate(allow_partial=True) is True
 
     def test_validate_partial_empty(self):
@@ -239,18 +209,12 @@ class TestOutlineData:
 
     def test_validate_partial_with_negative_chunk_id(self):
         """测试验证部分完成大纲（负数chunk_id）"""
-        outline = OutlineData(
-            chunk_id=-1,
-            plot=["剧情1"]
-        )
+        outline = OutlineData(chunk_id=-1, plot=["剧情1"])
         assert outline.validate(allow_partial=True) is False
 
     def test_character_count_property(self):
         """测试character_count属性"""
-        outline = OutlineData(
-            chunk_id=1,
-            characters=["人物1", "人物2", "人物3"]
-        )
+        outline = OutlineData(chunk_id=1, characters=["人物1", "人物2", "人物3"])
         assert outline.character_count == 3
 
     def test_character_count_empty(self):
@@ -261,11 +225,7 @@ class TestOutlineData:
     def test_relationship_count_property(self):
         """测试relationship_count属性"""
         outline = OutlineData(
-            chunk_id=1,
-            relationships=[
-                ["人物1", "人物2", "朋友"],
-                ["人物2", "人物3", "敌人"]
-            ]
+            chunk_id=1, relationships=[["人物1", "人物2", "朋友"], ["人物2", "人物3", "敌人"]]
         )
         assert outline.relationship_count == 2
 
@@ -280,13 +240,13 @@ class TestOutlineData:
             chunk_id=1,
             plot=["剧情1"],
             characters=["人物1"],
-            relationships=[["人物1", "人物2", "朋友"]]
+            relationships=[["人物1", "人物2", "朋友"]],
         )
         outline2 = OutlineData(
             chunk_id=1,
             plot=["剧情2"],
             characters=["人物2"],
-            relationships=[["人物2", "人物3", "敌人"]]
+            relationships=[["人物2", "人物3", "敌人"]],
         )
         outline1.merge_with(outline2)
         assert outline1.plot == ["剧情1", "剧情2"]
@@ -295,26 +255,16 @@ class TestOutlineData:
 
     def test_merge_with_duplicate_characters(self):
         """测试合并时去重人物"""
-        outline1 = OutlineData(
-            chunk_id=1,
-            characters=["人物1", "人物2"]
-        )
-        outline2 = OutlineData(
-            chunk_id=1,
-            characters=["人物2", "人物3"]
-        )
+        outline1 = OutlineData(chunk_id=1, characters=["人物1", "人物2"])
+        outline2 = OutlineData(chunk_id=1, characters=["人物2", "人物3"])
         outline1.merge_with(outline2)
         assert outline1.characters == ["人物1", "人物2", "人物3"]
 
     def test_merge_with_duplicate_relationships(self):
         """测试合并时去重关系"""
-        outline1 = OutlineData(
-            chunk_id=1,
-            relationships=[["人物1", "人物2", "朋友"]]
-        )
+        outline1 = OutlineData(chunk_id=1, relationships=[["人物1", "人物2", "朋友"]])
         outline2 = OutlineData(
-            chunk_id=1,
-            relationships=[["人物1", "人物2", "朋友"], ["人物2", "人物3", "敌人"]]
+            chunk_id=1, relationships=[["人物1", "人物2", "朋友"], ["人物2", "人物3", "敌人"]]
         )
         outline1.merge_with(outline2)
         assert outline1.relationships == [["人物1", "人物2", "朋友"], ["人物2", "人物3", "敌人"]]
@@ -328,40 +278,22 @@ class TestOutlineData:
 
     def test_merge_with_raw_response(self):
         """测试合并时raw_response的处理"""
-        outline1 = OutlineData(
-            chunk_id=1,
-            raw_response="响应1"
-        )
-        outline2 = OutlineData(
-            chunk_id=1,
-            raw_response="响应2"
-        )
+        outline1 = OutlineData(chunk_id=1, raw_response="响应1")
+        outline2 = OutlineData(chunk_id=1, raw_response="响应2")
         outline1.merge_with(outline2)
         assert outline1.raw_response == "响应1"  # 保留原始响应
 
     def test_merge_with_none_raw_response(self):
         """测试合并时raw_response为None的处理"""
-        outline1 = OutlineData(
-            chunk_id=1,
-            raw_response=None
-        )
-        outline2 = OutlineData(
-            chunk_id=1,
-            raw_response="响应2"
-        )
+        outline1 = OutlineData(chunk_id=1, raw_response=None)
+        outline2 = OutlineData(chunk_id=1, raw_response="响应2")
         outline1.merge_with(outline2)
         assert outline1.raw_response == "响应2"  # 使用新响应
 
     def test_merge_with_processing_time(self):
         """测试合并时processing_time的处理"""
-        outline1 = OutlineData(
-            chunk_id=1,
-            processing_time=1.0
-        )
-        outline2 = OutlineData(
-            chunk_id=1,
-            processing_time=2.0
-        )
+        outline1 = OutlineData(chunk_id=1, processing_time=1.0)
+        outline2 = OutlineData(chunk_id=1, processing_time=2.0)
         outline1.merge_with(outline2)
         # processing_time不会更新
         assert outline1.processing_time == 1.0
@@ -373,7 +305,7 @@ class TestOutlineData:
             plot=["剧情1", "剧情2"],
             characters=["人物1", "人物2"],
             relationships=[["人物1", "人物2", "朋友"]],
-            processing_time=1.5
+            processing_time=1.5,
         )
         # 序列化
         json_str = json.dumps(original.to_dict(), ensure_ascii=False)
@@ -392,7 +324,7 @@ class TestOutlineData:
         data = {
             "chunk_id": 1,
             "events": ["剧情1", "剧情2"],  # 使用旧字段名
-            "characters": ["人物1"]
+            "characters": ["人物1"],
         }
         json_str = json.dumps(data, ensure_ascii=False)
         restored_data = json.loads(json_str)
@@ -423,11 +355,7 @@ class TestOutlineData:
 
     def test_outline_data_with_empty_relationships(self):
         """测试空关系列表"""
-        outline = OutlineData(
-            chunk_id=1,
-            plot=["剧情1"],
-            relationships=[]
-        )
+        outline = OutlineData(chunk_id=1, plot=["剧情1"], relationships=[])
         assert outline.relationship_count == 0
 
     def test_outline_data_created_at_auto_generated(self):

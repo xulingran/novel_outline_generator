@@ -3,24 +3,23 @@
 """
 
 import os
-from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 
 from config import (
-    APIConfig,
     API_KEY,
     API_PROVIDER,
-    ProcessingConfig,
     SUPPORTED_API_PROVIDERS,
+    APIConfig,
+    ProcessingConfig,
     _APIKeyWrapper,
     create_env_file,
     get_api_config,
     get_processing_config,
     init_config,
 )
-from exceptions import APIKeyError, ConfigurationError
+from exceptions import ConfigurationError
 
 
 class TestAPIConfig:
@@ -46,21 +45,24 @@ class TestAPIConfig:
 
     def test_api_config_initialization_from_env(self):
         """测试APIConfig从环境变量初始化"""
-        with patch.dict(os.environ, {
-            "API_PROVIDER": "gemini",
-            "OPENAI_API_KEY": "sk-test1",
-            "OPENAI_API_BASE": "https://custom.openai.com",
-            "OPENAI_MODEL": "gpt-4",
-            "GEMINI_API_KEY": "gemini-test",
-            "GEMINI_MODEL": "gemini-pro",
-            "GEMINI_SAFETY_SETTINGS": "BLOCK_MEDIUM",
-            "ZHIPU_API_KEY": "zhipu-test",
-            "ZHIPU_API_BASE": "https://custom.zhipu.com",
-            "ZHIPU_MODEL": "glm-4",
-            "AIHUBMIX_API_KEY": "aihubmix-test",
-            "AIHUBMIX_MODEL": "gpt-4",
-            "AIHUBMIX_API_BASE": "https://custom.aihubmix.com"
-        }):
+        with patch.dict(
+            os.environ,
+            {
+                "API_PROVIDER": "gemini",
+                "OPENAI_API_KEY": "sk-test1",
+                "OPENAI_API_BASE": "https://custom.openai.com",
+                "OPENAI_MODEL": "gpt-4",
+                "GEMINI_API_KEY": "gemini-test",
+                "GEMINI_MODEL": "gemini-pro",
+                "GEMINI_SAFETY_SETTINGS": "BLOCK_MEDIUM",
+                "ZHIPU_API_KEY": "zhipu-test",
+                "ZHIPU_API_BASE": "https://custom.zhipu.com",
+                "ZHIPU_MODEL": "glm-4",
+                "AIHUBMIX_API_KEY": "aihubmix-test",
+                "AIHUBMIX_MODEL": "gpt-4",
+                "AIHUBMIX_API_BASE": "https://custom.aihubmix.com",
+            },
+        ):
             config = APIConfig()
             assert config.provider == "gemini"
             assert config.openai_key == "sk-test1"
@@ -92,7 +94,9 @@ class TestAPIConfig:
 
     def test_validate_openai_placeholder_key(self):
         """测试验证OpenAI占位符密钥"""
-        with patch.dict(os.environ, {"API_PROVIDER": "openai", "OPENAI_API_KEY": "your_api_key_here"}):
+        with patch.dict(
+            os.environ, {"API_PROVIDER": "openai", "OPENAI_API_KEY": "your_api_key_here"}
+        ):
             config = APIConfig()
             with pytest.raises(ConfigurationError, match="当前值看起来像是占位符"):
                 config.validate()
@@ -113,7 +117,9 @@ class TestAPIConfig:
 
     def test_validate_gemini_placeholder_key(self):
         """测试验证Gemini占位符密钥"""
-        with patch.dict(os.environ, {"API_PROVIDER": "gemini", "GEMINI_API_KEY": "your_gemini_key_here"}):
+        with patch.dict(
+            os.environ, {"API_PROVIDER": "gemini", "GEMINI_API_KEY": "your_gemini_key_here"}
+        ):
             config = APIConfig()
             with pytest.raises(ConfigurationError, match="当前值看起来像是占位符"):
                 config.validate()
@@ -134,7 +140,9 @@ class TestAPIConfig:
 
     def test_validate_zhipu_placeholder_key(self):
         """测试验证智谱占位符密钥"""
-        with patch.dict(os.environ, {"API_PROVIDER": "zhipu", "ZHIPU_API_KEY": "your_zhipu_key_here"}):
+        with patch.dict(
+            os.environ, {"API_PROVIDER": "zhipu", "ZHIPU_API_KEY": "your_zhipu_key_here"}
+        ):
             config = APIConfig()
             with pytest.raises(ConfigurationError, match="当前值看起来像是占位符"):
                 config.validate()
@@ -150,19 +158,25 @@ class TestAPIConfig:
         """测试验证AiHubMix缺少密钥"""
         with patch.dict(os.environ, {"API_PROVIDER": "aihubmix", "AIHUBMIX_API_KEY": ""}):
             config = APIConfig()
-            with pytest.raises(ConfigurationError, match="使用AiHubMix API时必须设置AIHUBMIX_API_KEY"):
+            with pytest.raises(
+                ConfigurationError, match="使用AiHubMix API时必须设置AIHUBMIX_API_KEY"
+            ):
                 config.validate()
 
     def test_validate_aihubmix_placeholder_key(self):
         """测试验证AiHubMix占位符密钥"""
-        with patch.dict(os.environ, {"API_PROVIDER": "aihubmix", "AIHUBMIX_API_KEY": "your_aihubmix_key_here"}):
+        with patch.dict(
+            os.environ, {"API_PROVIDER": "aihubmix", "AIHUBMIX_API_KEY": "your_aihubmix_key_here"}
+        ):
             config = APIConfig()
             with pytest.raises(ConfigurationError, match="当前值看起来像是占位符"):
                 config.validate()
 
     def test_validate_aihubmix_valid_key(self):
         """测试验证AiHubMix有效密钥"""
-        with patch.dict(os.environ, {"API_PROVIDER": "aihubmix", "AIHUBMIX_API_KEY": "aihubmix.test.key"}):
+        with patch.dict(
+            os.environ, {"API_PROVIDER": "aihubmix", "AIHUBMIX_API_KEY": "aihubmix.test.key"}
+        ):
             config = APIConfig()
             config.validate()
             assert config._validated is True
@@ -220,7 +234,9 @@ class TestAPIConfig:
 
     def test_api_key_property_aihubmix(self):
         """测试获取AiHubMix API密钥"""
-        with patch.dict(os.environ, {"API_PROVIDER": "aihubmix", "AIHUBMIX_API_KEY": "aihubmix.test"}):
+        with patch.dict(
+            os.environ, {"API_PROVIDER": "aihubmix", "AIHUBMIX_API_KEY": "aihubmix.test"}
+        ):
             config = APIConfig()
             assert config.api_key == "aihubmix.test"
 
@@ -229,12 +245,16 @@ class TestAPIConfig:
         with patch.dict(os.environ, {"API_PROVIDER": "aihubmix", "AIHUBMIX_API_KEY": ""}):
             config = APIConfig()
             # validate会先检查并抛出ConfigurationError
-            with pytest.raises(ConfigurationError, match="使用AiHubMix API时必须设置AIHUBMIX_API_KEY"):
+            with pytest.raises(
+                ConfigurationError, match="使用AiHubMix API时必须设置AIHUBMIX_API_KEY"
+            ):
                 _ = config.api_key
 
     def test_base_url_property_openai(self):
         """测试获取OpenAI基础URL"""
-        with patch.dict(os.environ, {"API_PROVIDER": "openai", "OPENAI_API_BASE": "https://custom.com"}):
+        with patch.dict(
+            os.environ, {"API_PROVIDER": "openai", "OPENAI_API_BASE": "https://custom.com"}
+        ):
             config = APIConfig()
             assert config.base_url == "https://custom.com"
 
@@ -252,7 +272,9 @@ class TestAPIConfig:
 
     def test_base_url_property_zhipu(self):
         """测试获取智谱基础URL"""
-        with patch.dict(os.environ, {"API_PROVIDER": "zhipu", "ZHIPU_API_BASE": "https://custom.zhipu.com"}):
+        with patch.dict(
+            os.environ, {"API_PROVIDER": "zhipu", "ZHIPU_API_BASE": "https://custom.zhipu.com"}
+        ):
             config = APIConfig()
             assert config.base_url == "https://custom.zhipu.com"
 
@@ -264,7 +286,10 @@ class TestAPIConfig:
 
     def test_base_url_property_aihubmix(self):
         """测试获取AiHubMix基础URL"""
-        with patch.dict(os.environ, {"API_PROVIDER": "aihubmix", "AIHUBMIX_API_BASE": "https://custom.aihubmix.com"}):
+        with patch.dict(
+            os.environ,
+            {"API_PROVIDER": "aihubmix", "AIHUBMIX_API_BASE": "https://custom.aihubmix.com"},
+        ):
             config = APIConfig()
             assert config.base_url == "https://custom.aihubmix.com"
 
@@ -310,8 +335,16 @@ class TestProcessingConfig:
             assert config.output_dir == "outputs"
             assert config.progress_file == os.path.join("outputs", "progress.json")
             assert config.encodings == [
-                "utf-8", "gbk", "gb2312", "gb18030", "big5",
-                "utf-16", "utf-16-le", "utf-16-be", "latin1", "cp1252"
+                "utf-8",
+                "gbk",
+                "gb2312",
+                "gb18030",
+                "big5",
+                "utf-16",
+                "utf-16-le",
+                "utf-16-be",
+                "latin1",
+                "cp1252",
             ]
             assert config.model_max_tokens == 200000
             assert config.target_tokens_per_chunk == 6000
@@ -323,15 +356,18 @@ class TestProcessingConfig:
 
     def test_processing_config_initialization_from_env(self):
         """测试ProcessingConfig从环境变量初始化"""
-        with patch.dict(os.environ, {
-            "MODEL_MAX_TOKENS": "300000",
-            "TARGET_TOKENS_PER_CHUNK": "8000",
-            "PARALLEL_LIMIT": "10",
-            "MAX_RETRY": "3",
-            "LOG_EVERY": "5",
-            "USE_PROXY": "true",
-            "PROXY_URL": "http://proxy.example.com:8080"
-        }):
+        with patch.dict(
+            os.environ,
+            {
+                "MODEL_MAX_TOKENS": "300000",
+                "TARGET_TOKENS_PER_CHUNK": "8000",
+                "PARALLEL_LIMIT": "10",
+                "MAX_RETRY": "3",
+                "LOG_EVERY": "5",
+                "USE_PROXY": "true",
+                "PROXY_URL": "http://proxy.example.com:8080",
+            },
+        ):
             config = ProcessingConfig()
             assert config.model_max_tokens == 300000
             assert config.target_tokens_per_chunk == 8000
@@ -376,22 +412,24 @@ class TestProcessingConfig:
 
     def test_validate_target_tokens_per_chunk_greater_than_model_max_tokens(self):
         """测试验证target_tokens_per_chunk大于model_max_tokens"""
-        with patch.dict(os.environ, {
-            "MODEL_MAX_TOKENS": "10000",
-            "TARGET_TOKENS_PER_CHUNK": "15000"
-        }):
+        with patch.dict(
+            os.environ, {"MODEL_MAX_TOKENS": "10000", "TARGET_TOKENS_PER_CHUNK": "15000"}
+        ):
             config = ProcessingConfig()
-            with pytest.raises(ConfigurationError, match="TARGET_TOKENS_PER_CHUNK必须小于MODEL_MAX_TOKENS"):
+            with pytest.raises(
+                ConfigurationError, match="TARGET_TOKENS_PER_CHUNK必须小于MODEL_MAX_TOKENS"
+            ):
                 config.validate()
 
     def test_validate_target_tokens_per_chunk_equal_to_model_max_tokens(self):
         """测试验证target_tokens_per_chunk等于model_max_tokens"""
-        with patch.dict(os.environ, {
-            "MODEL_MAX_TOKENS": "10000",
-            "TARGET_TOKENS_PER_CHUNK": "10000"
-        }):
+        with patch.dict(
+            os.environ, {"MODEL_MAX_TOKENS": "10000", "TARGET_TOKENS_PER_CHUNK": "10000"}
+        ):
             config = ProcessingConfig()
-            with pytest.raises(ConfigurationError, match="TARGET_TOKENS_PER_CHUNK必须小于MODEL_MAX_TOKENS"):
+            with pytest.raises(
+                ConfigurationError, match="TARGET_TOKENS_PER_CHUNK必须小于MODEL_MAX_TOKENS"
+            ):
                 config.validate()
 
     def test_validate_parallel_limit_zero(self):
@@ -438,6 +476,7 @@ class TestGetAPIConfig:
             config1 = get_api_config()
             # 修改全局变量后，应该返回新实例
             import config
+
             config._api_config = None
             config2 = get_api_config()
             assert config1 is not config2
@@ -516,8 +555,12 @@ GEMINI_API_KEY=test_gemini_key
 MODEL_MAX_TOKENS=300000
 """
         with patch("builtins.open", create=True) as mock_open:
-            mock_open.return_value.__enter__.return_value.__iter__ = lambda self: iter(env_content.splitlines())
-            mock_open.return_value.__enter__.return_value.__next__ = lambda self: next(iter(env_content.splitlines()))
+            mock_open.return_value.__enter__.return_value.__iter__ = lambda self: iter(
+                env_content.splitlines()
+            )
+            mock_open.return_value.__enter__.return_value.__next__ = lambda self: next(
+                iter(env_content.splitlines())
+            )
 
             init_config(create_env_if_missing=False)
 
@@ -542,19 +585,23 @@ class TestBackwardCompatibility:
     def test_get_txt_file(self):
         """测试get_txt_file函数"""
         from config import get_txt_file
+
         assert get_txt_file() == get_processing_config().default_txt_file
 
     def test_get_output_dir(self):
         """测试get_output_dir函数"""
         from config import get_output_dir
+
         assert get_output_dir() == get_processing_config().output_dir
 
     def test_get_progress_file(self):
         """测试get_progress_file函数"""
         from config import get_progress_file
+
         assert get_progress_file() == get_processing_config().progress_file
 
     def test_get_encodings(self):
         """测试get_encodings函数"""
         from config import get_encodings
+
         assert get_encodings() == get_processing_config().encodings

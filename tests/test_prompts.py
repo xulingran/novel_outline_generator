@@ -2,8 +2,6 @@
 测试LLM提示词模板模块
 """
 
-import pytest
-
 from prompts import chunk_prompt, merge_prompt, merge_text_prompt
 
 
@@ -167,14 +165,14 @@ class TestMergePrompt:
 
     def test_merge_prompt_with_complex_json(self):
         """测试复杂JSON的merge_prompt"""
-        json_blocks = '''[
+        json_blocks = """[
             {
                 "chunk_id": 1,
                 "plot": ["事件1", "事件2"],
                 "characters": ["人物A", "人物B"],
                 "relationships": [["人物A", "人物B", "朋友"]]
             }
-        ]'''
+        ]"""
 
         result = merge_prompt(json_blocks)
 
