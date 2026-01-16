@@ -27,22 +27,24 @@ class OutlineData:
     """大纲数据模型"""
 
     chunk_id: int
-    events: list[str] = field(default_factory=list)
+    plot: list[str] = field(default_factory=list)
     characters: list[str] = field(default_factory=list)
     relationships: list[list[str]] = field(default_factory=list)
-    conflicts: list[str] = field(default_factory=list)
     raw_response: str | None = None
     processing_time: float | None = None
     created_at: datetime = field(default_factory=datetime.now)
 
     def to_dict(self) -> dict[str, Any]:
-        """转换为字典格式（用于JSON序列化）"""
+        """转换为字典格式（用于JSON序列化）
+
+        为保持向后兼容，同时输出 plot 和 events 字段
+        """
         return {
             "chunk_id": self.chunk_id,
-            "events": self.events,
+            "plot": self.plot,
+            "events": self.plot,  # 向后兼容：保留旧字段名
             "characters": self.characters,
             "relationships": self.relationships,
-            "conflicts": self.conflicts,
             "processing_time": self.processing_time,
             "created_at": self.created_at.isoformat() if self.created_at else None,
         }
@@ -56,21 +58,35 @@ class OutlineData:
             processing_time=data.get("processing_time"),
         )
 
-        outline.events = data.get("events", [])
+        # 向后兼容：如果plot不存在，尝试从events字段读取
+        plot = data.get("plot")
+        if plot is None:
+            plot = data.get("events", [])
+        outline.plot = plot
+
         outline.characters = data.get("characters", [])
         outline.relationships = data.get("relationships", [])
-        outline.conflicts = data.get("conflicts", [])
 
         if "created_at" in data and data["created_at"]:
             outline.created_at = datetime.fromisoformat(data["created_at"])
 
         return outline
 
-    def validate(self) -> bool:
-        """验证数据完整性"""
+    def validate(self, allow_partial: bool = False) -> bool:
+        """验证数据完整性
+
+        Args:
+            allow_partial: 是否允许部分数据（用于部分完成的大纲）
+        """
         if self.chunk_id < 0:
             return False
-        if not self.events and not self.characters and not self.conflicts:
+
+        # 对于部分完成的大纲，只要有任意一个字段有数据即可
+        if allow_partial:
+            return bool(self.plot or self.characters or self.relationships)
+
+        # 完整大纲至少需要剧情或人物信息
+        if not self.plot and not self.characters:
             return False
         return True
 
@@ -89,10 +105,9 @@ class OutlineData:
         if other.chunk_id != self.chunk_id:
             raise ValueError("Cannot merge outlines with different chunk IDs")
 
-        self.events.extend(other.events)
+        self.plot.extend(other.plot)
         self.characters.extend([c for c in other.characters if c not in self.characters])
         self.relationships.extend([r for r in other.relationships if r not in self.relationships])
-        self.conflicts.extend([c for c in other.conflicts if c not in self.conflicts])
 
         if other.raw_response and not self.raw_response:
             self.raw_response = other.raw_response

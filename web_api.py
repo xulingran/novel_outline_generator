@@ -1,6 +1,6 @@
 """
 FastAPI 后端接口：
-- /env   GET/POST 读取与更新 .env（可视化配置编辑）
+- /env   GET 读取 .env（可视化配置查看）
 - /upload POST 上传文本文件
 - /process POST 启动小说处理（基于 NovelProcessingService）
 - /jobs/{job_id} GET 查询处理状态
@@ -25,7 +25,9 @@ from fastapi import FastAPI, File, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
+from config import init_config
 from services.novel_processing_service import NovelProcessingService
+from services.task_queue import QueueTask, get_global_queue
 from services.token_estimator import estimate_tokens
 
 logger = logging.getLogger(__name__)
@@ -56,32 +58,6 @@ def _load_cors_origins() -> list[str]:
 
 CORS_ORIGINS = _load_cors_origins()
 
-ALLOWED_KEYS = {
-    "API_PROVIDER",
-    "OPENAI_API_KEY",
-    "OPENAI_MODEL",
-    "OPENAI_API_BASE",
-    "GEMINI_API_KEY",
-    "GEMINI_MODEL",
-    "GEMINI_SAFETY_SETTINGS",
-    "ZHIPU_API_KEY",
-    "ZHIPU_MODEL",
-    "ZHIPU_API_BASE",
-    "AIHUBMIX_API_KEY",
-    "AIHUBMIX_MODEL",
-    "AIHUBMIX_API_BASE",
-    "MODEL_MAX_TOKENS",
-    "TARGET_TOKENS_PER_CHUNK",
-    "PARALLEL_LIMIT",
-    "MAX_RETRY",
-    "LOG_EVERY",
-    "LOG_LEVEL",
-    "USE_PROXY",
-    "PROXY_URL",
-    "CORS_ORIGINS",
-    "OUTLINE_PROMPT_TEMPLATE",
-}
-
 
 class RateLimiter:
     """简单内存限流器，按 IP 在时间窗口内计数。"""
@@ -103,6 +79,7 @@ class RateLimiter:
 
 rate_limiter = RateLimiter()
 UPLOAD_FILE_PARAM = File(...)
+UPLOAD_FILES_PARAM = File(...)
 
 
 def load_env_file() -> dict[str, str]:
@@ -117,17 +94,6 @@ def load_env_file() -> dict[str, str]:
     return data
 
 
-def save_env_file(updates: dict[str, str]) -> None:
-    existing = load_env_file()
-    existing.update(updates)
-    for key, value in updates.items():
-        os.environ[key] = value
-    lines: list[str] = []
-    for k, v in existing.items():
-        lines.append(f"{k}={v}")
-    ENV_PATH.write_text("\n".join(lines) + "\n", encoding="utf-8")
-
-
 def mask_value(key: str, value: str) -> str:
     """对敏感值（如 API Key）进行掩码处理"""
     if "KEY" in key.upper():
@@ -140,6 +106,12 @@ def mask_value(key: str, value: str) -> str:
 class ProcessRequest(BaseModel):
     file_path: str
     resume: bool = True
+
+
+class MultipleFilesRequest(BaseModel):
+    """批量文件请求"""
+
+    file_paths: list[str]
 
 
 @dataclass
@@ -166,11 +138,66 @@ class Job:
             self.log_offset += overflow
 
 
-JOBS: dict[str, Job] = {}
+# 常量定义
 MAX_JOBS = 100
-MAX_RUNNING_JOBS = 20
 JOB_MAX_AGE_HOURS = 24
+
+JOBS: dict[str, Job] = {}
 _cleanup_task: asyncio.Task | None = None
+
+
+def _update_progress_from_info(
+    info: dict[str, Any],
+    target: Job | QueueTask,
+) -> None:
+    """从进度信息更新目标对象（Job 或 QueueTask）
+
+    Args:
+        info: 进度信息字典
+        target: 目标对象（Job 或 QueueTask）
+    """
+    target.progress = info.get("progress", target.progress)
+
+    # 更新结果字典中的字段
+    result_fields = [
+        "total_chunks",
+        "completed_chunks",
+        "failed_chunks",
+        "partial_chunks",
+        "partial_info",
+        "eta_seconds",
+        "eta_confidence",
+        "eta_method",
+        "phase",
+        "merge_level",
+        "merge_batch_current",
+        "merge_batch_total",
+        "merge_outlines_count",
+    ]
+
+    for field_name in result_fields:
+        if info.get(field_name) is not None:
+            target.result[field_name] = info[field_name]
+
+    # 处理块完成/失败日志
+    if info.get("last_chunk_id") is not None:
+        if info.get("last_error"):
+            target.log(f"块 {info['last_chunk_id']} 失败: {info['last_error']}")
+        else:
+            target.log(f"块 {info['last_chunk_id']} 完成")
+
+    # 处理 token 使用统计（只记录一次）
+    if info.get("token_usage") and not target.token_logged:
+        token_usage = info["token_usage"]
+        target.result["token_usage"] = token_usage
+        prompt_tokens = token_usage.get("prompt_tokens", 0)
+        completion_tokens = token_usage.get("completion_tokens", 0)
+        total_tokens = token_usage.get("total_tokens", 0)
+        target.log(
+            "合并完成，Token统计: "
+            f"输入={prompt_tokens:,}, 输出={completion_tokens:,}, 总计={total_tokens:,}"
+        )
+        target.token_logged = True
 
 
 async def _periodic_job_cleanup() -> None:
@@ -208,30 +235,6 @@ def cleanup_excess_jobs() -> None:
     if len(JOBS) <= MAX_JOBS:
         return
 
-    over_limit = len(JOBS) - MAX_JOBS
-
-    def _by_age(statuses):
-        return sorted(
-            ((job_id, job) for job_id, job in JOBS.items() if job.status in statuses),
-            key=lambda x: x[1].created_at,
-        )
-
-    for statuses in (("success", "error"), ("pending",), ("running",)):
-        if over_limit <= 0:
-            break
-        for job_id, _ in _by_age(statuses):
-            if over_limit <= 0:
-                break
-            del JOBS[job_id]
-            over_limit -= 1
-
-
-def cleanup_old_jobs():
-    """清理旧的 job 记录，确保 JOBS 不会无限增长"""
-    if len(JOBS) <= MAX_JOBS:
-        return
-
-    # 优先清理已结束的任务，其次未开始的，最后才是仍在运行的
     over_limit = len(JOBS) - MAX_JOBS
 
     def _by_age(statuses):
@@ -289,15 +292,22 @@ def cleanup_uploads(protected_paths: set[Path] | None = None) -> int:
             else:
                 item.unlink()
             cleaned += 1
-        except Exception:
+        except Exception as e:
             # 忽略清理失败，避免影响主流程
-            continue
+            logger.warning(f"清理上传文件失败: {e}")
     return cleaned
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # Load configuration on startup (without creating .env file as side effect)
+    init_config(create_env_if_missing=False)
     startup_cleanup_task()
+
+    # Initialize the queue callback
+    queue = get_global_queue()
+    queue.set_callback(run_queue_task)
+
     yield
     global _cleanup_task
     if _cleanup_task:
@@ -357,6 +367,41 @@ async def upload_file(request: Request, file: UploadFile = UPLOAD_FILE_PARAM):
     return {"file_path": str(dest)}
 
 
+# ... 其他导入 ...
+
+
+@app.post("/upload-multiple")
+async def upload_multiple_files(request: Request, files: list[UploadFile] = UPLOAD_FILES_PARAM):
+    """批量上传多个文件"""
+    client_host = request.client.host if request.client else "unknown"
+    rate_limiter.check_rate_limit(client_host, 10, 60)
+
+    from validators import sanitize_filename
+
+    UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+    uploaded_files = []
+
+    for file in files:
+        # 验证文件名存在
+        if not file.filename:
+            raise HTTPException(status_code=400, detail="文件名不能为空")
+
+        suffix = Path(file.filename).suffix.lower()
+        if suffix not in (".txt", ".md"):
+            raise HTTPException(status_code=400, detail=f"仅支持.txt 或 .md 文件: {file.filename}")
+
+        safe_filename = sanitize_filename(file.filename)
+        dest = UPLOAD_DIR / safe_filename
+        content = await file.read()
+        if len(content) > 100 * 1024 * 1024:
+            raise HTTPException(status_code=400, detail=f"文件过大，限制100MB: {file.filename}")
+
+        dest.write_bytes(content)
+        uploaded_files.append(str(dest))
+
+    return {"file_paths": uploaded_files}
+
+
 async def _run_job(job: Job, req: ProcessRequest):
     job.status = "running"
     job.file_path = req.file_path
@@ -365,23 +410,7 @@ async def _run_job(job: Job, req: ProcessRequest):
     job.log(f"开始处理文件: {req.file_path}")
 
     def handle_progress(info: dict[str, Any]) -> None:
-        job.progress = info.get("progress", job.progress)
-        if "total_chunks" in info:
-            job.result["chunk_count"] = info["total_chunks"]
-        if "completed_chunks" in info:
-            job.result["completed_chunks"] = info["completed_chunks"]
-        if "failed_chunks" in info:
-            job.result["failed_chunks"] = info["failed_chunks"]
-        if info.get("eta_seconds") is not None:
-            job.result["eta_seconds"] = info["eta_seconds"]
-        if info.get("eta_confidence"):
-            job.result["eta_confidence"] = info["eta_confidence"]
-        if info.get("eta_method"):
-            job.result["eta_method"] = info["eta_method"]
-        if info.get("phase"):
-            job.result["phase"] = info["phase"]
-        if info.get("merge_level") is not None:
-            job.result["merge_level"] = info["merge_level"]
+        _update_progress_from_info(info, job)
         if info.get("merge_batch_current") is not None:
             job.result["merge_batch_current"] = info["merge_batch_current"]
         if info.get("merge_batch_total") is not None:
@@ -452,6 +481,58 @@ async def _run_job(job: Job, req: ProcessRequest):
         job.log(f"错误: {e}")
 
 
+async def run_queue_task(task: QueueTask) -> None:
+    """运行队列任务（由 TaskQueue 调用）"""
+    task.log(f"开始处理文件: {task.file_path}")
+
+    def handle_progress(info: dict[str, Any]) -> None:
+        _update_progress_from_info(info, task)
+
+    try:
+        service = NovelProcessingService(
+            progress_callback=handle_progress, cancel_event=task.cancel_event
+        )
+        # 检查是否强制完成
+        if task.should_force_complete:
+            service.force_complete = True
+            logger.info(f"任务 {task.id} 启用强制完成模式")
+
+        result = await service.process_novel(task.file_path, resume=True)
+        task.result.update(result)
+        task.progress = 1.0
+        task.status = "success"
+
+        # 输出token统计
+        if "token_usage" in result and not task.token_logged:
+            token_usage = result["token_usage"]
+            prompt_tokens = token_usage.get("prompt_tokens", 0)
+            completion_tokens = token_usage.get("completion_tokens", 0)
+            total_tokens = token_usage.get("total_tokens", 0)
+
+            task.log(
+                f"Token统计: 输入={prompt_tokens:,}, 输出={completion_tokens:,}, 总计={total_tokens:,}"
+            )
+            task.token_logged = True
+
+        task.log("处理完成")
+
+    except asyncio.CancelledError:
+        # 如果是强制完成模式，继续处理已有结果
+        if task.should_force_complete and len(task.result.get("outlines", [])) > 0:
+            logger.info(f"任务 {task.id} 强制完成模式：继续合并已有结果")
+            task.status = "success"
+            task.message = "强制完成（部分结果已合并）"
+            task.log("强制完成：将合并已有部分结果")
+        else:
+            task.status = "cancelled"
+            task.message = "任务被取消"
+            task.log("任务被取消")
+    except Exception as e:  # noqa: BLE001
+        task.status = "error"
+        task.message = str(e)
+        task.log(f"错误: {e}")
+
+
 @app.post("/process")
 async def start_process(request: Request, req: ProcessRequest):
     client_host = request.client.host if request.client else "unknown"
@@ -462,7 +543,7 @@ async def start_process(request: Request, req: ProcessRequest):
         raise HTTPException(status_code=404, detail="文件不存在")
 
     # 清理旧job
-    cleanup_old_jobs()
+    cleanup_excess_jobs()
 
     job_id = str(uuid.uuid4())
     job = Job(id=job_id, file_path=req.file_path)
@@ -495,6 +576,103 @@ def get_job(job_id: str):
         "logs": job.logs,
         "log_offset": job.log_offset,
     }
+
+
+@app.get("/queue/list")
+async def list_queue():
+    """列出所有队列任务"""
+    queue = get_global_queue()
+    tasks = await queue.list_tasks()
+    return {"tasks": tasks}
+
+
+@app.post("/queue/add")
+async def add_to_queue(request: Request, req: ProcessRequest):
+    """添加任务到队列"""
+    client_host = request.client.host if request.client else "unknown"
+    rate_limiter.check_rate_limit(client_host, 5, 60)
+
+    if not req.file_path:
+        raise HTTPException(status_code=400, detail="file_path 不能为空")
+    if not Path(req.file_path).exists():
+        raise HTTPException(status_code=404, detail="文件不存在")
+
+    queue = get_global_queue()
+    task_id = await queue.add_task(req.file_path)
+    return {"task_id": task_id, "message": "任务已添加到队列"}
+
+
+@app.post("/queue/add-multiple")
+async def add_multiple_to_queue(request: Request, req: MultipleFilesRequest):
+    """批量添加文件到队列"""
+    client_host = request.client.host if request.client else "unknown"
+    rate_limiter.check_rate_limit(client_host, 5, 60)
+
+    if not req.file_paths:
+        raise HTTPException(status_code=400, detail="file_paths 不能为空")
+
+    queue = get_global_queue()
+    task_ids = []
+
+    for file_path in req.file_paths:
+        if not file_path:
+            raise HTTPException(status_code=400, detail="file_path 不能为空")
+        if not Path(file_path).exists():
+            raise HTTPException(status_code=404, detail=f"文件不存在: {file_path}")
+        task_id = await queue.add_task(file_path)
+        task_ids.append(task_id)
+
+    return {
+        "task_ids": task_ids,
+        "count": len(task_ids),
+        "message": f"已将 {len(task_ids)} 个文件添加到队列",
+    }
+
+
+@app.post("/queue/cancel")
+async def cancel_queue_task(request: Request, task_id: str):
+    """取消队列任务"""
+    client_host = request.client.host if request.client else "unknown"
+    rate_limiter.check_rate_limit(client_host, 10, 60)
+
+    queue = get_global_queue()
+    success = await queue.cancel_task(task_id)
+
+    if not success:
+        raise HTTPException(status_code=404, detail="任务不存在或无法取消")
+
+    return {"success": True, "message": "任务已取消"}
+
+
+@app.post("/queue/clear")
+async def clear_queue():
+    """清空队列（仅取消未开始的任务）"""
+    queue = get_global_queue()
+    count = await queue.clear_queue()
+    return {"success": True, "cancelled_count": count}
+
+
+@app.post("/queue/force-complete/{task_id}")
+async def force_complete_queue_task(request: Request, task_id: str):
+    """强制完成任务（忽略未完成的块，直接合并已有结果）"""
+    client_host = request.client.host if request.client else "unknown"
+    rate_limiter.check_rate_limit(client_host, 10, 60)
+
+    queue = get_global_queue()
+    success = await queue.force_complete_task(task_id)
+
+    if not success:
+        raise HTTPException(status_code=404, detail="任务不存在或无法强制完成")
+
+    return {"success": True, "message": "已强制完成，将合并已有结果"}
+
+
+@app.get("/queue/stats")
+async def get_queue_stats():
+    """获取队列统计信息"""
+    queue = get_global_queue()
+    stats = await queue.get_stats()
+    return stats
 
 
 if __name__ == "__main__":

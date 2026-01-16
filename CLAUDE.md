@@ -54,11 +54,17 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ### 运行应用
 ```bash
-# 命令行模式
+# 命令行模式（Windows，启动后选择模式 2）
 python -Xutf8 main.py
 
-# Web UI 模式（启动后选择模式 1）
+# Web UI 模式（Windows，启动后选择模式 1）
 python -Xutf8 main.py
+
+# Linux/Mac
+python main.py
+
+# 直接启动 Web API（开发模式）
+.venv/Scripts/python -m uvicorn web_api:app --reload --port 8000
 ```
 
 ## 项目架构
@@ -129,4 +135,81 @@ file_service  splitter  llm_service  merge_prompt  最终txt
 - `APIKeyError`：API 密钥未配置或无效
 - `RateLimitError`：速率限制，支持 `retry-after` 头
 - `APIError`：通用 API 错误，支持重试标记
+- `ContentFilterError`：内容审查错误（不触发熔断器）
 - 熔断器：连续失败达到阈值后暂停请求
+
+### 失败块重试机制
+
+当某个文本块处理失败时，系统会：
+1. 先进行指数退避重试（最多 `MAX_RETRY` 次）
+2. 若仍失败，将该块拆分为 5 个小块（`SUB_CHUNK_COUNT`）
+3. 逐个处理小块，成功的小块会被合并为部分完成的大纲
+4. 部分完成的块标记为 `is_partial: true`，包含 `partial_outlines` 字段
+5. 进度恢复时会自动合并部分完成的小块
+
+### 断点恢复机制
+
+- 进度文件：`outputs/progress.json`
+- 包含内容：已完成块、部分完成块、失败块、处理时间等
+- 验证机制：基于文件路径和内容哈希（`ProgressData.calculate_chunks_hash`）
+- 恢复时会合并部分完成的小块为完整大纲
+
+### Web API 关键端点
+
+| 端点 | 方法 | 功能 |
+|------|------|------|
+| `/env` | GET | 查看环境配置（API Key 已脱敏） |
+| `/upload` | POST | 单文件上传 |
+| `/upload-multiple` | POST | 批量文件上传 |
+| `/process` | POST | 启动处理任务 |
+| `/jobs/{job_id}` | GET | 查询任务状态和进度 |
+| `/jobs/{job_id}/logs` | GET | 获取任务日志（支持增量） |
+| `/queue/status` | GET | 查看任务队列状态 |
+| `/force-complete/{job_id}` | POST | 强制完成任务（忽略未完成块） |
+
+### 任务队列
+
+- 全局单例队列：`get_global_queue()`
+- 并发限制：默认 1 个任务同时运行（`max_concurrent`）
+- 任务优先级：支持优先级排序（默认 FIFO）
+- 自动清理：24 小时后清理完成的任务
+
+### 测试覆盖
+
+重要测试文件：
+- `test_llm_service.py`：LLM 服务和熔断器测试
+- `test_splitter.py`：文本分块逻辑测试
+- `test_processing_state.py`：处理状态管理测试
+- `test_partial_completion.py`：部分完成机制测试
+- `test_resume_processing.py`：断点恢复测试
+- `test_task_queue.py`：任务队列测试
+- `test_web_api.py`：Web API 端点测试
+
+## 开发注意事项
+
+### 配置修改后的重启
+
+修改 `.env` 文件后，必须**重启服务**（Web API 或 CLI）才能生效。配置在启动时加载，运行时不会自动重载。
+
+### Token 计数
+
+- 使用 `tiktoken` 库（`cl100k_base` 编码）
+- 所有 token 计数通过 `tokenizer.py` 的 `count_tokens()` 统一处理
+- 分块时按 `TARGET_TOKENS_PER_CHUNK` 控制大小
+
+### 提示词自定义
+
+提示词定义在 `prompts.py` 中：
+- `chunk_prompt()`: 处理单个文本块的提示词
+- `merge_prompt()`: 合并 JSON 格式大纲
+- `merge_text_prompt()`: 合并文本格式大纲
+
+**重要**：所有合并提示词都明确要求输出**纯文本格式**，不使用 Markdown 符号。
+
+### 虚拟环境路径
+
+项目使用项目内虚拟环境 `.venv`，所有命令都应使用：
+- Windows: `.venv\Scripts\python`
+- Linux/Mac: `.venv/bin/python`
+
+避免使用系统 Python 或全局虚拟环境。

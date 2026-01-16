@@ -8,9 +8,10 @@ import logging
 import os
 import shutil
 import tempfile
+from collections.abc import Callable
 from datetime import datetime
 from pathlib import Path
-from typing import Any, cast
+from typing import IO, Any, cast
 
 # 日志配置函数
 _logging_configured = False
@@ -47,6 +48,59 @@ setup_logging()
 logger = logging.getLogger(__name__)
 
 
+def _ensure_directory(file_path: Path) -> None:
+    """确保父目录存在"""
+    file_path.parent.mkdir(parents=True, exist_ok=True)
+
+
+def _create_backup(file_path: Path) -> bool:
+    """创建备份文件，成功返回True"""
+    if not file_path.exists():
+        return False
+    backup_path = file_path.with_suffix(f".{datetime.now().strftime('%Y%m%d_%H%M%S')}.bak")
+    try:
+        shutil.copy2(file_path, backup_path)
+        logger.debug(f"创建备份文件: {backup_path}")
+        return True
+    except Exception as e:
+        logger.warning(f"创建备份文件失败: {e}")
+        return False
+
+
+def _write_temp_file(
+    file_path: Path, write_func: Callable[[IO[str]], None], encoding: str = "utf-8"
+) -> None:
+    """原子性写入临时文件并替换
+
+    Args:
+        file_path: 目标文件路径
+        write_func: 写入函数，接收文件对象
+        encoding: 文件编码
+    """
+    temp_fd, temp_path = tempfile.mkstemp(
+        suffix=".tmp", prefix=file_path.name + "_", dir=file_path.parent
+    )
+
+    try:
+        with os.fdopen(temp_fd, "w", encoding=encoding) as f:
+            write_func(f)
+            f.flush()
+            os.fsync(f.fileno())
+
+        # 原子性重命名
+        os.replace(temp_path, file_path)
+        logger.debug(f"原子性写入成功: {file_path}")
+
+    except Exception as e:
+        # 清理临时文件
+        try:
+            os.unlink(temp_path)
+        except (OSError, FileNotFoundError):
+            pass
+        logger.error(f"写入文件失败: {file_path}, 错误: {e}")
+        raise
+
+
 def atomic_write_json(
     file_path: str | Path,
     data: dict[str, Any] | list[Any],
@@ -68,41 +122,17 @@ def atomic_write_json(
     file_path = Path(file_path)
 
     # 确保目录存在
-    file_path.parent.mkdir(parents=True, exist_ok=True)
+    _ensure_directory(file_path)
 
     # 创建备份
-    if backup and file_path.exists():
-        backup_path = file_path.with_suffix(f'.{datetime.now().strftime("%Y%m%d_%H%M%S")}.bak')
-        try:
-            shutil.copy2(file_path, backup_path)
-            logger.debug(f"创建备份文件: {backup_path}")
-        except Exception as e:
-            logger.warning(f"创建备份文件失败: {e}")
+    if backup:
+        _create_backup(file_path)
 
     # 写入临时文件
-    temp_fd, temp_path = tempfile.mkstemp(
-        suffix=".tmp", prefix=file_path.name + "_", dir=file_path.parent
-    )
+    def write_json(f: IO[str]) -> None:
+        json.dump(data, f, ensure_ascii=False, indent=indent, sort_keys=True)
 
-    try:
-        with os.fdopen(temp_fd, "w", encoding="utf-8") as f:
-            json.dump(data, f, ensure_ascii=False, indent=indent)
-            f.flush()
-            os.fsync(f.fileno())  # 强制写入磁盘
-
-        # 原子性重命名
-        os.replace(temp_path, file_path)
-        logger.debug(f"原子性写入成功: {file_path}")
-
-    except Exception as e:
-        # 清理临时文件
-        try:
-            os.unlink(temp_path)
-        except (OSError, FileNotFoundError):
-            # 忽略清理临时文件时的错误
-            pass
-        logger.error(f"写入文件失败: {file_path}, 错误: {e}")
-        raise
+    _write_temp_file(file_path, write_json, encoding="utf-8")
 
 
 def atomic_write_text(
@@ -119,41 +149,17 @@ def atomic_write_text(
     file_path = Path(file_path)
 
     # 确保目录存在
-    file_path.parent.mkdir(parents=True, exist_ok=True)
+    _ensure_directory(file_path)
 
     # 创建备份
-    if backup and file_path.exists():
-        backup_path = file_path.with_suffix(f'.{datetime.now().strftime("%Y%m%d_%H%M%S")}.bak')
-        try:
-            shutil.copy2(file_path, backup_path)
-            logger.debug(f"创建备份文件: {backup_path}")
-        except Exception as e:
-            logger.warning(f"创建备份文件失败: {e}")
+    if backup:
+        _create_backup(file_path)
 
     # 写入临时文件
-    temp_fd, temp_path = tempfile.mkstemp(
-        suffix=".tmp", prefix=file_path.name + "_", dir=file_path.parent
-    )
+    def write_text(f: IO[str]) -> None:
+        f.write(content)
 
-    try:
-        with os.fdopen(temp_fd, "w", encoding=encoding) as f:
-            f.write(content)
-            f.flush()
-            os.fsync(f.fileno())  # 强制写入磁盘
-
-        # 原子性重命名
-        os.replace(temp_path, file_path)
-        logger.debug(f"原子性写入成功: {file_path}")
-
-    except Exception as e:
-        # 清理临时文件
-        try:
-            os.unlink(temp_path)
-        except (OSError, FileNotFoundError):
-            # 忽略清理临时文件时的错误
-            pass
-        logger.error(f"写入文件失败: {file_path}, 错误: {e}")
-        raise
+    _write_temp_file(file_path, write_text, encoding=encoding)
 
 
 def safe_read_json(
@@ -188,7 +194,7 @@ def safe_read_json(
 
         if backup_on_corruption:
             backup_path = file_path.with_suffix(
-                f'.corrupt_{datetime.now().strftime("%Y%m%d_%H%M%S")}'
+                f".corrupt_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
             )
             try:
                 shutil.copy2(file_path, backup_path)
@@ -207,7 +213,7 @@ def safe_read_text(
     file_path: str | Path,
     encoding: str = "utf-8",
     fallback_encodings: list[str] | None = None,
-) -> str:
+) -> tuple[str, str]:
     """安全读取文本文件，支持多种编码
 
     Args:
@@ -216,7 +222,7 @@ def safe_read_text(
         fallback_encodings: 备选编码列表
 
     Returns:
-        str: 文件内容
+        Tuple[str, str]: (文件内容, 实际使用的编码)
     """
     file_path = Path(file_path)
 
@@ -233,7 +239,7 @@ def safe_read_text(
             with open(file_path, encoding=enc) as f:
                 content = f.read()
             logger.debug(f"成功读取文件 {file_path}，使用编码: {enc}")
-            return content
+            return content, enc
         except UnicodeDecodeError as e:
             last_error = e
             logger.debug(f"编码 {enc} 失败: {e}")
@@ -315,34 +321,6 @@ def get_file_info(file_path: str | Path) -> dict[str, Any]:
     }
 
 
-def cleanup_old_backups(directory: str | Path, pattern: str = "*.bak", max_files: int = 10) -> None:
-    """清理旧的备份文件
-
-    Args:
-        directory: 目录路径
-        pattern: 文件模式
-        max_files: 保留的最大文件数
-    """
-    directory = Path(directory)
-
-    if not directory.exists():
-        return
-
-    # 查找备份文件
-    backup_files = list(directory.glob(pattern))
-
-    # 按修改时间排序（最新的在前）
-    backup_files.sort(key=lambda f: f.stat().st_mtime, reverse=True)
-
-    # 删除多余的备份
-    for old_backup in backup_files[max_files:]:
-        try:
-            old_backup.unlink()
-            logger.debug(f"删除旧备份: {old_backup}")
-        except Exception as e:
-            logger.warning(f"删除旧备份失败: {old_backup}, 错误: {e}")
-
-
 class ProgressTracker:
     """进度跟踪器（带批量更新功能）"""
 
@@ -363,8 +341,8 @@ class ProgressTracker:
         if not self.pending_updates:
             return
 
-        # 这里可以添加实际的保存逻辑
-        # 例如：将更新合并并写入进度文件
+        # 记录批量更新并清空队列
+        # 如需持久化保存，可在此处扩展文件写入逻辑
         self.logger.debug(f"批量更新进度: {len(self.pending_updates)} 项")
         self.pending_updates.clear()
 

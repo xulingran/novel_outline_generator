@@ -96,8 +96,9 @@ class TestSafeReadText:
             temp_path = f.name
 
         try:
-            result = safe_read_text(temp_path)
-            assert result == "Hello World"
+            content, encoding = safe_read_text(temp_path)
+            assert content == "Hello World"
+            assert encoding == "utf-8"
         finally:
             Path(temp_path).unlink()
 
@@ -121,6 +122,23 @@ class TestFormatFileSize:
     def test_megabytes(self):
         """Megabytes"""
         assert format_file_size(1024 * 1024) == "1.0MB"
+
+    def test_zero(self):
+        """Zero bytes"""
+        assert format_file_size(0) == "0.0B"
+
+    def test_multiple_kilobytes(self):
+        """Multiple kilobytes"""
+        assert format_file_size(1536) == "1.5KB"
+
+    def test_gigabytes(self):
+        """Gigabytes"""
+        assert format_file_size(1024 * 1024 * 1024) == "1.0GB"
+
+    def test_very_large(self):
+        """Very large size"""
+        result = format_file_size(1024 * 1024 * 1024 * 1024)
+        assert "TB" in result  # 检查是否包含 TB 单位，不精确匹配值
 
 
 class TestTruncateText:

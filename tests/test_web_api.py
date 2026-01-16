@@ -166,3 +166,151 @@ def test_job_not_found():
     client = TestClient(web_api.app)
     response = client.get("/jobs/missing")
     assert response.status_code == 404
+
+
+# ============ Queue Related Tests ============
+
+
+def test_queue_add_success(tmp_path):
+    """测试单个文件添加到队列成功"""
+    input_path = tmp_path / "input.txt"
+    input_path.write_text("hello", encoding="utf-8")
+
+    client = TestClient(web_api.app)
+    response = client.post(
+        "/queue/add",
+        json={"file_path": str(input_path), "resume": False},
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert "task_id" in data
+    assert data["message"] == "任务已添加到队列"
+
+
+def test_queue_add_missing_file(tmp_path):
+    """测试添加不存在的文件"""
+    missing_path = tmp_path / "missing.txt"
+    client = TestClient(web_api.app)
+    response = client.post(
+        "/queue/add",
+        json={"file_path": str(missing_path), "resume": False},
+    )
+    assert response.status_code == 404
+    assert "不存在" in response.json()["detail"]
+
+
+def test_queue_add_empty_path():
+    """测试添加空文件路径"""
+    client = TestClient(web_api.app)
+    response = client.post(
+        "/queue/add",
+        json={"file_path": "", "resume": False},
+    )
+    assert response.status_code == 400
+    assert "不能为空" in response.json()["detail"]
+
+
+def test_queue_add_multiple_success(tmp_path):
+    """测试批量添加文件到队列成功"""
+    input_path1 = tmp_path / "input1.txt"
+    input_path2 = tmp_path / "input2.txt"
+    input_path3 = tmp_path / "input3.txt"
+
+    input_path1.write_text("hello1", encoding="utf-8")
+    input_path2.write_text("hello2", encoding="utf-8")
+    input_path3.write_text("hello3", encoding="utf-8")
+
+    client = TestClient(web_api.app)
+    response = client.post(
+        "/queue/add-multiple",
+        json={"file_paths": [str(input_path1), str(input_path2), str(input_path3)]},
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert "task_ids" in data
+    assert len(data["task_ids"]) == 3
+    assert data["count"] == 3
+    assert "已将 3 个文件添加到队列" == data["message"]
+
+
+def test_queue_add_multiple_empty_list():
+    """测试批量添加 - 空列表"""
+    client = TestClient(web_api.app)
+    response = client.post(
+        "/queue/add-multiple",
+        json={"file_paths": []},
+    )
+    assert response.status_code == 400
+    assert "不能为空" in response.json()["detail"]
+
+
+def test_queue_add_multiple_missing_file(tmp_path):
+    """测试批量添加 - 文件不存在"""
+    input_path1 = tmp_path / "input1.txt"
+    input_path1.write_text("hello1", encoding="utf-8")
+
+    missing_path = tmp_path / "missing.txt"
+
+    client = TestClient(web_api.app)
+    response = client.post(
+        "/queue/add-multiple",
+        json={"file_paths": [str(input_path1), str(missing_path)]},
+    )
+    assert response.status_code == 404
+    assert "不存在" in response.json()["detail"]
+
+
+def test_queue_add_multiple_empty_string(tmp_path):
+    """测试批量添加 - 空字符串路径"""
+    client = TestClient(web_api.app)
+    response = client.post(
+        "/queue/add-multiple",
+        json={"file_paths": ["", "file2.txt"]},
+    )
+    # 空字符串可能导致不同的验证错误，所以只检查不是200
+    assert response.status_code != 200
+
+
+def test_queue_list(tmp_path):
+    """测试列出队列"""
+    client = TestClient(web_api.app)
+    response = client.get("/queue/list")
+    assert response.status_code == 200
+    data = response.json()
+    assert "tasks" in data
+    assert isinstance(data["tasks"], list)
+
+
+def test_queue_stats():
+    """测试获取队列统计"""
+    client = TestClient(web_api.app)
+    response = client.get("/queue/stats")
+    assert response.status_code == 200
+    data = response.json()
+    assert "pending" in data
+    assert "running" in data
+    assert "total" in data
+    assert data["pending"] >= 0
+    assert data["running"] >= 0
+
+
+def test_queue_clear(tmp_path):
+    """测试清空队列"""
+    input_path1 = tmp_path / "input1.txt"
+    input_path2 = tmp_path / "input2.txt"
+    input_path1.write_text("hello1", encoding="utf-8")
+    input_path2.write_text("hello2", encoding="utf-8")
+
+    client = TestClient(web_api.app)
+
+    # 先添加几个任务
+    client.post("/queue/add", json={"file_path": str(input_path1), "resume": False})
+    client.post("/queue/add", json={"file_path": str(input_path2), "resume": False})
+
+    # 清空队列
+    response = client.post("/queue/clear")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["success"] is True
+    assert "cancelled_count" in data
+    assert data["cancelled_count"] >= 0

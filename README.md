@@ -37,22 +37,36 @@ uv pip install -e ".[dev]"
 
 ### 3. 配置环境变量
 
-**方式一：使用配置工具（推荐）**
-```bash
-# Windows
-python -Xutf8 create_env.py
+**方式一：自动生成（推荐）**
 
-# Linux/Mac
-python create_env.py
-```
-按照提示选择 API 提供商并输入 API Key
+首次运行时程序会自动检测并创建 `.env` 文件模板。
 
 **方式二：手动编辑**
-复制 `.env.example` 为 `.env` 并填入配置
+复制以下模板为 `.env` 文件并填入配置：
 
-⚠️ **重要提示**：
+```bash
+# API提供商选择: openai, gemini, zhipu 或 aihubmix
+API_PROVIDER=openai
+
+# OpenAI API配置
+OPENAI_API_KEY=your_openai_api_key_here
+OPENAI_API_BASE=https://api.openai.com/v1
+OPENAI_MODEL=gpt-4o-mini
+
+# 其他API提供商配置（根据需要取消注释）
+# GEMINI_API_KEY=your_gemini_api_key_here
+# GEMINI_MODEL=gemini-2.5-flash
+# GEMINI_SAFETY_SETTINGS=BLOCK_NONE
+# ZHIPU_API_KEY=your_zhipu_api_key_here
+# ZHIPU_API_BASE=https://open.bigmodel.cn/api/paas/v4
+# ZHIPU_MODEL=glm-4-flash
+# AIHUBMIX_API_KEY=your_aihubmix_api_key_here
+# AIHUBMIX_MODEL=gpt-3.5-turbo
+# AIHUBMIX_API_BASE=https://aihubmix.com/v1
+```
+
+ ⚠️ **重要提示**：
 - 修改配置后需要**重启服务**才能生效
-- 详细配置说明请参考：[API 配置指南](docs/API_CONFIGURATION.md)
 
 **API 提供商选择：**
 | 提供商 | 环境变量 | 必要配置 |

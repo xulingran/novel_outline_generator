@@ -21,6 +21,13 @@ from exceptions import APIError, APIKeyError, RateLimitError
 logger = logging.getLogger(__name__)
 
 
+class ContentFilterError(APIError):
+    """内容审查错误（不触发熔断器）"""
+
+    def __init__(self, message: str):
+        super().__init__(message, is_retryable=False)
+
+
 def _httpx_proxy_kwargs(
     client_class: type[httpx.Client] | type[httpx.AsyncClient], proxy_url: str
 ) -> dict[str, Any]:
@@ -104,7 +111,7 @@ class LLMService(ABC):
         """调用API的具体实现"""
         pass
 
-    async def call(self, prompt: str, chunk_id: int | None = None) -> LLMResponse:
+    async def call(self, prompt: str, chunk_id: int | str | None = None) -> LLMResponse:
         """统一的调用接口，返回完整的响应对象（包含token使用情况）"""
         chunk_info = f" [块 {chunk_id}]" if chunk_id else ""
 
@@ -136,6 +143,11 @@ class LLMService(ABC):
                 await asyncio.sleep(wait_time)
 
             except APIError as e:
+                # 内容审查错误不触发熔断器，直接抛出
+                if isinstance(e, ContentFilterError):
+                    logger.warning(f"内容被安全过滤器阻止{chunk_info}: {e.message}")
+                    raise
+
                 if not e.is_retryable:
                     # 不可重试的错误，直接抛出
                     self.circuit_breaker.record_failure()
@@ -281,6 +293,10 @@ class OpenAIService(LLMService):
 
             if "quota" in error_str or "exceeded" in error_str:
                 raise APIError("API配额已用尽", is_retryable=False) from e
+
+            # 内容审查错误（不触发熔断器）
+            if "421" in str(e) or "content_filter" in error_str or "moderation block" in error_str:
+                raise ContentFilterError("内容被安全过滤器阻止") from e
 
             # 其他错误
             raise APIError(f"OpenAI API错误: {str(e)}", is_retryable=True) from e

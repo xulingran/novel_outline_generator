@@ -1,4 +1,4 @@
-﻿# Python cache and virtualenvs
+# Python cache and virtualenvs
 __pycache__/
 *.py[cod]
 *.pyo
@@ -35,3 +35,33 @@ node_modules/
 .coverage
 htmlcov/
 .pytest_cache/
+
+# Python linters cache
+.mypy_cache/
+.ruff_cache/
+.dmypy.json
+dmypy.json
+
+# AI tools cache
+.claude/
+.trae/
+
+# Additional Python tools
+.coverage.*
+.tox/
+.hypothesis/
+
+# OS files
+Thumbs.db
+/nul
+.esd10/
+
+# Python session
+.python-version
+
+# Temporary files
+*.tmp
+*.bak
+
+# AI session artifacts
+.sessions/

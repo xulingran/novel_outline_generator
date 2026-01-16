@@ -3,27 +3,16 @@
 使用环境变量管理配置，提高安全性
 """
 
+import logging
 import os
 from dataclasses import dataclass, field
 
 from exceptions import APIKeyError, ConfigurationError
-from prompts import DEFAULT_OUTLINE_PROMPT_TEMPLATE
 
-# 加载.env文件中的环境变量
-try:
-    from dotenv import load_dotenv
+logger = logging.getLogger(__name__)
 
-    load_dotenv()
-except ImportError:
-    # 如果没有安装python-dotenv，尝试手动加载
-    env_file = os.path.join(os.path.dirname(__file__), ".env")
-    if os.path.exists(env_file):
-        with open(env_file, encoding="utf-8") as f:
-            for line in f:
-                line = line.strip()
-                if line and not line.startswith("#") and "=" in line:
-                    key, value = line.split("=", 1)
-                    os.environ[key.strip()] = value.strip()
+# 支持的API提供商列表
+SUPPORTED_API_PROVIDERS = ["openai", "gemini", "zhipu", "aihubmix"]
 
 
 @dataclass
@@ -58,9 +47,9 @@ class APIConfig:
         if self._validated:
             return
 
-        if self.provider not in ["openai", "gemini", "zhipu", "aihubmix"]:
+        if self.provider not in SUPPORTED_API_PROVIDERS:
             raise ConfigurationError(
-                f"不支持的API提供商: {self.provider}. 支持的提供商: openai, gemini, zhipu, aihubmix"
+                f"不支持的API提供商: {self.provider}. 支持的提供商: {', '.join(SUPPORTED_API_PROVIDERS)}"
             )
 
         if self.provider == "openai":
@@ -282,8 +271,9 @@ try:
     API_BASE = _api_cfg.base_url
     MODEL_NAME = _api_cfg.model_name
     GEMINI_SAFETY_SETTINGS = _api_cfg.gemini_safety
-except Exception:
+except Exception as e:
     # 如果配置加载失败，使用默认值（向后兼容）
+    logger.warning(f"加载API配置失败，使用默认值: {e}")
     API_PROVIDER = "openai"
     API_BASE = None
     MODEL_NAME = "gpt-4o-mini"
@@ -324,13 +314,12 @@ def create_env_file():
     """创建.env文件模板（如果不存在）"""
     env_file = ".env"
     if not os.path.exists(env_file):
-        outline_prompt_env = DEFAULT_OUTLINE_PROMPT_TEMPLATE.replace("\n", "\\n")
         with open(env_file, "w", encoding="utf-8") as f:
             f.write(
                 """# 小说大纲生成工具环境变量配置
 # 复制此文件并填入你的API密钥
 
-# API提供商选择: openai, gemini 或 zhipu
+# API提供商选择: openai, gemini, zhipu 或 aihubmix
 API_PROVIDER=openai
 
 # OpenAI API配置
@@ -348,6 +337,11 @@ OPENAI_MODEL=gpt-4o-mini
 # ZHIPU_API_BASE=https://open.bigmodel.cn/api/paas/v4
 # ZHIPU_MODEL=glm-4-flash
 
+# AiHubMix API配置（使用时取消注释并配置）
+# AIHUBMIX_API_KEY=your_aihubmix_api_key_here
+# AIHUBMIX_MODEL=gpt-3.5-turbo
+# AIHUBMIX_API_BASE=https://aihubmix.com/v1
+
 # 处理参数（可选）
 MODEL_MAX_TOKENS=200000
 TARGET_TOKENS_PER_CHUNK=6000
@@ -364,18 +358,94 @@ PROXY_URL=http://127.0.0.1:7897
 
 # CORS 允许的来源（可选，多个用逗号分隔）
 # CORS_ORIGINS=http://localhost:8000,http://127.0.0.1:8000
+
+# 注意：提示词模板现已内置，使用 prompts.py 中的函数
 """
             )
-        with open(env_file, "a", encoding="utf-8") as f:
-            f.write("\n# 大纲提示词配置\n")
-            f.write(f"OUTLINE_PROMPT_TEMPLATE={outline_prompt_env}\n")
         print(f"✓ 已创建环境变量模板文件: {env_file}")
         print("  请编辑该文件并填入你的API密钥")
 
 
-# 检查并创建环境变量文件
-if not os.getenv("OPENAI_API_KEY") and not os.getenv("GEMINI_API_KEY"):
-    if not os.path.exists(".env"):
-        print("\n⚠️  警告: 未检测到API密钥环境变量")
-        print("  建议使用环境变量或.env文件来管理API密钥")
-        create_env_file()
+def _refresh_config_cache() -> None:
+    global _api_config, _processing_config
+    global TXT_FILE, OUTPUT_DIR, PROGRESS_FILE, ENCODINGS
+    global API_PROVIDER, API_BASE, MODEL_NAME, GEMINI_SAFETY_SETTINGS
+    global MODEL_MAX_TOKENS, TARGET_TOKENS_PER_CHUNK, PARALLEL_LIMIT, MAX_RETRY, LOG_EVERY
+    global USE_PROXY, PROXY_URL
+
+    _api_config = None
+    _processing_config = None
+
+    processing_cfg = get_processing_config()
+    TXT_FILE = processing_cfg.default_txt_file
+    OUTPUT_DIR = processing_cfg.output_dir
+    PROGRESS_FILE = processing_cfg.progress_file
+    ENCODINGS = processing_cfg.encodings
+
+    try:
+        api_cfg = get_api_config()
+        API_PROVIDER = api_cfg.provider
+        API_BASE = api_cfg.base_url
+        MODEL_NAME = api_cfg.model_name
+        GEMINI_SAFETY_SETTINGS = api_cfg.gemini_safety
+    except Exception as e:
+        logger.warning(f"刷新API配置失败，使用默认值: {e}")
+        API_PROVIDER = "openai"
+        API_BASE = None
+        MODEL_NAME = "gpt-4o-mini"
+        GEMINI_SAFETY_SETTINGS = "BLOCK_NONE"
+
+    MODEL_MAX_TOKENS = processing_cfg.model_max_tokens
+    TARGET_TOKENS_PER_CHUNK = processing_cfg.target_tokens_per_chunk
+    PARALLEL_LIMIT = processing_cfg.parallel_limit
+    MAX_RETRY = processing_cfg.max_retry
+    LOG_EVERY = processing_cfg.log_every
+    USE_PROXY = processing_cfg.use_proxy
+    PROXY_URL = processing_cfg.proxy_url
+
+
+def init_config(create_env_if_missing: bool = True):
+    """初始化配置
+
+    此函数负责：
+    1. 加载 .env 文件（使用 python-dotenv 或手动读取）
+    2. 检查 API 密钥是否存在
+    3. 如果缺少 API 密钥且 .env 不存在，则创建 .env 文件并打印提示（可选）
+
+    Args:
+        create_env_if_missing: 如果缺少 API 密钥且 .env 不存在，是否创建 .env 文件。
+            默认为 True 以保持向后兼容。在模块导入时调用应设置为 False 以避免副作用。
+
+    注意：此函数应在需要时显式调用，而不是在模块导入时自动执行
+    """
+    # 加载.env文件中的环境变量
+    try:
+        from dotenv import load_dotenv
+
+        load_dotenv()
+    except ImportError:
+        # 如果没有安装python-dotenv，尝试手动加载
+        env_file = os.path.join(os.path.dirname(__file__), ".env")
+        if os.path.exists(env_file):
+            with open(env_file, encoding="utf-8") as f:
+                for line in f:
+                    line = line.strip()
+                    if line and not line.startswith("#") and "=" in line:
+                        key, value = line.split("=", 1)
+                        key = key.strip()
+                        # 只在环境变量不存在时才设置，保持环境变量优先
+                        if key not in os.environ:
+                            os.environ[key] = value.strip()
+
+    # 检查并创建环境变量文件
+    if (
+        create_env_if_missing
+        and not os.getenv("OPENAI_API_KEY")
+        and not os.getenv("GEMINI_API_KEY")
+    ):
+        if not os.path.exists(".env"):
+            print("\n⚠️  警告: 未检测到API密钥环境变量")
+            print("  建议使用环境变量或.env文件来管理API密钥")
+            create_env_file()
+
+    _refresh_config_cache()
