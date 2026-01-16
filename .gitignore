@@ -26,6 +26,7 @@ venv/
 
 # Project outputs
 outputs/
+novel_outline.log
 
 # Node tooling (if any)
 node_modules/
