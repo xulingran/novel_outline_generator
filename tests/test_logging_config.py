@@ -3,7 +3,6 @@
 import logging
 import os
 import shutil
-from datetime import datetime
 from pathlib import Path
 
 import pytest
@@ -112,9 +111,7 @@ def test_console_handler_info_level(test_log_dir):
     setup_logging(log_dir=str(test_log_dir))
 
     root_logger = logging.getLogger()
-    console_handlers = [
-        h for h in root_logger.handlers if isinstance(h, logging.StreamHandler)
-    ]
+    console_handlers = [h for h in root_logger.handlers if isinstance(h, logging.StreamHandler)]
 
     assert len(console_handlers) > 0
     console_handler = console_handlers[0]
