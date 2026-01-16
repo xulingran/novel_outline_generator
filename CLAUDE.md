@@ -184,6 +184,7 @@ file_service  splitter  llm_service  merge_prompt  最终txt
 - `test_resume_processing.py`：断点恢复测试
 - `test_task_queue.py`：任务队列测试
 - `test_web_api.py`：Web API 端点测试
+- `test_logging_config.py`：日志配置和轮转测试
 
 ## 开发注意事项
 
@@ -213,3 +214,27 @@ file_service  splitter  llm_service  merge_prompt  最终txt
 - Linux/Mac: `.venv/bin/python`
 
 避免使用系统 Python 或全局虚拟环境。
+
+### 日志系统
+
+项目使用按天自动轮转的日志系统：
+- **日志目录**：`logs/`（默认，可通过 `LOG_DIR` 环境变量配置）
+- **当前日志**：`novel_outline.log`（当天的日志）
+- **历史日志**：`novel_outline.log.YYYY-MM-DD`（如 `novel_outline.log.2026-01-16`）
+- **轮转规则**：每天午夜自动轮转，当前日志重命名为带日期后缀的文件
+- **日志保留**：默认保留 30 天，可通过 `LOG_BACKUP_DAYS` 环境变量配置
+- **日志级别**：默认 INFO，可通过 `LOG_LEVEL` 环境变量配置（DEBUG, INFO, WARNING, ERROR）
+
+**环境变量配置**（在 `.env` 文件中）：
+```bash
+LOG_LEVEL=INFO          # 日志级别
+LOG_DIR=logs            # 日志目录
+LOG_BACKUP_DAYS=30      # 保留天数
+```
+
+**实现细节**：
+- 使用 `TimedRotatingFileHandler` 实现按天轮转
+- 自动清理超过保留天数的旧日志文件
+- 同时输出到文件（所有级别）和控制台（INFO 及以上）
+- 日志格式：`YYYY-MM-DD HH:MM:SS - 模块名 - 级别 - 消息`
+
