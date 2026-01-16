@@ -455,6 +455,10 @@ class NovelProcessingService:
                     # 尝试解析JSON响应
                     outline_data = self._parse_llm_response(response, chunk_id)
 
+                    # 确保outline_data包含chunk_id
+                    if "chunk_id" not in outline_data:
+                        outline_data["chunk_id"] = chunk_id
+
                     # 记录处理时间
                     processing_time = (datetime.now() - start_time).total_seconds()
 
@@ -710,6 +714,9 @@ class NovelProcessingService:
             # 尝试直接解析JSON
             data = json.loads(response)
             if isinstance(data, dict):
+                # 确保返回的数据包含chunk_id
+                if "chunk_id" not in data:
+                    data["chunk_id"] = chunk_id
                 return cast(dict[str, Any], data)
             raise ValueError("LLM响应不是JSON对象")
 
@@ -720,6 +727,9 @@ class NovelProcessingService:
                 try:
                     data = json.loads(json_match.group())
                     if isinstance(data, dict):
+                        # 确保返回的数据包含chunk_id
+                        if "chunk_id" not in data:
+                            data["chunk_id"] = chunk_id
                         return cast(dict[str, Any], data)
                 except (json.JSONDecodeError, ValueError, TypeError):
                     # JSON解析失败，继续使用默认结构
