@@ -42,27 +42,52 @@ uv pip install -e ".[dev]"
 首次运行时程序会自动检测并创建 `.env` 文件模板。
 
 **方式二：手动编辑**
-复制以下模板为 `.env` 文件并填入配置：
+复制`.env.sample` 为 `.env` 文件并填入配置：
 
-```bash
+```.env.sample
 # API提供商选择: openai, gemini, zhipu 或 aihubmix
+# 小说大纲生成工具配置文件示例
+# 复制此文件为 .env 并填入你的API密钥
+
+# ==================== API提供商 ====================
+# 选择API提供商: openai, gemini, zhipu, aihubmix
 API_PROVIDER=openai
 
-# OpenAI API配置
+# ==================== OpenAI API配置 ====================
 OPENAI_API_KEY=your_openai_api_key_here
-OPENAI_API_BASE=https://api.openai.com/v1
+# OPENAI_API_BASE=https://api.openai.com/v1
 OPENAI_MODEL=gpt-4o-mini
 
-# 其他API提供商配置（根据需要取消注释）
+# ==================== Google Gemini API配置 ====================
 # GEMINI_API_KEY=your_gemini_api_key_here
+# GEMINI_API_BASE=https://generativelanguage.googleapis.com
 # GEMINI_MODEL=gemini-2.5-flash
-# GEMINI_SAFETY_SETTINGS=BLOCK_NONE
+# GEMINI_SAFETY_SETTINGS=BLOCK_ONLY_HIGH
+
+# ==================== 智谱清言 API配置 ====================
 # ZHIPU_API_KEY=your_zhipu_api_key_here
 # ZHIPU_API_BASE=https://open.bigmodel.cn/api/paas/v4
 # ZHIPU_MODEL=glm-4-flash
+
+# ==================== AiHubMix API配置 ====================
 # AIHUBMIX_API_KEY=your_aihubmix_api_key_here
-# AIHUBMIX_MODEL=gpt-3.5-turbo
 # AIHUBMIX_API_BASE=https://aihubmix.com/v1
+# AIHUBMIX_MODEL=gpt-3.5-turbo
+
+# ==================== 代理配置 ====================
+USE_PROXY=false
+# PROXY_URL=http://127.0.0.1:7890
+
+# ==================== 处理参数（一般无需修改） ====================
+MODEL_MAX_TOKENS=200000
+TARGET_TOKENS_PER_CHUNK=6000
+PARALLEL_LIMIT=5
+MAX_RETRY=5
+LOG_EVERY=1
+
+# ==================== 日志配置 ====================
+# 日志级别: DEBUG, INFO, WARNING, ERROR
+LOG_LEVEL=INFO
 ```
 
  ⚠️ **重要提示**：
@@ -85,10 +110,10 @@ OPENAI_MODEL=gpt-4o-mini
 ### 命令行
 ```bash
 # Windows
-python -Xutf8 main.py
+uv run python main.py
 
 # Linux/Mac
-python main.py
+uv run python main.py
 ```
 按提示选择2，处理新文件，输入 txt/md 路径
 
@@ -139,7 +164,6 @@ uv run pre-commit install
 ```
 ├── main.py                 # 命令行入口，选择 CLI/Web
 ├── web_api.py              # FastAPI 后端接口
-├── create_env.py           # 配置创建工具
 ├── ui/                     # Web 前端资源
 │   └── index.html
 ├── services/               # 核心服务
