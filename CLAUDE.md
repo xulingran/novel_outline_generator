@@ -13,7 +13,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 # 2. Black 格式化
 .venv/Scripts/python -m black .
 
-# 3. Pytest 测试
+# 3. Mypy 类型检查
+.venv/Scripts/python -m mypy .
+
+# 4. Pytest 测试
 .venv/Scripts/python -m pytest tests/ -v
 ```
 
