@@ -13,6 +13,8 @@ dist/
 
 # Environments
 .env
+.env.*
+!.env.sample
 .venv/
 venv/
 
@@ -26,7 +28,8 @@ venv/
 
 # Project outputs
 outputs/
-novel_outline.log
+logs/
+test_results.txt
 
 # Node tooling (if any)
 node_modules/
@@ -35,6 +38,8 @@ node_modules/
 .coverage
 htmlcov/
 .pytest_cache/
+coverage.json
+coverage.xml
 
 # Python linters cache
 .mypy_cache/

@@ -177,7 +177,7 @@ class ProcessingConfig:
         default_factory=lambda: int(os.getenv("MODEL_MAX_TOKENS", "200000"))
     )
     target_tokens_per_chunk: int = field(
-        default_factory=lambda: int(os.getenv("TARGET_TOKENS_PER_CHUNK", "6000"))
+        default_factory=lambda: int(os.getenv("TARGET_TOKENS_PER_CHUNK", "64000"))
     )
     parallel_limit: int = field(default_factory=lambda: int(os.getenv("PARALLEL_LIMIT", "5")))
     max_retry: int = field(default_factory=lambda: int(os.getenv("MAX_RETRY", "5")))
@@ -344,7 +344,7 @@ OPENAI_MODEL=gpt-4o-mini
 
 # 处理参数（可选）
 MODEL_MAX_TOKENS=200000
-TARGET_TOKENS_PER_CHUNK=6000
+TARGET_TOKENS_PER_CHUNK=64000
 PARALLEL_LIMIT=5
 MAX_RETRY=5
 LOG_EVERY=1

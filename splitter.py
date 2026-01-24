@@ -53,20 +53,8 @@ class TextSplitter:
         logger.debug(f"开始分割文本，总长度: {len(text)} 字符")
 
         try:
-            # 1. 优先按章节分割
-            chapter_chunks = self._split_by_chapters(text)
-            logger.debug(f"按章节分割得到 {len(chapter_chunks)} 个块")
-
-            # 2. 检查章节大小，必要时进行二级分割
-            final_chunks = []
-            for idx, chunk in enumerate(chapter_chunks, 1):
-                token_count = count_tokens(chunk)
-                if token_count > self.processing_config.target_tokens_per_chunk:
-                    logger.debug(f"章节 {idx} 过大 ({token_count} tokens)，进行二级分割")
-                    sub_chunks = self._split_by_tokens(chunk)
-                    final_chunks.extend(sub_chunks)
-                else:
-                    final_chunks.append(chunk)
+            # 直接按 token 数量分割
+            final_chunks = self._split_by_tokens(text)
 
             logger.info(f"文本分割完成，共 {len(final_chunks)} 个块")
             return final_chunks

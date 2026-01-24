@@ -72,13 +72,14 @@ class TestSplitTextBasic:
 
 
 class TestSplitByChapters:
-    """Test chapter-based splitting."""
+    """Test chapter-based splitting (internal methods)."""
 
     def test_split_by_chapter_pattern_chinese_numbers(self):
         """Test splitting with Chinese chapter numbers."""
         splitter = TextSplitter()
         text = "第一章 开始\n这是第一章的内容\n\n第二章 结束\n这是第二章的内容"
-        chunks = splitter.split_text(text)
+        # 直接测试 _split_by_chapters 方法
+        chunks = splitter._split_by_chapters(text)
         assert len(chunks) >= 2
         assert "第一章" in chunks[0] or "第一章" in chunks[1]
         assert "第二章" in chunks[-1]
@@ -87,28 +88,32 @@ class TestSplitByChapters:
         """Test splitting with Arabic chapter numbers."""
         splitter = TextSplitter()
         text = "第1章 开始\n这是第一章的内容\n\n第2章 结束\n这是第二章的内容"
-        chunks = splitter.split_text(text)
+        # 直接测试 _split_by_chapters 方法
+        chunks = splitter._split_by_chapters(text)
         assert len(chunks) >= 2
 
     def test_split_by_chapter_pattern_chapter_keyword(self):
         """Test splitting with 'Chapter' keyword."""
         splitter = TextSplitter()
         text = "Chapter 1\nStart\n\nChapter 2\nEnd"
-        chunks = splitter.split_text(text)
+        # 直接测试 _split_by_chapters 方法
+        chunks = splitter._split_by_chapters(text)
         assert len(chunks) >= 2
 
     def test_split_by_chapter_pattern_section(self):
         """Test splitting with section markers."""
         splitter = TextSplitter()
         text = "第一节 开始\n这是第一节\n\n第二节 结束\n这是第二节"
-        chunks = splitter.split_text(text)
+        # 直接测试 _split_by_chapters 方法
+        chunks = splitter._split_by_chapters(text)
         assert len(chunks) >= 2
 
     def test_split_by_chapter_pattern_volume(self):
         """Test splitting with volume markers."""
         splitter = TextSplitter()
         text = "第一卷 开始\n这是第一卷\n\n第二卷 结束\n这是第二卷"
-        chunks = splitter.split_text(text)
+        # 直接测试 _split_by_chapters 方法
+        chunks = splitter._split_by_chapters(text)
         assert len(chunks) >= 1
 
     def test_try_split_pattern_no_match(self):
@@ -160,8 +165,9 @@ class TestSplitByTokens:
     def test_split_by_tokens_large_text(self):
         """Large text should be split at token boundaries."""
         splitter = TextSplitter()
-        # Create text that exceeds target tokens (6000)
-        text = "这是一个测试句子。" * 1000  # Repeat to exceed limit
+        # Create text that exceeds target tokens (64000)
+        # 使用更长的文本以确保超过新的限制
+        text = "这是一个测试句子。" * 15000  # Repeat to exceed limit
         chunks = splitter._split_by_tokens(text)
         assert len(chunks) >= 2
         # Verify chunks are within reasonable size
