@@ -28,6 +28,8 @@ venv/
 
 # Project outputs
 outputs/
+logs/
+test_results.txt
 
 # Node tooling (if any)
 node_modules/
@@ -36,6 +38,8 @@ node_modules/
 .coverage
 htmlcov/
 .pytest_cache/
+coverage.json
+coverage.xml
 
 # Python linters cache
 .mypy_cache/
