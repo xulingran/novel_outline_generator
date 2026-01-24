@@ -1053,6 +1053,12 @@
     const taskLogOffsets = new Map();
     // 记录每个任务上一次显示的最后一条日志（用于去重）
     const lastDisplayedLogs = new Map();
+    // 记录每个任务的 Token 统计是否已显示
+    const tokenLoggedDisplayed = new Map();
+    // 记录每个任务的部分完成信息是否已显示
+    const partialInfoLogged = new Map();
+    // 记录每个任务的合并进度是否已显示
+    const mergeProgressLogged = new Map();
 
     // ========================================
     // 模块 5: 队列管理
@@ -1084,7 +1090,7 @@
 
         // 先处理 token 统计（必须在return之前）
         const tokenUsage = result.token_usage;
-        if (tokenUsage && !task.token_logged_displayed && (task.status === 'success' || task.status === 'completed')) {
+        if (tokenUsage && !tokenLoggedDisplayed.has(taskId) && (task.status === 'success' || task.status === 'completed')) {
           const promptTokens = tokenUsage.prompt_tokens || 0;
           const completionTokens = tokenUsage.completion_tokens || 0;
           const totalTokens = tokenUsage.total_tokens || 0;
@@ -1092,14 +1098,14 @@
           const formattedCompletion = completionTokens.toLocaleString();
           const formattedTotal = totalTokens.toLocaleString();
           addLog(`[${fileName}] Token统计: 输入=${formattedPrompt}, 输出=${formattedCompletion}, 总计=${formattedTotal}`);
-          task.token_logged_displayed = true;
+          tokenLoggedDisplayed.set(taskId, true);
         }
 
         // 处理部分完成信息（必须在status检查之前，否则已完成任务不会显示）
         const partialInfo = result.partial_info;
-        if (partialInfo && !task.partial_info_logged) {
+        if (partialInfo && !partialInfoLogged.has(taskId)) {
           addLog(`[${fileName}] ${partialInfo}`, 'warning');
-          task.partial_info_logged = true;
+          partialInfoLogged.set(taskId, true);
         }
 
         // 跳过已完成、已取消或错误的任务的日志显示（避免重复）
@@ -1150,13 +1156,13 @@
         const phase = result.phase;
 
         // 只在合并阶段且从未记录过时显示
-        if (phase === 'merging' && !task.merge_progress_logged) {
+        if (phase === 'merging' && !mergeProgressLogged.has(taskId)) {
           if (mergeLevel !== undefined && mergeBatchTotal !== undefined && mergeOutlinesCount !== undefined) {
             const batchInfo = mergeBatchCurrent !== undefined
               ? ` ${mergeBatchCurrent}/${mergeBatchTotal} 批次`
               : '';
             addLog(`[${fileName}] 合并层级 ${mergeLevel}:${batchInfo}, ${mergeOutlinesCount} 个大纲`);
-            task.merge_progress_logged = true;
+            mergeProgressLogged.set(taskId, true);
           }
         }
       });

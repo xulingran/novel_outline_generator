@@ -347,7 +347,7 @@ class TestProcessingConfig:
                 "cp1252",
             ]
             assert config.model_max_tokens == 200000
-            assert config.target_tokens_per_chunk == 6000
+            assert config.target_tokens_per_chunk == 64000
             assert config.parallel_limit == 5
             assert config.max_retry == 5
             assert config.log_every == 1
