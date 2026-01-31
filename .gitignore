@@ -70,3 +70,6 @@ Thumbs.db
 
 # AI session artifacts
 .sessions/
+
+# Git worktrees
+.worktrees/
