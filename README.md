@@ -1,6 +1,6 @@
 ## 小说大纲生成工具
 
-支持命令行与 Web 界面，使用LLM大模型自动分块、生成和合并大纲。
+支持命令行、Web 与桌面 GUI，使用 LLM 大模型自动分块、生成和合并大纲。
 
 ## 功能概览
 - **多模型支持**：OpenAI / 智谱 / Gemini / AiHubMix，支持代理、中转URL
@@ -8,6 +8,7 @@
 - **递归合并**：逐块生成大纲，递归合并为完整总纲
 - **进度追踪**：实时 ETA 估算、合并进度显示
 - **Web UI**：上传文件、查看进度与日志、查看环境配置
+- **桌面 GUI**：本地窗口化操作，支持文件选择、进度展示、配置编辑与日志查看
 - **断点恢复**：支持失败重试、中断恢复
 - **代码质量**：Ruff、Black、Mypy 自动检查
 
@@ -99,7 +100,7 @@ LOG_LEVEL=INFO
 | OpenAI | `API_PROVIDER=openai` | `OPENAI_API_KEY`, `OPENAI_API_BASE`(可选) |
 | 智谱 | `API_PROVIDER=zhipu` | `ZHIPU_API_KEY` |
 | Gemini | `API_PROVIDER=gemini` | `GEMINI_API_KEY` |
-| AiHubMix | `API_PROVIDER=aihubmix` | `AIHUBMIX_API_KEY`, `AIHUBMIX_APP_CODE` |
+| AiHubMix | `API_PROVIDER=aihubmix` | `AIHUBMIX_API_KEY`, `AIHUBMIX_API_BASE`(可选) |
 
 **常见问题：**
 - 如遇到 `401 Unauthorized` 错误，说明 API Key 未正确配置
@@ -109,13 +110,13 @@ LOG_LEVEL=INFO
 
 ### 命令行
 ```bash
-# Windows
-uv run python main.py
-
-# Linux/Mac
+# Windows / Linux / Mac
 uv run python main.py
 ```
-按提示选择2，处理新文件，输入 txt/md 路径
+按提示可选择：
+- `1` 启动 Web UI
+- `2` 处理新文件（CLI）
+- `3` 启动桌面 GUI
 
 ### Web UI
 在 `main.py` 中选择1启动 Web 服务
@@ -126,6 +127,22 @@ uv run python main.py
 - 实时进度日志
 - Token 消耗预估
 - 环境配置查看
+
+### 桌面 GUI
+```bash
+# 方式一：主程序中选择模式 3
+uv run python main.py
+
+# 方式二：直接启动 GUI
+uv run python gui_launcher.py
+```
+
+**GUI 依赖说明：**
+- 需要 `customtkinter` 与 `pillow`（已在 `requirements.txt` / `pyproject.toml` 中）
+- macOS 使用 Homebrew 的 Python 时，如提示缺少 `_tkinter`，安装：
+```bash
+brew install python-tk@3.14
+```
 
 ## 开发指南
 
@@ -162,8 +179,14 @@ uv run pre-commit install
 
 ## 目录结构
 ```
-├── main.py                 # 命令行入口，选择 CLI/Web
+├── main.py                 # 命令行入口，选择 CLI/Web/GUI
+├── gui_launcher.py         # 桌面 GUI 启动入口
 ├── web_api.py              # FastAPI 后端接口
+├── gui/                    # 桌面 GUI 代码
+│   ├── main_window.py
+│   ├── config_dialog.py
+│   ├── async_worker.py
+│   └── widgets/
 ├── ui/                     # Web 前端资源
 │   └── index.html
 ├── services/               # 核心服务
