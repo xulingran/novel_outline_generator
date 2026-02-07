@@ -19,7 +19,7 @@ from collections import defaultdict, deque
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from fastapi import FastAPI, File, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
@@ -31,60 +31,67 @@ from services.novel_processing_service import NovelProcessingService
 from services.task_queue import QueueTask, get_global_queue
 from services.token_estimator import estimate_tokens
 
-try:
+if TYPE_CHECKING:
     from services.job_manager import JobManager
-except ModuleNotFoundError:
-    # 回退实现：防止部署遗漏模块时 API 因导入失败无法启动
-    class JobManager:
-        """内存任务管理器（回退实现）。"""
+else:
+    try:
+        from services.job_manager import JobManager
+    except ModuleNotFoundError:
+        # 回退实现：防止部署遗漏模块时 API 因导入失败无法启动
+        class JobManager:
+            """内存任务管理器（回退实现）。"""
 
-        def __init__(self, max_jobs: int = 100, max_age_hours: int = 24) -> None:
-            self.max_jobs = max_jobs
-            self.max_age_hours = max_age_hours
-            self.jobs: dict[str, Any] = {}
+            def __init__(self, max_jobs: int = 100, max_age_hours: int = 24) -> None:
+                self.max_jobs = max_jobs
+                self.max_age_hours = max_age_hours
+                self.jobs: dict[str, Any] = {}
 
-        def get(self, job_id: str) -> Any | None:
-            return self.jobs.get(job_id)
+            def get(self, job_id: str) -> Any | None:
+                return self.jobs.get(job_id)
 
-        def set(self, job_id: str, job: Any) -> None:
-            self.jobs[job_id] = job
+            def set(self, job_id: str, job: Any) -> None:
+                self.jobs[job_id] = job
 
-        def values(self):
-            return self.jobs.values()
+            def values(self):
+                return self.jobs.values()
 
-        def cleanup_expired(self, now: float) -> int:
-            cutoff_time = now - self.max_age_hours * 3600
-            expired_ids = [
-                job_id for job_id, job in self.jobs.items() if job.created_at < cutoff_time
-            ]
-            for job_id in expired_ids:
-                del self.jobs[job_id]
-            return len(expired_ids)
+            def cleanup_expired(self, now: float) -> int:
+                cutoff_time = now - self.max_age_hours * 3600
+                expired_ids = [
+                    job_id for job_id, job in self.jobs.items() if job.created_at < cutoff_time
+                ]
+                for job_id in expired_ids:
+                    del self.jobs[job_id]
+                return len(expired_ids)
 
-        def cleanup_excess(self) -> int:
-            if len(self.jobs) <= self.max_jobs:
-                return 0
+            def cleanup_excess(self) -> int:
+                if len(self.jobs) <= self.max_jobs:
+                    return 0
 
-            over_limit = len(self.jobs) - self.max_jobs
-            removed = 0
+                over_limit = len(self.jobs) - self.max_jobs
+                removed = 0
 
-            def _by_age(statuses: tuple[str, ...]) -> list[tuple[str, Any]]:
-                return sorted(
-                    ((job_id, job) for job_id, job in self.jobs.items() if job.status in statuses),
-                    key=lambda item: item[1].created_at,
-                )
+                def _by_age(statuses: tuple[str, ...]) -> list[tuple[str, Any]]:
+                    return sorted(
+                        (
+                            (job_id, job)
+                            for job_id, job in self.jobs.items()
+                            if job.status in statuses
+                        ),
+                        key=lambda item: item[1].created_at,
+                    )
 
-            for statuses in (("success", "error"), ("pending",), ("running",)):
-                if over_limit <= 0:
-                    break
-                for job_id, _ in _by_age(statuses):
+                for statuses in (("success", "error"), ("pending",), ("running",)):
                     if over_limit <= 0:
                         break
-                    del self.jobs[job_id]
-                    over_limit -= 1
-                    removed += 1
+                    for job_id, _ in _by_age(statuses):
+                        if over_limit <= 0:
+                            break
+                        del self.jobs[job_id]
+                        over_limit -= 1
+                        removed += 1
 
-            return removed
+                return removed
 
 
 logger = logging.getLogger(__name__)
