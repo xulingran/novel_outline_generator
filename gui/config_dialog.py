@@ -1,82 +1,111 @@
-"""配置编辑对话框。"""
+"""
+配置对话框模块
+
+提供可视化配置编辑界面，支持 API 配置、处理配置、代理配置等。
+"""
 
 import logging
-import re
 from pathlib import Path
-from typing import Any
+from typing import Optional, Callable
 
 import customtkinter as ctk
 
-from config import (
-    SUPPORTED_API_PROVIDERS,
-    _refresh_config_cache,
-    get_api_config,
-    get_processing_config,
-)
+from config import SUPPORTED_API_PROVIDERS, _refresh_config_cache
 
 logger = logging.getLogger(__name__)
-ENV_LINE_PATTERN = re.compile(
-    r"^(?P<prefix>\s*(?:export\s+)?)"
-    r"(?P<key>[A-Za-z_][A-Za-z0-9_]*)"
-    r"(?P<sep>\s*=\s*)"
-    r"(?P<value>[^#\n\r]*)"
-    r"(?P<comment>\s*(?:#.*)?)$"
-)
 
 
 class ConfigDialog(ctk.CTkToplevel):
-    """编辑并保存 `.env` 配置。"""
+    """
+    配置对话框
 
-    def __init__(self, master: Any, **kwargs: Any) -> None:
+    功能：
+    - API 配置（提供商、密钥、Base URL、模型名称）
+    - 处理配置（分块大小、并发限制、最大重试次数）
+    - 代理配置
+    - 保存到 .env 文件
+    - 刷新配置缓存
+    """
+
+    def __init__(self, master, **kwargs):
         super().__init__(master, **kwargs)
+
         self.title("配置管理")
         self.geometry("700x600")
+
+        # 使对话框模态
         self.grab_set()
+
+        # 加载当前配置
+        self._load_current_config()
+
+        # 设置 UI
+        self._setup_ui()
+
+        logger.info("打开配置对话框")
+
+    def _load_current_config(self):
+        """加载当前配置"""
+        from config import get_api_config, get_processing_config
 
         self.api_config = get_api_config()
         self.proc_config = get_processing_config()
-        self._setup_ui()
 
-    def _setup_ui(self) -> None:
+    def _setup_ui(self):
+        """设置 UI"""
+        # 主容器
         main_frame = ctk.CTkScrollableFrame(self)
         main_frame.pack(fill="both", expand=True, padx=20, pady=20)
 
+        # API 配置区域
         self._setup_api_config(main_frame)
+
+        # 处理配置区域
         self._setup_processing_config(main_frame)
+
+        # 代理配置区域
         self._setup_proxy_config(main_frame)
 
-        btn_frame = ctk.CTkFrame(self, fg_color="transparent")
-        btn_frame.pack(fill="x", padx=20, pady=(0, 20))
+        # 按钮区域
+        button_frame = ctk.CTkFrame(self, fg_color="transparent")
+        button_frame.pack(fill="x", padx=20, pady=(0, 20))
 
-        ctk.CTkButton(btn_frame, text="保存配置", command=self._on_save, width=120).pack(
-            side="left", padx=5
-        )
-        ctk.CTkButton(btn_frame, text="取消", command=self.destroy, width=120).pack(
-            side="left", padx=5
-        )
-        ctk.CTkButton(btn_frame, text="导出配置", command=self._on_export, width=120).pack(
-            side="right", padx=5
-        )
+        save_button = ctk.CTkButton(button_frame, text="保存配置", command=self._on_save, width=120)
+        save_button.pack(side="left", padx=5)
 
-    def _setup_api_config(self, parent: Any) -> None:
+        cancel_button = ctk.CTkButton(button_frame, text="取消", command=self.destroy, width=120)
+        cancel_button.pack(side="left", padx=5)
+
+        export_button = ctk.CTkButton(
+            button_frame, text="导出配置", command=self._on_export, width=120
+        )
+        export_button.pack(side="right", padx=5)
+
+    def _setup_api_config(self, parent):
+        """设置 API 配置区域"""
         frame = ctk.CTkFrame(parent)
         frame.pack(fill="x", pady=(0, 20))
-        ctk.CTkLabel(frame, text="API 配置", font=ctk.CTkFont(size=16, weight="bold")).pack(
-            pady=(15, 10)
-        )
 
+        # 标题
+        title_label = ctk.CTkLabel(frame, text="API 配置", font=ctk.CTkFont(size=16, weight="bold"))
+        title_label.pack(pady=(15, 10))
+
+        # 提供商选择
         provider_frame = ctk.CTkFrame(frame, fg_color="transparent")
         provider_frame.pack(fill="x", padx=15, pady=5)
-        ctk.CTkLabel(provider_frame, text="API 提供商:", width=120).pack(side="left", padx=5)
-        self.provider_var = ctk.StringVar(value=self.api_config.provider)
-        ctk.CTkOptionMenu(
-            provider_frame,
-            values=SUPPORTED_API_PROVIDERS,
-            variable=self.provider_var,
-        ).pack(side="left", padx=5)
 
-        self._create_key_field(
-            frame, "OpenAI API Key:", self.api_config.openai_key or "", "openai_key_var"
+        provider_label = ctk.CTkLabel(provider_frame, text="API 提供商:", width=120)
+        provider_label.pack(side="left", padx=5)
+
+        self.provider_var = ctk.StringVar(value=self.api_config.provider)
+        provider_menu = ctk.CTkOptionMenu(
+            provider_frame, values=SUPPORTED_API_PROVIDERS, variable=self.provider_var
+        )
+        provider_menu.pack(side="left", padx=5)
+
+        # OpenAI 配置
+        self._create_api_key_field(
+            frame, "OpenAI API Key:", self.api_config.openai_key or "", "openai_key_var", show="*"
         )
         self._create_text_field(
             frame, "OpenAI Base URL:", self.api_config.openai_base or "", "openai_base_var"
@@ -85,26 +114,30 @@ class ConfigDialog(ctk.CTkToplevel):
             frame, "OpenAI 模型:", self.api_config.openai_model, "openai_model_var"
         )
 
-        self._create_key_field(
-            frame, "Gemini API Key:", self.api_config.gemini_key or "", "gemini_key_var"
+        # Gemini 配置
+        self._create_api_key_field(
+            frame, "Gemini API Key:", self.api_config.gemini_key or "", "gemini_key_var", show="*"
         )
         self._create_text_field(
             frame, "Gemini 模型:", self.api_config.gemini_model, "gemini_model_var"
         )
 
-        self._create_key_field(
-            frame, "智谱 API Key:", self.api_config.zhipu_key or "", "zhipu_key_var"
+        # 智谱配置
+        self._create_api_key_field(
+            frame, "智谱 API Key:", self.api_config.zhipu_key or "", "zhipu_key_var", show="*"
         )
         self._create_text_field(
             frame, "智谱 Base URL:", self.api_config.zhipu_base or "", "zhipu_base_var"
         )
         self._create_text_field(frame, "智谱模型:", self.api_config.zhipu_model, "zhipu_model_var")
 
-        self._create_key_field(
+        # AiHubMix 配置
+        self._create_api_key_field(
             frame,
             "AiHubMix API Key:",
             self.api_config.aihubmix_api_key or "",
             "aihubmix_key_var",
+            show="*",
         )
         self._create_text_field(
             frame,
@@ -113,77 +146,124 @@ class ConfigDialog(ctk.CTkToplevel):
             "aihubmix_base_var",
         )
         self._create_text_field(
-            frame,
-            "AiHubMix 模型:",
-            self.api_config.aihubmix_model,
-            "aihubmix_model_var",
+            frame, "AiHubMix 模型:", self.api_config.aihubmix_model, "aihubmix_model_var"
         )
 
-    def _setup_processing_config(self, parent: Any) -> None:
+    def _setup_processing_config(self, parent):
+        """设置处理配置区域"""
         frame = ctk.CTkFrame(parent)
         frame.pack(fill="x", pady=(0, 20))
-        ctk.CTkLabel(frame, text="处理配置", font=ctk.CTkFont(size=16, weight="bold")).pack(
-            pady=(15, 10)
-        )
+
+        # 标题
+        title_label = ctk.CTkLabel(frame, text="处理配置", font=ctk.CTkFont(size=16, weight="bold"))
+        title_label.pack(pady=(15, 10))
+
+        # 目标分块大小
+        chunk_frame = ctk.CTkFrame(frame, fg_color="transparent")
+        chunk_frame.pack(fill="x", padx=15, pady=5)
+
+        chunk_label = ctk.CTkLabel(chunk_frame, text="目标分块大小:", width=120)
+        chunk_label.pack(side="left", padx=5)
 
         self.chunk_size_var = ctk.StringVar(value=str(self.proc_config.target_tokens_per_chunk))
+        chunk_entry = ctk.CTkEntry(chunk_frame, textvariable=self.chunk_size_var, width=150)
+        chunk_entry.pack(side="left", padx=5)
+
+        chunk_unit = ctk.CTkLabel(chunk_frame, text="tokens")
+        chunk_unit.pack(side="left", padx=5)
+
+        # 并发限制
+        parallel_frame = ctk.CTkFrame(frame, fg_color="transparent")
+        parallel_frame.pack(fill="x", padx=15, pady=5)
+
+        parallel_label = ctk.CTkLabel(parallel_frame, text="并发限制:", width=120)
+        parallel_label.pack(side="left", padx=5)
+
         self.parallel_limit_var = ctk.StringVar(value=str(self.proc_config.parallel_limit))
+        parallel_entry = ctk.CTkEntry(
+            parallel_frame, textvariable=self.parallel_limit_var, width=150
+        )
+        parallel_entry.pack(side="left", padx=5)
+
+        # 最大重试次数
+        retry_frame = ctk.CTkFrame(frame, fg_color="transparent")
+        retry_frame.pack(fill="x", padx=15, pady=5)
+
+        retry_label = ctk.CTkLabel(retry_frame, text="最大重试次数:", width=120)
+        retry_label.pack(side="left", padx=5)
+
         self.max_retry_var = ctk.StringVar(value=str(self.proc_config.max_retry))
+        retry_entry = ctk.CTkEntry(retry_frame, textvariable=self.max_retry_var, width=150)
+        retry_entry.pack(side="left", padx=5)
 
-        self._line_input(frame, "目标分块大小:", self.chunk_size_var, unit="tokens")
-        self._line_input(frame, "并发限制:", self.parallel_limit_var)
-        self._line_input(frame, "最大重试次数:", self.max_retry_var)
-
-    def _setup_proxy_config(self, parent: Any) -> None:
+    def _setup_proxy_config(self, parent):
+        """设置代理配置区域"""
         frame = ctk.CTkFrame(parent)
         frame.pack(fill="x", pady=(0, 20))
-        ctk.CTkLabel(frame, text="代理配置", font=ctk.CTkFont(size=16, weight="bold")).pack(
-            pady=(15, 10)
+
+        # 标题
+        title_label = ctk.CTkLabel(frame, text="代理配置", font=ctk.CTkFont(size=16, weight="bold"))
+        title_label.pack(pady=(15, 10))
+
+        # 启用代理
+        proxy_enable_frame = ctk.CTkFrame(frame, fg_color="transparent")
+        proxy_enable_frame.pack(fill="x", padx=15, pady=5)
+
+        self.proxy_enabled_var = ctk.BooleanVar(value=False)
+        proxy_enable_checkbox = ctk.CTkCheckBox(
+            proxy_enable_frame, text="启用代理", variable=self.proxy_enabled_var
+        )
+        proxy_enable_checkbox.pack(side="left", padx=5)
+
+        # 代理地址
+        self._create_text_field(
+            frame, "代理地址:", "", "proxy_url_var", placeholder="http://proxy.example.com:8080"
         )
 
-        self.proxy_enabled_var = ctk.BooleanVar(value=self.proc_config.use_proxy)
-        self.proxy_url_var = ctk.StringVar(value=self.proc_config.proxy_url)
-
-        ctk.CTkCheckBox(frame, text="启用代理", variable=self.proxy_enabled_var).pack(
-            anchor="w", padx=20, pady=5
-        )
-        self._line_input(frame, "代理地址:", self.proxy_url_var)
-
-    def _line_input(
-        self,
-        parent: Any,
-        label: str,
-        var: Any,
-        unit: str = "",
-    ) -> None:
-        frame = ctk.CTkFrame(parent, fg_color="transparent")
-        frame.pack(fill="x", padx=15, pady=5)
-        ctk.CTkLabel(frame, text=label, width=120).pack(side="left", padx=5)
-        ctk.CTkEntry(frame, textvariable=var, width=220).pack(side="left", padx=5)
-        if unit:
-            ctk.CTkLabel(frame, text=unit).pack(side="left", padx=5)
-
-    def _create_text_field(self, parent: Any, label: str, default: str, var_name: str) -> None:
-        var = ctk.StringVar(value=default)
-        setattr(self, var_name, var)
-        self._line_input(parent, label, var)
-
-    def _create_key_field(self, parent: Any, label: str, default: str, var_name: str) -> None:
+    def _create_api_key_field(
+        self, parent, label: str, default_value: str, var_name: str, show: str | None = None
+    ):
+        """创建 API 密钥输入字段"""
         frame = ctk.CTkFrame(parent, fg_color="transparent")
         frame.pack(fill="x", padx=15, pady=5)
 
-        ctk.CTkLabel(frame, text=label, width=150).pack(side="left", padx=5)
-        var = ctk.StringVar(value=default)
+        label_widget = ctk.CTkLabel(frame, text=label, width=150)
+        label_widget.pack(side="left", padx=5)
+
+        var = ctk.StringVar(value=default_value)
         setattr(self, var_name, var)
-        entry = ctk.CTkEntry(frame, textvariable=var, show="*", width=300)
+
+        entry = ctk.CTkEntry(frame, textvariable=var, show=show, width=300)
         entry.pack(side="left", padx=5, expand=True, fill="x")
 
-        show_btn = ctk.CTkButton(frame, text="显示", width=60)
-        show_btn.configure(command=lambda: self._toggle_password(entry, show_btn))
-        show_btn.pack(side="left", padx=5)
+        # 显示/隐藏按钮
+        if show:
+            show_button: ctk.CTkButton = ctk.CTkButton(
+                frame,
+                text="显示",
+                width=60,
+                command=lambda: self._toggle_password(entry, show_button),
+            )
+            show_button.pack(side="left", padx=5)
 
-    def _toggle_password(self, entry: Any, button: Any) -> None:
-        """切换密钥显隐。"""
+    def _create_text_field(
+        self, parent, label: str, default_value: str, var_name: str, placeholder: str = ""
+    ):
+        """创建文本输入字段"""
+        frame = ctk.CTkFrame(parent, fg_color="transparent")
+        frame.pack(fill="x", padx=15, pady=5)
+
+        label_widget = ctk.CTkLabel(frame, text=label, width=150)
+        label_widget.pack(side="left", padx=5)
+
+        var = ctk.StringVar(value=default_value)
+        setattr(self, var_name, var)
+
+        entry = ctk.CTkEntry(frame, textvariable=var, placeholder_text=placeholder)
+        entry.pack(side="left", padx=5, expand=True, fill="x")
+
+    def _toggle_password(self, entry: ctk.CTkEntry, button: ctk.CTkButton):
+        """切换密码显示"""
         if entry.cget("show") == "*":
             entry.configure(show="")
             button.configure(text="隐藏")
@@ -191,118 +271,62 @@ class ConfigDialog(ctk.CTkToplevel):
             entry.configure(show="*")
             button.configure(text="显示")
 
-    def _collect_env_lines(self) -> list[str]:
-        return [f"{key}={value}" for key, value in self._collect_env_updates().items()]
-
-    def _collect_env_updates(self) -> dict[str, str]:
-        """收集配置项键值。"""
-        return {
-            "API_PROVIDER": self.provider_var.get(),
-            "OPENAI_API_KEY": self.openai_key_var.get(),
-            "OPENAI_API_BASE": self.openai_base_var.get(),
-            "OPENAI_MODEL": self.openai_model_var.get(),
-            "GEMINI_API_KEY": self.gemini_key_var.get(),
-            "GEMINI_MODEL": self.gemini_model_var.get(),
-            "ZHIPU_API_KEY": self.zhipu_key_var.get(),
-            "ZHIPU_API_BASE": self.zhipu_base_var.get(),
-            "ZHIPU_MODEL": self.zhipu_model_var.get(),
-            "AIHUBMIX_API_KEY": self.aihubmix_key_var.get(),
-            "AIHUBMIX_API_BASE": self.aihubmix_base_var.get(),
-            "AIHUBMIX_MODEL": self.aihubmix_model_var.get(),
-            "TARGET_TOKENS_PER_CHUNK": self.chunk_size_var.get(),
-            "PARALLEL_LIMIT": self.parallel_limit_var.get(),
-            "MAX_RETRY": self.max_retry_var.get(),
-            "USE_PROXY": "true" if self.proxy_enabled_var.get() else "false",
-            "PROXY_URL": self.proxy_url_var.get(),
-        }
-
-    @staticmethod
-    def _normalize_env_value(raw_value: str) -> str:
-        """归一化 env 值用于比较。"""
-        value = raw_value.strip()
-        if len(value) >= 2 and value[0] == value[-1] and value[0] in {'"', "'"}:
-            return value[1:-1]
-        return value
-
-    @staticmethod
-    def _format_updated_value(original_value: str, new_value: str) -> str:
-        """在保留原引号风格的前提下更新值。"""
-        stripped = original_value.strip()
-        if len(stripped) >= 2 and stripped[0] == stripped[-1] and stripped[0] in {'"', "'"}:
-            quote = stripped[0]
-            return f"{quote}{new_value}{quote}"
-        return new_value
-
-    def _update_env_file(self, env_file: Path, updates: dict[str, str]) -> None:
-        """仅更新变更项，保留注释和未改动行。"""
-        if not env_file.exists():
-            env_file.write_text(
-                "\n".join(f"{key}={value}" for key, value in updates.items()) + "\n",
-                encoding="utf-8",
-            )
-            return
-
-        lines = env_file.read_text(encoding="utf-8").splitlines()
-        updated_lines: list[str] = []
-        seen_keys: set[str] = set()
-
-        for line in lines:
-            match = ENV_LINE_PATTERN.match(line)
-            if not match:
-                updated_lines.append(line)
-                continue
-
-            key = match.group("key")
-            if key not in updates:
-                updated_lines.append(line)
-                continue
-
-            seen_keys.add(key)
-            new_value = updates[key]
-            current_value = self._normalize_env_value(match.group("value"))
-            if current_value == new_value:
-                updated_lines.append(line)
-                continue
-
-            replaced = (
-                f"{match.group('prefix')}{key}{match.group('sep')}"
-                f"{self._format_updated_value(match.group('value'), new_value)}"
-                f"{self._normalize_comment_spacing(match.group('comment'))}"
-            )
-            updated_lines.append(replaced)
-
-        for key, value in updates.items():
-            if key not in seen_keys:
-                updated_lines.append(f"{key}={value}")
-
-        env_file.write_text("\n".join(updated_lines) + "\n", encoding="utf-8")
-
-    @staticmethod
-    def _normalize_comment_spacing(comment: str) -> str:
-        """确保行内注释前有一个空格。"""
-        stripped = comment.lstrip()
-        if not stripped:
-            return comment
-        if stripped.startswith("#"):
-            return f" {stripped}"
-        return comment
-
-    def _on_save(self) -> None:
-        """保存配置到项目根目录 `.env`。"""
+    def _on_save(self):
+        """保存配置"""
         from tkinter import messagebox
 
-        try:
-            env_file = Path(".env")
-            self._update_env_file(env_file, self._collect_env_updates())
-            _refresh_config_cache()
-            messagebox.showinfo("成功", "配置已保存。请重启应用以使配置生效。")
-            self.destroy()
-        except Exception as exc:  # noqa: BLE001
-            logger.error(f"保存配置失败: {exc}")
-            messagebox.showerror("错误", f"保存配置失败: {exc}")
+        # 收集配置
+        config_lines = []
 
-    def _on_export(self) -> None:
-        """导出配置到指定路径。"""
+        # API 配置
+        config_lines.append(f"API_PROVIDER={self.provider_var.get()}")
+        config_lines.append(f"OPENAI_API_KEY={self.openai_key_var.get()}")
+        config_lines.append(f"OPENAI_API_BASE={self.openai_base_var.get()}")
+        config_lines.append(f"OPENAI_MODEL={self.openai_model_var.get()}")
+        config_lines.append(f"GEMINI_API_KEY={self.gemini_key_var.get()}")
+        config_lines.append(f"GEMINI_MODEL={self.gemini_model_var.get()}")
+        config_lines.append(f"ZHIPU_API_KEY={self.zhipu_key_var.get()}")
+        config_lines.append(f"ZHIPU_API_BASE={self.zhipu_base_var.get()}")
+        config_lines.append(f"ZHIPU_MODEL={self.zhipu_model_var.get()}")
+        config_lines.append(f"AIHUBMIX_API_KEY={self.aihubmix_key_var.get()}")
+        config_lines.append(f"AIHUBMIX_API_BASE={self.aihubmix_base_var.get()}")
+        config_lines.append(f"AIHUBMIX_MODEL={self.aihubmix_model_var.get()}")
+
+        # 处理配置
+        config_lines.append(f"TARGET_TOKENS_PER_CHUNK={self.chunk_size_var.get()}")
+        config_lines.append(f"PARALLEL_LIMIT={self.parallel_limit_var.get()}")
+        config_lines.append(f"MAX_RETRY={self.max_retry_var.get()}")
+
+        # 代理配置
+        if self.proxy_enabled_var.get():
+            config_lines.append(f"HTTP_PROXY={self.proxy_url_var.get()}")
+            config_lines.append(f"HTTPS_PROXY={self.proxy_url_var.get()}")
+
+        # 写入 .env 文件
+        env_file = Path(".env")
+        try:
+            # 备份现有配置
+            if env_file.exists():
+                backup_file = Path(".env.backup")
+                env_file.rename(backup_file)
+
+            # 写入新配置
+            env_file.write_text("\n".join(config_lines) + "\n", encoding="utf-8")
+
+            messagebox.showinfo("成功", "配置已保存。请重启应用以使配置生效。")
+            logger.info("配置已保存到 .env 文件")
+
+            # 刷新配置缓存
+            _refresh_config_cache()
+
+            self.destroy()
+
+        except Exception as e:
+            logger.error(f"保存配置失败: {e}")
+            messagebox.showerror("错误", f"保存配置失败: {e}")
+
+    def _on_export(self):
+        """导出配置"""
         from tkinter import filedialog, messagebox
 
         filepath = filedialog.asksaveasfilename(
@@ -310,12 +334,42 @@ class ConfigDialog(ctk.CTkToplevel):
             filetypes=[("环境变量文件", "*.env"), ("所有文件", "*.*")],
             title="导出配置",
         )
-        if not filepath:
-            return
 
-        try:
-            Path(filepath).write_text("\n".join(self._collect_env_lines()) + "\n", encoding="utf-8")
-            messagebox.showinfo("成功", f"配置已导出到: {filepath}")
-        except Exception as exc:  # noqa: BLE001
-            logger.error(f"导出配置失败: {exc}")
-            messagebox.showerror("错误", f"导出配置失败: {exc}")
+        if filepath:
+            try:
+                # 收集配置
+                config_lines = []
+
+                # API 配置
+                config_lines.append(f"API_PROVIDER={self.provider_var.get()}")
+                config_lines.append(f"OPENAI_API_KEY={self.openai_key_var.get()}")
+                config_lines.append(f"OPENAI_API_BASE={self.openai_base_var.get()}")
+                config_lines.append(f"OPENAI_MODEL={self.openai_model_var.get()}")
+                config_lines.append(f"GEMINI_API_KEY={self.gemini_key_var.get()}")
+                config_lines.append(f"GEMINI_MODEL={self.gemini_model_var.get()}")
+                config_lines.append(f"ZHIPU_API_KEY={self.zhipu_key_var.get()}")
+                config_lines.append(f"ZHIPU_API_BASE={self.zhipu_base_var.get()}")
+                config_lines.append(f"ZHIPU_MODEL={self.zhipu_model_var.get()}")
+                config_lines.append(f"AIHUBMIX_API_KEY={self.aihubmix_key_var.get()}")
+                config_lines.append(f"AIHUBMIX_API_BASE={self.aihubmix_base_var.get()}")
+                config_lines.append(f"AIHUBMIX_MODEL={self.aihubmix_model_var.get()}")
+
+                # 处理配置
+                config_lines.append(f"TARGET_TOKENS_PER_CHUNK={self.chunk_size_var.get()}")
+                config_lines.append(f"PARALLEL_LIMIT={self.parallel_limit_var.get()}")
+                config_lines.append(f"MAX_RETRY={self.max_retry_var.get()}")
+
+                # 代理配置
+                if self.proxy_enabled_var.get():
+                    config_lines.append(f"HTTP_PROXY={self.proxy_url_var.get()}")
+                    config_lines.append(f"HTTPS_PROXY={self.proxy_url_var.get()}")
+
+                # 写入文件
+                Path(filepath).write_text("\n".join(config_lines) + "\n", encoding="utf-8")
+
+                messagebox.showinfo("成功", f"配置已导出到: {filepath}")
+                logger.info(f"配置已导出到: {filepath}")
+
+            except Exception as e:
+                logger.error(f"导出配置失败: {e}")
+                messagebox.showerror("错误", f"导出配置失败: {e}")

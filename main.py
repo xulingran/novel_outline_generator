@@ -58,7 +58,7 @@ class NovelOutlineApp:
             print(f"\n❌ 发生未知错误: {e}")
             print("请查看日志文件 novel_outline.log 获取详细信息")
             print("\n提示：如需使用 Web UI，请确认已安装 fastapi/uvicorn 等依赖，并选择模式 1。")
-            print("提示：如需使用 GUI，请确认已安装 customtkinter 依赖，并选择模式 3。")
+            print("提示：如需使用 GUI 桌面应用，请确认已安装 customtkinter 依赖，并选择模式 3。")
 
     def _print_welcome(self) -> None:
         """打印欢迎信息"""
@@ -138,13 +138,16 @@ class NovelOutlineApp:
             print(f"❌ 启动 Web UI 失败: {e}")
 
     def _start_gui(self) -> None:
-        """启动 GUI 桌面应用。"""
+        """启动 GUI 桌面应用"""
         try:
+            print("\n🚀 正在启动 GUI 桌面应用...")
+
+            # 导入并启动 GUI
             from gui.main_window import MainWindow
 
-            print("\n🚀 正在启动 GUI 桌面应用...")
             app = MainWindow()
             app.mainloop()
+
         except ImportError as e:
             print("❌ 启动失败：未安装 customtkinter。请先运行: pip install -r requirements.txt")
             print(f"   详细错误: {e}")

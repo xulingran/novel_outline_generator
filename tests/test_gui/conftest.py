@@ -1,198 +1,245 @@
-"""GUI 测试共用 fixtures。"""
+"""
+GUI 测试配置和 fixtures
+
+提供 GUI 测试所需的共享 fixtures 和工具函数。
+"""
 
 import asyncio
 import sys
-import types
-from collections.abc import Iterator
 from pathlib import Path
+from typing import AsyncIterator, Iterator
 
 import pytest
+from pytest_mock import MockerFixture
 
 
-class _BaseWidget:
-    def __init__(self, *args, **kwargs):
-        self._config = dict(kwargs)
-        self._after_jobs: dict[str, tuple[int, object]] = {}
+# 创建模拟的 customtkinter 模块（用于没有 tkinter 的环境）
+class MockCTk:
+    """Mock CustomTkinter for testing without GUI"""
 
-    def pack(self, *args, **kwargs):
-        return None
-
-    def pack_forget(self):
-        return None
-
-    def configure(self, **kwargs):
-        self._config.update(kwargs)
-
-    def cget(self, key):
-        return self._config.get(key)
-
-    def after(self, _delay, callback):
-        job_id = f"job-{len(self._after_jobs) + 1}"
-        self._after_jobs[job_id] = (_delay, callback)
-        return job_id
-
-    def after_cancel(self, job_id):
-        self._after_jobs.pop(job_id, None)
-
-
-class MockCTkModule(types.ModuleType):
-    class CTk(_BaseWidget):
+    class CTk:
         def __init__(self, *args, **kwargs):
-            super().__init__(*args, **kwargs)
             self._title = ""
             self._geometry = ""
-            self._protocols = {}
-
-        def title(self, text=None):
-            if text is not None:
-                self._title = text
-            return self._title
-
-        def geometry(self, text=None):
-            if text is not None:
-                self._geometry = text
-            return self._geometry
-
-        def protocol(self, name, callback):
-            self._protocols[name] = callback
 
         def mainloop(self):
-            return None
-
-        def grab_set(self):
-            return None
+            pass
 
         def quit(self):
-            return None
+            pass
 
-        def destroy(self):
-            return None
+        def title(self, title: str = None):
+            if title is not None:
+                self._title = title
+            return self._title
+
+        def geometry(self, geometry: str = None):
+            if geometry is not None:
+                self._geometry = geometry
+            return self._geometry
+
+        def grab_set(self):
+            pass
+
+        def pack(self, *args, **kwargs):
+            """Add pack method to base CTk class for all widgets"""
+            pass
+
+        def pack_forget(self):
+            pass
 
     class CTkToplevel(CTk):
-        pass
+        def __init__(self, *args, **kwargs):
+            super().__init__(*args, **kwargs)
+            self.title = ""
 
-    class CTkFrame(_BaseWidget):
-        pass
+        def destroy(self):
+            pass
+
+    class CTkFrame(CTk):
+        def __init__(self, *args, **kwargs):
+            super().__init__(*args, **kwargs)
+            self.children = []
+
+        def pack(self, *args, **kwargs):
+            pass
+
+        def pack_forget(self):
+            pass
 
     class CTkScrollableFrame(CTkFrame):
         pass
 
-    class CTkTabview(_BaseWidget):
+    class CTkTabview(CTk):
         def __init__(self, *args, **kwargs):
             super().__init__(*args, **kwargs)
-            self._tabs = {}
+            self.tabs = {}
 
-        def add(self, name):
-            self._tabs[name] = MockCTkModule.CTkFrame()
+        def add(self, name: str):
+            self.tabs[name] = None
 
-        def tab(self, name):
-            return self._tabs[name]
+        def tab(self, name: str):
+            return self.tabs.get(name)
 
-    class CTkLabel(_BaseWidget):
-        pass
-
-    class CTkButton(_BaseWidget):
+    class CTkLabel(CTk):
         def __init__(self, *args, **kwargs):
             super().__init__(*args, **kwargs)
-            self.command = kwargs.get("command")
+            self.text = kwargs.get("text", "")
 
-    class CTkEntry(_BaseWidget):
+        def configure(self, **kwargs):
+            if "text" in kwargs:
+                self.text = kwargs["text"]
+
+    class CTkButton(CTk):
         def __init__(self, *args, **kwargs):
             super().__init__(*args, **kwargs)
-            self.textvariable = kwargs.get("textvariable")
+            self.command = kwargs.get("command", None)
+            self.state = kwargs.get("state", "normal")
+
+        def configure(self, **kwargs):
+            if "state" in kwargs:
+                self.state = kwargs["state"]
+
+    class CTkEntry(CTk):
+        def __init__(self, *args, **kwargs):
+            super().__init__(*args, **kwargs)
+            self.textvariable = kwargs.get("textvariable", None)
 
         def get(self):
             return self.textvariable.get() if self.textvariable else ""
 
-    class CTkProgressBar(_BaseWidget):
+    class CTkProgressBar(CTk):
         def __init__(self, *args, **kwargs):
             super().__init__(*args, **kwargs)
             self._value = 0.0
+            self.mode = "determinate"
 
-        def set(self, value):
+        def set(self, value: float):
             self._value = value
 
         def get(self):
             return self._value
 
+        def configure(self, **kwargs):
+            if "mode" in kwargs:
+                self.mode = kwargs["mode"]
+
         def start(self):
-            return None
+            pass
 
         def stop(self):
-            return None
+            pass
 
-    class CTkOptionMenu(_BaseWidget):
+    class CTkOptionMenu(CTk):
         def __init__(self, *args, **kwargs):
             super().__init__(*args, **kwargs)
-            self.variable = kwargs.get("variable")
+            self.values = kwargs.get("values", [])
+            self.variable = kwargs.get("variable", None)
 
-        def set(self, value):
+        def set(self, value: str):
             if self.variable:
                 self.variable.set(value)
 
-    class CTkCheckBox(_BaseWidget):
-        pass
+    class CTkCheckBox(CTk):
+        def __init__(self, *args, **kwargs):
+            super().__init__(*args, **kwargs)
+            self.variable = kwargs.get("variable", None)
 
-    class CTkTextbox(_BaseWidget):
+    class CTkTextbox(CTk):
         def __init__(self, *args, **kwargs):
             super().__init__(*args, **kwargs)
             self.content = ""
 
-        def insert(self, _index, text):
+        def insert(self, index: str, text: str):
             self.content += text
 
-        def delete(self, _start, _end):
+        def delete(self, start: str, end: str):
             self.content = ""
 
-        def get(self, _start, _end):
+        def get(self, start: str, end: str):
             return self.content
 
-        def see(self, _index):
-            return None
+        def see(self, index: str):
+            pass
+
+        def index(self, index: str):
+            return "1.0"
 
     class CTkFont:
         def __init__(self, *args, **kwargs):
             self.size = kwargs.get("size", 12)
+            self.weight = kwargs.get("weight", "normal")
+
+    @staticmethod
+    def set_appearance_mode(mode: str):
+        pass
+
+    @staticmethod
+    def set_default_color_theme(theme: str):
+        pass
 
     class StringVar:
-        def __init__(self, value=""):
+        def __init__(self, value: str = ""):
+            self._value = value
+
+        def set(self, value: str):
             self._value = value
 
         def get(self):
             return self._value
 
-        def set(self, value):
-            self._value = value
-
-    class BooleanVar(StringVar):
-        def __init__(self, value=False):
-            super().__init__(value)
+    class IntVar(StringVar):
+        def __init__(self, value: int = 0):
+            super().__init__(str(value))
 
         def get(self):
-            return bool(self._value)
+            return int(self._value)
 
-    @staticmethod
-    def set_appearance_mode(_mode):
-        return None
+    class DoubleVar(StringVar):
+        def __init__(self, value: float = 0.0):
+            super().__init__(str(value))
 
-    @staticmethod
-    def set_default_color_theme(_theme):
-        return None
+        def get(self):
+            return float(self._value)
+
+    class BooleanVar(StringVar):
+        def __init__(self, value: bool = False):
+            super().__init__(str(value))
+
+        def get(self):
+            return self._value.lower() == "true"
+
+        def set(self, value: bool):
+            self._value = str(value)
 
 
-ctk = MockCTkModule("customtkinter")
-sys.modules.setdefault("customtkinter", ctk)
+# 检测 GUI 是否可用
+GUI_AVAILABLE = True
+
+try:
+    import tkinter
+    # 测试 tkinter 是否真正可用
+    test_tk = tkinter.Tk()
+    test_tk.destroy()
+    # 尝试导入 customtkinter
+    import customtkinter as ctk
+except Exception:
+    GUI_AVAILABLE = False
+    # 如果不可用，将模拟模块添加到 sys.modules
+    sys.modules["customtkinter"] = MockCTk
+    ctk = MockCTk
 
 
 @pytest.fixture
 def skip_if_no_gui():
-    """兼容旧测试接口。"""
-    return None
+    """如果 GUI 不可用则跳过测试"""
+    if not GUI_AVAILABLE:
+        pytest.skip("GUI (customtkinter/tkinter) not available")
 
 
 @pytest.fixture
 def event_loop() -> Iterator[asyncio.AbstractEventLoop]:
-    """提供独立事件循环。"""
+    """创建事件循环用于异步测试"""
     loop = asyncio.new_event_loop()
     yield loop
     loop.close()
@@ -200,11 +247,14 @@ def event_loop() -> Iterator[asyncio.AbstractEventLoop]:
 
 @pytest.fixture
 def temp_log_file(tmp_path: Path) -> Path:
-    """创建临时日志文件。"""
+    """创建临时日志文件"""
     log_file = tmp_path / "test.log"
     log_file.write_text(
-        "2025-01-31 10:00:00 - test - INFO - Test message\n"
-        "2025-01-31 10:00:01 - test - ERROR - Error message\n",
+        "2025-01-31 10:00:00 - test - INFO - Test message 1\n"
+        "2025-01-31 10:00:01 - test - DEBUG - Debug message\n"
+        "2025-01-31 10:00:02 - test - WARNING - Warning message\n"
+        "2025-01-31 10:00:03 - test - ERROR - Error message\n"
+        "2025-01-31 10:00:04 - test - INFO - Test message 2\n",
         encoding="utf-8",
     )
     return log_file
@@ -212,20 +262,27 @@ def temp_log_file(tmp_path: Path) -> Path:
 
 @pytest.fixture
 def temp_test_file(tmp_path: Path) -> Path:
-    """创建临时文本文件。"""
-    file_path = tmp_path / "test.txt"
-    file_path.write_text("第一章\n这是一段测试文本。\n", encoding="utf-8")
-    return file_path
+    """创建临时测试文件"""
+    test_file = tmp_path / "test_novel.txt"
+    test_file.write_text(
+        "第一章 开始\n这是第一章的内容。\n\n"
+        "第二章 发展\n这是第二章的内容。\n\n"
+        "第三章 高潮\n这是第三章的内容。\n\n"
+        "第四章 结局\n这是第四章的内容。\n",
+        encoding="utf-8",
+    )
+    return test_file
 
 
-def create_mock_progress_data() -> dict[str, object]:
-    """构造模拟进度数据。"""
+def create_mock_progress_data() -> dict:
+    """创建模拟的进度数据"""
     return {
         "total_chunks": 10,
         "completed_chunks": 5,
         "failed_chunks": 1,
-        "partial_chunks": 1,
-        "phase": "processing",
-        "eta_seconds": 60,
+        "partial_chunks": 0,
+        "phase": "处理中",
+        "progress": 0.5,
+        "eta_seconds": 120,
         "eta_confidence": 0.8,
     }

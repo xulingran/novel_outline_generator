@@ -1,9 +1,13 @@
-"""文件选择组件。"""
+"""
+文件选择器组件
+
+提供文件浏览、文件信息显示、token 预估等功能。
+"""
 
 import logging
 from collections.abc import Callable
+from typing import Optional, Callable
 from pathlib import Path
-from typing import Any
 
 import customtkinter as ctk
 
@@ -14,69 +18,91 @@ logger = logging.getLogger(__name__)
 
 
 class FileSelector(ctk.CTkFrame):
-    """提供文件选择与基础信息展示。"""
+    """
+    文件选择器组件
+
+    功能：
+    - 文件浏览按钮
+    - 文件信息显示（大小、修改时间、token 数量）
+    - 预估块数显示
+    """
 
     def __init__(
         self,
-        master: Any,
+        master,
         title: str = "文件选择",
         file_types: list[tuple[str, str]] | None = None,
         on_file_selected: Callable[[Path], None] | None = None,
-        **kwargs: Any,
-    ) -> None:
+        **kwargs,
+    ):
         super().__init__(master, **kwargs)
+
         self.title = title
         self.file_types = file_types or [
             ("文本文件", "*.txt"),
             ("Markdown 文件", "*.md"),
             ("所有文件", "*.*"),
         ]
-        if not self.file_types:
-            self.file_types = [
-                ("文本文件", "*.txt"),
-                ("Markdown 文件", "*.md"),
-                ("所有文件", "*.*"),
-            ]
         self.on_file_selected = on_file_selected
         self.current_file: Path | None = None
+
         self._setup_ui()
 
-    def _setup_ui(self) -> None:
+    def _setup_ui(self):
+        """设置 UI"""
+        # 标题
         title_label = ctk.CTkLabel(self, text=self.title, font=ctk.CTkFont(size=16, weight="bold"))
         title_label.pack(pady=(10, 5))
 
+        # 文件路径显示
         self.file_path_label = ctk.CTkLabel(self, text="未选择文件", text_color="gray")
         self.file_path_label.pack(pady=5)
 
-        info_frame = ctk.CTkFrame(self, fg_color="transparent")
-        info_frame.pack(pady=5, fill="x")
+        # 文件信息显示
+        self.file_info_frame = ctk.CTkFrame(self, fg_color="transparent")
+        self.file_info_frame.pack(pady=5, fill="x")
 
-        self.size_label = ctk.CTkLabel(info_frame, text="大小: --", width=200)
+        # 大小
+        self.size_label = ctk.CTkLabel(self.file_info_frame, text="大小: --", width=200)
         self.size_label.pack(side="left", padx=5)
 
-        self.tokens_label = ctk.CTkLabel(info_frame, text="Tokens: --", width=200)
+        # Tokens
+        self.tokens_label = ctk.CTkLabel(self.file_info_frame, text="Tokens: --", width=200)
         self.tokens_label.pack(side="left", padx=5)
 
-        self.chunks_label = ctk.CTkLabel(info_frame, text="预估块数: --", width=150)
+        # 预估块数
+        self.chunks_label = ctk.CTkLabel(self.file_info_frame, text="预估块数: --", width=150)
         self.chunks_label.pack(side="left", padx=5)
 
-        self.mtime_label = ctk.CTkLabel(info_frame, text="", text_color="gray", width=200)
+        # 修改时间
+        self.mtime_label = ctk.CTkLabel(self.file_info_frame, text="", text_color="gray", width=200)
         self.mtime_label.pack(side="left", padx=5)
 
-        self.select_button = ctk.CTkButton(
-            self, text="选择文件", command=self._on_select_file, width=120
-        )
-        self.select_button.pack(pady=(10, 10))
+        # 选择按钮
+        button_frame = ctk.CTkFrame(self, fg_color="transparent")
+        button_frame.pack(pady=(10, 10))
 
-    def _on_select_file(self) -> None:
+        self.select_button = ctk.CTkButton(
+            button_frame, text="选择文件", command=self._on_select_file, width=120
+        )
+        self.select_button.pack()
+
+    def _on_select_file(self):
+        """选择文件事件处理"""
         from tkinter import filedialog
 
         filepath = filedialog.askopenfilename(filetypes=self.file_types, title="选择要处理的文件")
+
         if filepath:
             self.set_file(Path(filepath))
 
-    def set_file(self, filepath: Path) -> None:
-        """设置当前文件并更新展示。"""
+    def set_file(self, filepath: Path):
+        """
+        设置当前文件
+
+        Args:
+            filepath: 文件路径
+        """
         if not filepath.exists():
             logger.error(f"文件不存在: {filepath}")
             return
@@ -85,40 +111,57 @@ class FileSelector(ctk.CTkFrame):
         self.file_path_label.configure(text=f"文件: {filepath.name}")
         self._update_file_info()
 
+        # 回调
         if self.on_file_selected:
             self.on_file_selected(filepath)
 
-    def _update_file_info(self) -> None:
+        logger.info(f"选择文件: {filepath}")
+
+    def _update_file_info(self):
+        """更新文件信息显示"""
         if not self.current_file or not self.current_file.exists():
             return
 
-        stat = self.current_file.stat()
-        size_mb = stat.st_size / (1024 * 1024)
-        self.size_label.configure(text=f"大小: {size_mb:.2f} MB")
-
         try:
-            content = self.current_file.read_text(encoding="utf-8")
-            token_count = count_tokens(content)
-            self.tokens_label.configure(text=f"Tokens: {token_count:,}")
-            chunk_target = max(get_processing_config().target_tokens_per_chunk, 1)
-            chunk_count = max(1, (token_count + chunk_target - 1) // chunk_target)
-            self.chunks_label.configure(text=f"预估块数: {chunk_count}")
-        except Exception as exc:  # noqa: BLE001
-            logger.warning(f"文件统计失败: {exc}")
-            self.tokens_label.configure(text="Tokens: --")
-            self.chunks_label.configure(text="预估块数: --")
+            stat = self.current_file.stat()
+            size = stat.st_size
+            mtime = stat.st_mtime
 
-        from datetime import datetime
+            # 大小
+            size_mb = size / (1024 * 1024)
+            self.size_label.configure(text=f"大小: {size_mb:.2f} MB")
 
-        mtime_str = datetime.fromtimestamp(stat.st_mtime).strftime("%Y-%m-%d %H:%M")
-        self.mtime_label.configure(text=mtime_str)
+            # Token 数量
+            try:
+                content = self.current_file.read_text(encoding="utf-8")
+                token_count = count_tokens(content)
+                self.tokens_label.configure(text=f"Tokens: {token_count:,}")
+
+                # 预估块数
+                proc_config = get_processing_config()
+                chunk_count = (token_count // proc_config.target_tokens_per_chunk) + 1
+                self.chunks_label.configure(text=f"预估块数: {chunk_count}")
+            except Exception as e:
+                logger.error(f"计算 token 数量失败: {e}")
+                self.tokens_label.configure(text="Tokens: --")
+                self.chunks_label.configure(text="预估块数: --")
+
+            # 修改时间
+            from datetime import datetime
+
+            mtime_dt = datetime.fromtimestamp(mtime)
+            mtime_str = mtime_dt.strftime("%Y-%m-%d %H:%M")
+            self.mtime_label.configure(text=mtime_str)
+
+        except Exception as e:
+            logger.error(f"更新文件信息失败: {e}")
 
     def get_file(self) -> Path | None:
-        """获取当前已选择文件。"""
+        """获取当前选择的文件"""
         return self.current_file
 
-    def clear(self) -> None:
-        """清空当前选择。"""
+    def clear(self):
+        """清空选择"""
         self.current_file = None
         self.file_path_label.configure(text="未选择文件")
         self.size_label.configure(text="大小: --")
