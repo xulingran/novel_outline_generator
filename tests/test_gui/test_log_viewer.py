@@ -5,7 +5,7 @@
 """
 
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -244,10 +244,7 @@ class TestLogViewerAutoRefresh:
 class TestLogViewerClear:
     """测试清空日志功能"""
 
-    @pytest.mark.skipif(
-        not hasattr(ctk, "CTkTextbox"),
-        reason="CustomTkinter not available"
-    )
+    @pytest.mark.skipif(not hasattr(ctk, "CTkTextbox"), reason="CustomTkinter not available")
     def test_clear_log(self, log_viewer, temp_log_file: Path, tmp_path: Path):
         """测试清空日志文件"""
         # 在测试中不实际清空文件，只验证方法存在
@@ -279,10 +276,7 @@ class TestLogViewerSetLogFile:
 class TestLogViewerAppendLog:
     """测试追加日志功能"""
 
-    @pytest.mark.skipif(
-        not hasattr(ctk, "CTkTextbox"),
-        reason="CustomTkinter not available"
-    )
+    @pytest.mark.skipif(not hasattr(ctk, "CTkTextbox"), reason="CustomTkinter not available")
     def test_append_log(self, log_viewer):
         """测试追加日志消息"""
         # 验证方法存在

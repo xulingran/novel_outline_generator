@@ -12,6 +12,20 @@
 - **断点恢复**：支持失败重试、中断恢复
 - **代码质量**：Ruff、Black、Mypy 自动检查
 
+## 核心流程图
+
+```mermaid
+flowchart LR
+    A["输入文件"] --> B["FileService 读取/编码探测"]
+    B --> C["Splitter 分块（普通/流式）"]
+    C --> D["NovelProcessingService 并发处理块"]
+    D --> E["LLMService 调用模型（重试/熔断）"]
+    E --> F["ProgressService 持久化进度"]
+    D --> G["递归合并大纲"]
+    F --> H["可恢复继续处理"]
+    G --> I["输出最终大纲"]
+```
+
 ## 环境准备
 
 ### 1. 安装 Python 和 uv
@@ -176,6 +190,10 @@ uv run pre-commit install
 | `uv pip install -e ".[dev]"` | 安装项目及开发依赖 |
 | `uv run <command>` | 在虚拟环境中运行命令 |
 | `uv pip freeze` | 查看已安装的包 |
+
+## 依赖来源说明
+- `pyproject.toml` + `uv.lock` 是依赖的权威来源。
+- `requirements.txt` 仅用于兼容旧工作流，不作为主依赖维护入口。
 
 ## 目录结构
 ```

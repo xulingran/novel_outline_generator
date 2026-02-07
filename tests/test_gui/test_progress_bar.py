@@ -9,7 +9,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from gui.widgets.progress_bar import ProgressBar
-from tests.test_gui.conftest import ctk, create_mock_progress_data
+from tests.test_gui.conftest import create_mock_progress_data, ctk
 
 
 @pytest.fixture
@@ -36,10 +36,7 @@ class TestProgressBar:
         assert bar.eta_seconds == 0
         assert bar.eta_confidence == 0.0
 
-    @pytest.mark.skipif(
-        not hasattr(ctk, "CTkProgressBar"),
-        reason="CustomTkinter not available"
-    )
+    @pytest.mark.skipif(not hasattr(ctk, "CTkProgressBar"), reason="CustomTkinter not available")
     def test_update_progress_basic(self, progress_bar):
         """测试基本进度更新"""
         progress_bar.update_progress(
@@ -56,10 +53,7 @@ class TestProgressBar:
         assert progress_bar.partial_chunks == 0
         assert progress_bar.current_phase == "处理中"
 
-    @pytest.mark.skipif(
-        not hasattr(ctk, "CTkProgressBar"),
-        reason="CustomTkinter not available"
-    )
+    @pytest.mark.skipif(not hasattr(ctk, "CTkProgressBar"), reason="CustomTkinter not available")
     def test_update_progress_with_eta(self, progress_bar):
         """测试带 ETA 的进度更新"""
         progress_bar.update_progress(
@@ -76,10 +70,7 @@ class TestProgressBar:
         assert progress_bar.eta_confidence == 0.9
         assert progress_bar.current_phase == "合并中"
 
-    @pytest.mark.skipif(
-        not hasattr(ctk, "CTkProgressBar"),
-        reason="CustomTkinter not available"
-    )
+    @pytest.mark.skipif(not hasattr(ctk, "CTkProgressBar"), reason="CustomTkinter not available")
     def test_reset(self, progress_bar):
         """测试重置进度"""
         # 先设置一些进度
@@ -152,37 +143,25 @@ class TestProgressBarETAFormatting:
 class TestProgressBarStatistics:
     """测试统计功能"""
 
-    @pytest.mark.skipif(
-        not hasattr(ctk, "CTkProgressBar"),
-        reason="CustomTkinter not available"
-    )
+    @pytest.mark.skipif(not hasattr(ctk, "CTkProgressBar"), reason="CustomTkinter not available")
     def test_completed_count(self, progress_bar):
         """测试完成计数"""
         progress_bar.update_progress(completed=10, total=20)
         assert progress_bar.completed_chunks == 10
 
-    @pytest.mark.skipif(
-        not hasattr(ctk, "CTkProgressBar"),
-        reason="CustomTkinter not available"
-    )
+    @pytest.mark.skipif(not hasattr(ctk, "CTkProgressBar"), reason="CustomTkinter not available")
     def test_failed_count(self, progress_bar):
         """测试失败计数"""
         progress_bar.update_progress(completed=8, total=10, failed=2)
         assert progress_bar.failed_chunks == 2
 
-    @pytest.mark.skipif(
-        not hasattr(ctk, "CTkProgressBar"),
-        reason="CustomTkinter not available"
-    )
+    @pytest.mark.skipif(not hasattr(ctk, "CTkProgressBar"), reason="CustomTkinter not available")
     def test_partial_count(self, progress_bar):
         """测试部分完成计数"""
         progress_bar.update_progress(completed=7, total=10, partial=1)
         assert progress_bar.partial_chunks == 1
 
-    @pytest.mark.skipif(
-        not hasattr(ctk, "CTkProgressBar"),
-        reason="CustomTkinter not available"
-    )
+    @pytest.mark.skipif(not hasattr(ctk, "CTkProgressBar"), reason="CustomTkinter not available")
     def test_all_statistics(self, progress_bar):
         """测试所有统计信息"""
         progress_bar.update_progress(
@@ -249,24 +228,16 @@ class TestProgressBarEdgeCases:
 class TestProgressBarProgressCalculation:
     """测试进度计算"""
 
-    @pytest.mark.skipif(
-        not hasattr(ctk, "CTkProgressBar"),
-        reason="CustomTkinter not available"
-    )
+    @pytest.mark.skipif(not hasattr(ctk, "CTkProgressBar"), reason="CustomTkinter not available")
     def test_progress_percentage(self, progress_bar):
         """测试进度百分比"""
         # 50%
         progress_bar.update_progress(completed=5, total=10)
         # 假设 get_progress 返回 0-1 之间的值
-        if hasattr(progress_bar, 'get_progress'):
-            progress = progress_bar.get_progress()
-            # 在模拟环境中可能无法正确工作
-            pass
+        if hasattr(progress_bar, "get_progress"):
+            assert isinstance(progress_bar.get_progress(), float)
 
-    @pytest.mark.skipif(
-        not hasattr(ctk, "CTkProgressBar"),
-        reason="CustomTkinter not available"
-    )
+    @pytest.mark.skipif(not hasattr(ctk, "CTkProgressBar"), reason="CustomTkinter not available")
     def test_progress_zero_denominator(self, progress_bar):
         """测试零分母情况"""
         # 避免除以零

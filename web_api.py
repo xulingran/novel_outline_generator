@@ -26,9 +26,66 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 from config import init_config
+from config import load_env_file as load_env_file_from_config
 from services.novel_processing_service import NovelProcessingService
 from services.task_queue import QueueTask, get_global_queue
 from services.token_estimator import estimate_tokens
+
+try:
+    from services.job_manager import JobManager
+except ModuleNotFoundError:
+    # 回退实现：防止部署遗漏模块时 API 因导入失败无法启动
+    class JobManager:
+        """内存任务管理器（回退实现）。"""
+
+        def __init__(self, max_jobs: int = 100, max_age_hours: int = 24) -> None:
+            self.max_jobs = max_jobs
+            self.max_age_hours = max_age_hours
+            self.jobs: dict[str, Any] = {}
+
+        def get(self, job_id: str) -> Any | None:
+            return self.jobs.get(job_id)
+
+        def set(self, job_id: str, job: Any) -> None:
+            self.jobs[job_id] = job
+
+        def values(self):
+            return self.jobs.values()
+
+        def cleanup_expired(self, now: float) -> int:
+            cutoff_time = now - self.max_age_hours * 3600
+            expired_ids = [
+                job_id for job_id, job in self.jobs.items() if job.created_at < cutoff_time
+            ]
+            for job_id in expired_ids:
+                del self.jobs[job_id]
+            return len(expired_ids)
+
+        def cleanup_excess(self) -> int:
+            if len(self.jobs) <= self.max_jobs:
+                return 0
+
+            over_limit = len(self.jobs) - self.max_jobs
+            removed = 0
+
+            def _by_age(statuses: tuple[str, ...]) -> list[tuple[str, Any]]:
+                return sorted(
+                    ((job_id, job) for job_id, job in self.jobs.items() if job.status in statuses),
+                    key=lambda item: item[1].created_at,
+                )
+
+            for statuses in (("success", "error"), ("pending",), ("running",)):
+                if over_limit <= 0:
+                    break
+                for job_id, _ in _by_age(statuses):
+                    if over_limit <= 0:
+                        break
+                    del self.jobs[job_id]
+                    over_limit -= 1
+                    removed += 1
+
+            return removed
+
 
 logger = logging.getLogger(__name__)
 
@@ -83,15 +140,7 @@ UPLOAD_FILES_PARAM = File(...)
 
 
 def load_env_file() -> dict[str, str]:
-    if not ENV_PATH.exists():
-        return {}
-    data: dict[str, str] = {}
-    for line in ENV_PATH.read_text(encoding="utf-8").splitlines():
-        if not line or line.strip().startswith("#") or "=" not in line:
-            continue
-        key, value = line.split("=", 1)
-        data[key.strip()] = value.strip()
-    return data
+    return load_env_file_from_config(str(ENV_PATH))
 
 
 def mask_value(key: str, value: str) -> str:
@@ -142,7 +191,8 @@ class Job:
 MAX_JOBS = 100
 JOB_MAX_AGE_HOURS = 24
 
-JOBS: dict[str, Job] = {}
+job_manager = JobManager(max_jobs=MAX_JOBS, max_age_hours=JOB_MAX_AGE_HOURS)
+JOBS: dict[str, Job] = job_manager.jobs
 _cleanup_task: asyncio.Task | None = None
 
 
@@ -222,35 +272,16 @@ def startup_cleanup_task() -> None:
 
 def cleanup_expired_jobs() -> None:
     """清理超过最大存活时间的job"""
-    cutoff_time = time.time() - JOB_MAX_AGE_HOURS * 3600
-    expired_ids = [job_id for job_id, job in JOBS.items() if job.created_at < cutoff_time]
-    for job_id in expired_ids:
-        del JOBS[job_id]
-    if expired_ids:
-        logger.debug(f"清理了 {len(expired_ids)} 个过期job")
+    job_manager.max_age_hours = JOB_MAX_AGE_HOURS
+    expired_count = job_manager.cleanup_expired(now=time.time())
+    if expired_count:
+        logger.debug(f"清理了 {expired_count} 个过期job")
 
 
 def cleanup_excess_jobs() -> None:
     """清理过多的job，防止内存泄漏"""
-    if len(JOBS) <= MAX_JOBS:
-        return
-
-    over_limit = len(JOBS) - MAX_JOBS
-
-    def _by_age(statuses):
-        return sorted(
-            ((job_id, job) for job_id, job in JOBS.items() if job.status in statuses),
-            key=lambda x: x[1].created_at,
-        )
-
-    for statuses in (("success", "error"), ("pending",), ("running",)):
-        if over_limit <= 0:
-            break
-        for job_id, _ in _by_age(statuses):
-            if over_limit <= 0:
-                break
-            del JOBS[job_id]
-            over_limit -= 1
+    job_manager.max_jobs = MAX_JOBS
+    job_manager.cleanup_excess()
 
 
 def _resolve_upload_path(path: str) -> Path | None:
@@ -458,7 +489,7 @@ async def _run_job(job: Job, req: ProcessRequest):
             current_upload = _resolve_upload_path(req.file_path)
             if current_upload:
                 active_uploads: set[Path] = set()
-                for other_job in JOBS.values():
+                for other_job in job_manager.values():
                     if other_job.id == job.id:
                         continue
                     if other_job.status not in {"pending", "running"}:
@@ -547,7 +578,7 @@ async def start_process(request: Request, req: ProcessRequest):
 
     job_id = str(uuid.uuid4())
     job = Job(id=job_id, file_path=req.file_path)
-    JOBS[job_id] = job
+    job_manager.set(job_id, job)
 
     asyncio.create_task(_run_job(job, req))
     return {"job_id": job_id}
@@ -564,7 +595,7 @@ def estimate(file_path: str):
 
 @app.get("/jobs/{job_id}")
 def get_job(job_id: str):
-    job = JOBS.get(job_id)
+    job = job_manager.get(job_id)
     if not job:
         raise HTTPException(status_code=404, detail="job 不存在")
     return {

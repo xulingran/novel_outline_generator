@@ -5,19 +5,20 @@
 小说大纲生成器 GUI 应用入口。
 """
 
-import sys
 import logging
+import sys
 
 # 添加项目根目录到路径
 from pathlib import Path
+
 project_root = Path(__file__).parent
 sys.path.insert(0, str(project_root))
 
 
 def main():
     """启动 GUI 应用"""
-    from gui.main_window import MainWindow
     from config import init_config
+    from gui.main_window import MainWindow
     from utils import setup_logging
 
     # 初始化日志
@@ -59,7 +60,6 @@ def main():
         restart_flag.unlink()
         logger.info("重启应用...")
         import os
-        import subprocess
 
         # 重启应用
         os.execv(sys.executable, [sys.executable] + sys.argv)

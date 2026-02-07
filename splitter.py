@@ -5,6 +5,7 @@
 
 import logging
 import re
+from collections.abc import Iterable, Iterator
 
 from config import ProcessingConfig, get_processing_config
 from exceptions import ProcessingError
@@ -62,6 +63,80 @@ class TextSplitter:
         except Exception as e:
             logger.error(f"分割文本失败: {e}")
             raise ProcessingError(f"分割文本失败: {str(e)}") from e
+
+    def split_text_stream(self, text_stream: Iterable[str]) -> Iterator[str]:
+        """
+        流式分割文本，避免一次性加载整本小说到内存。
+
+        Args:
+            text_stream: 文本片段迭代器
+
+        Yields:
+            str: 文本块
+        """
+        target_tokens = self.processing_config.target_tokens_per_chunk
+        current_chunk = ""
+        paragraph_buffer = ""
+        paragraph_separator = re.compile(r"\r?\n\r?\n")
+
+        for piece in text_stream:
+            if not piece:
+                continue
+            paragraph_buffer += piece
+
+            while True:
+                separator_match = paragraph_separator.search(paragraph_buffer)
+                if separator_match is None:
+                    break
+                paragraph = paragraph_buffer[: separator_match.start()]
+                paragraph_buffer = paragraph_buffer[separator_match.end() :]
+                paragraph = paragraph.strip()
+                if not paragraph:
+                    continue
+
+                if not current_chunk:
+                    candidate = paragraph
+                else:
+                    candidate = f"{current_chunk}\n\n{paragraph}"
+
+                if count_tokens(candidate) <= target_tokens:
+                    current_chunk = candidate
+                    continue
+
+                if current_chunk:
+                    yield current_chunk
+                    current_chunk = ""
+
+                if count_tokens(paragraph) > target_tokens:
+                    for chunk in self._split_by_tokens(paragraph):
+                        chunk = chunk.strip()
+                        if chunk:
+                            yield chunk
+                else:
+                    current_chunk = paragraph
+
+        tail = paragraph_buffer.strip()
+        if tail:
+            if current_chunk:
+                candidate = f"{current_chunk}\n\n{tail}"
+            else:
+                candidate = tail
+            if count_tokens(candidate) <= target_tokens:
+                current_chunk = candidate
+            else:
+                if current_chunk:
+                    yield current_chunk
+                    current_chunk = ""
+                if count_tokens(tail) > target_tokens:
+                    for chunk in self._split_by_tokens(tail):
+                        chunk = chunk.strip()
+                        if chunk:
+                            yield chunk
+                else:
+                    current_chunk = tail
+
+        if current_chunk:
+            yield current_chunk
 
     def _split_by_chapters(self, text: str) -> list[str]:
         """
@@ -173,7 +248,7 @@ class TextSplitter:
             # 解码tokens
             chunk_tokens = tokens[start:end]
             chunk_text = self.encoder.decode(chunk_tokens)
-            chunks.append(chunk_text.strip())
+            chunks.append(chunk_text)
 
             start = end
 
@@ -240,6 +315,20 @@ def split_text(text: str) -> list[str]:
     """
     splitter = get_splitter()
     return splitter.split_text(text)
+
+
+def split_text_stream(text_stream: Iterable[str]) -> Iterator[str]:
+    """
+    流式分割文本（向后兼容辅助函数）。
+
+    Args:
+        text_stream: 文本片段迭代器
+
+    Yields:
+        str: 文本块
+    """
+    splitter = get_splitter()
+    yield from splitter.split_text_stream(text_stream)
 
 
 # 保留旧函数以向后兼容

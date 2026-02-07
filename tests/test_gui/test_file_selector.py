@@ -5,7 +5,7 @@
 """
 
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -54,8 +54,7 @@ class TestFileSelector:
         assert selector.on_file_selected == callback
 
     @pytest.mark.skipif(
-        not hasattr(ctk, "CTk"),
-        reason="CustomTkinter not available for full GUI test"
+        not hasattr(ctk, "CTk"), reason="CustomTkinter not available for full GUI test"
     )
     def test_set_file_valid(self, temp_test_file: Path):
         """测试设置有效文件"""
@@ -68,8 +67,7 @@ class TestFileSelector:
         assert selector.current_file == temp_test_file
 
     @pytest.mark.skipif(
-        not hasattr(ctk, "CTk"),
-        reason="CustomTkinter not available for full GUI test"
+        not hasattr(ctk, "CTk"), reason="CustomTkinter not available for full GUI test"
     )
     def test_set_file_nonexistent(self, temp_test_file: Path):
         """测试设置不存在的文件"""
@@ -85,8 +83,7 @@ class TestFileSelector:
         assert selector.current_file is None
 
     @pytest.mark.skipif(
-        not hasattr(ctk, "CTk"),
-        reason="CustomTkinter not available for full GUI test"
+        not hasattr(ctk, "CTk"), reason="CustomTkinter not available for full GUI test"
     )
     def test_get_file(self, temp_test_file: Path):
         """测试获取当前文件"""
@@ -101,8 +98,7 @@ class TestFileSelector:
         assert selector.get_file() == temp_test_file
 
     @pytest.mark.skipif(
-        not hasattr(ctk, "CTk"),
-        reason="CustomTkinter not available for full GUI test"
+        not hasattr(ctk, "CTk"), reason="CustomTkinter not available for full GUI test"
     )
     def test_clear(self, temp_test_file: Path):
         """测试清空选择"""
@@ -144,8 +140,8 @@ class TestFileSelectorTokenEstimation:
 
     def test_chunk_estimation(self, temp_test_file: Path):
         """测试分块预估"""
-        from tokenizer import count_tokens
         from config import get_processing_config
+        from tokenizer import count_tokens
 
         config = get_processing_config()
         content = temp_test_file.read_text(encoding="utf-8")
@@ -225,7 +221,7 @@ class TestFileSelectorCallback:
         selector = FileSelector(master, on_file_selected=callback)
 
         # 模拟文件选择（直接调用内部方法）
-        if hasattr(selector, 'set_file'):
+        if hasattr(selector, "set_file"):
             # 在模拟环境中，set_file 方法可能不会真正工作
             # 这里我们只测试回调的设置
             assert selector.on_file_selected == callback

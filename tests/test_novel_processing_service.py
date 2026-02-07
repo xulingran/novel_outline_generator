@@ -17,22 +17,24 @@ from services.novel_processing_service import NovelProcessingService
 @pytest.fixture
 def mock_service():
     """创建一个完全mock的NovelProcessingService"""
-    with patch("services.llm_service.create_llm_service") as mock_create:
-        mock_create.return_value = MagicMock()
-        service = NovelProcessingService(progress_callback=MagicMock(), cancel_event=MagicMock())
-        # 设置所有必要的mock
-        service.llm_service = AsyncMock()
-        service.file_service = MagicMock()
-        service.progress_service = MagicMock()
-        service.eta_estimator = MagicMock()
-        service.processing_state = ProcessingState(file_path="test.txt", total_chunks=10)
-        service.total_prompt_tokens = 0
-        service.total_completion_tokens = 0
-        service.total_tokens = 0
-        service.force_complete = False
-        # 确保cancel_event.is_set()返回False
-        service.cancel_event.is_set.return_value = False
-        yield service
+    service = NovelProcessingService(
+        progress_callback=MagicMock(),
+        cancel_event=MagicMock(),
+        llm_service=AsyncMock(),
+    )
+    # 设置所有必要的mock
+    service.file_service = MagicMock()
+    service.file_service.get_file_size.return_value = 0
+    service.progress_service = MagicMock()
+    service.eta_estimator = MagicMock()
+    service.processing_state = ProcessingState(file_path="test.txt", total_chunks=10)
+    service.total_prompt_tokens = 0
+    service.total_completion_tokens = 0
+    service.total_tokens = 0
+    service.force_complete = False
+    # 确保cancel_event.is_set()返回False
+    service.cancel_event.is_set.return_value = False
+    yield service
 
 
 @pytest.fixture
@@ -219,6 +221,19 @@ class TestProcessNovel:
         assert mock_service.total_tokens == 150
 
 
+class TestDependencyInjection:
+    """测试依赖注入"""
+
+    def test_init_with_injected_llm_service(self):
+        """传入 llm_service 时不应调用默认工厂。"""
+        injected_llm = MagicMock()
+        with patch("services.novel_processing_service.create_llm_service") as mock_create:
+            service = NovelProcessingService(llm_service=injected_llm)
+
+        assert service.llm_service is injected_llm
+        mock_create.assert_not_called()
+
+
 class TestLoadAndValidateFile:
     """测试文件加载和验证"""
 
@@ -241,6 +256,32 @@ class TestLoadAndValidateFile:
 
         with pytest.raises(ProcessingError, match="文件内容为空"):
             await mock_service._load_and_validate_file("test.txt")
+
+
+class TestPrepareChunks:
+    """测试块准备逻辑（普通/流式）"""
+
+    @pytest.mark.asyncio
+    async def test_prepare_chunks_streaming_path(self, mock_service):
+        """大文件应走流式切块路径"""
+        sample_chunk = TextChunk(
+            id=1,
+            content="stream chunk",
+            token_count=10,
+            start_position=0,
+            end_position=12,
+        )
+        mock_service.file_service.get_file_size.return_value = (
+            mock_service.processing_config.stream_split_threshold_mb * 1024 * 1024
+        )
+        mock_service._prepare_chunks_streaming = MagicMock(return_value=([sample_chunk], "utf-8"))
+
+        chunks, encoding = await mock_service._prepare_chunks("test.txt")
+
+        assert len(chunks) == 1
+        assert chunks[0].content == "stream chunk"
+        assert encoding == "utf-8"
+        mock_service._prepare_chunks_streaming.assert_called_once_with("test.txt")
 
     @pytest.mark.asyncio
     async def test_load_and_validate_file_not_found(self, mock_service):
@@ -440,6 +481,7 @@ class TestProcessSingleChunk:
         mock_service.llm_service.call = AsyncMock(wraps=mock_call)
         mock_service.progress_service.update_chunk_completed = MagicMock()
         mock_service.eta_estimator.add_completion = MagicMock()
+        mock_service.processing_config.max_retry = 2
 
         chunk = TextChunk(id=1, content="test", token_count=10, start_position=0, end_position=4)
         sem = asyncio.Semaphore(5)
@@ -456,8 +498,8 @@ class TestProcessSingleChunk:
         result = await mock_service._process_single_chunk(chunk, sem, progress_data)
 
         assert result["chunk_id"] == 1
-        # 现在触发部分完成逻辑：1次初始失败 + 5次子块重试成功 = 6次调用
-        assert call_count == 6
+        # 首次失败后重试成功，共调用2次
+        assert call_count == 2
         # 验证返回结果包含plot数据（无论是完整还是部分完成）
         assert "plot" in result or "is_partial" in result
 
@@ -555,6 +597,21 @@ class TestProcessSingleChunk:
         assert mock_service.total_prompt_tokens == 100
         assert mock_service.total_completion_tokens == 50
         assert mock_service.total_tokens == 150
+
+
+class TestSplitChunkIntoSubChunks:
+    """测试失败块拆分逻辑"""
+
+    def test_split_chunk_avoids_empty_sub_chunks(self, mock_service):
+        """当 sub_chunk_count 大于文本长度时，不应产生空子块。"""
+        mock_service.processing_config.sub_chunk_count = 10
+        chunk = TextChunk(id=1, content="abc", token_count=3, start_position=0, end_position=3)
+
+        sub_chunks = mock_service._split_chunk_into_sub_chunks(chunk)
+
+        assert len(sub_chunks) == 3
+        assert all(sub_chunk.content for sub_chunk in sub_chunks)
+        assert "".join(sub_chunk.content for sub_chunk in sub_chunks) == "abc"
 
 
 class TestParseLLMResponse:

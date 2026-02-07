@@ -20,6 +20,8 @@ from exceptions import APIError, APIKeyError, RateLimitError
 
 logger = logging.getLogger(__name__)
 
+_LLM_PROVIDER_REGISTRY: dict[str, type["LLMService"]] = {}
+
 
 class ContentFilterError(APIError):
     """内容审查错误（不触发熔断器）"""
@@ -169,6 +171,23 @@ class LLMService(ABC):
         raise APIError(f"LLM API多次失败{chunk_info}", is_retryable=False)
 
 
+def register_llm_provider(provider: str):
+    """注册LLM服务提供商。"""
+    provider_key = provider.strip().lower()
+
+    def decorator(service_cls: type[LLMService]) -> type[LLMService]:
+        _LLM_PROVIDER_REGISTRY[provider_key] = service_cls
+        return service_cls
+
+    return decorator
+
+
+def get_registered_llm_providers() -> dict[str, type[LLMService]]:
+    """获取已注册LLM提供商。"""
+    return dict(_LLM_PROVIDER_REGISTRY)
+
+
+@register_llm_provider("openai")
 class OpenAIService(LLMService):
     """OpenAI服务实现"""
 
@@ -531,7 +550,7 @@ class AiHubMixService(LLMService):
 
     async def _call_api(self, prompt: str, **kwargs) -> LLMResponse:
         """调用AiHubMix API"""
-        import requests
+        import requests  # type: ignore[import-untyped]
 
         try:
             # 构建请求头
@@ -622,14 +641,14 @@ class AiHubMixService(LLMService):
 def create_llm_service() -> LLMService:
     """工厂函数：创建LLM服务实例"""
     api_config = get_api_config()
+    provider = api_config.provider.lower()
+    service_cls = _LLM_PROVIDER_REGISTRY.get(provider)
+    if service_cls is None:
+        providers = ", ".join(sorted(_LLM_PROVIDER_REGISTRY))
+        raise ValueError(f"不支持的API提供商: {api_config.provider}。可用提供商: {providers}")
+    return service_cls()
 
-    if api_config.provider == "openai":
-        return OpenAIService()
-    elif api_config.provider == "gemini":
-        return GeminiService()
-    elif api_config.provider == "zhipu":
-        return ZhipuService()
-    elif api_config.provider == "aihubmix":
-        return AiHubMixService()
-    else:
-        raise ValueError(f"不支持的API提供商: {api_config.provider}")
+
+register_llm_provider("gemini")(GeminiService)
+register_llm_provider("zhipu")(ZhipuService)
+register_llm_provider("aihubmix")(AiHubMixService)

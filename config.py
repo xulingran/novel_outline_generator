@@ -15,6 +15,23 @@ logger = logging.getLogger(__name__)
 SUPPORTED_API_PROVIDERS = ["openai", "gemini", "zhipu", "aihubmix"]
 
 
+def load_env_file(path: str = ".env") -> dict[str, str]:
+    """读取 .env 文件键值（仅解析 KEY=VALUE 行）。"""
+    env_path = os.path.abspath(path)
+    if not os.path.exists(env_path):
+        return {}
+
+    data: dict[str, str] = {}
+    with open(env_path, encoding="utf-8") as file_obj:
+        for line in file_obj:
+            line = line.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            key, value = line.split("=", 1)
+            data[key.strip()] = value.strip()
+    return data
+
+
 @dataclass
 class APIConfig:
     """API配置类"""
@@ -182,6 +199,13 @@ class ProcessingConfig:
     parallel_limit: int = field(default_factory=lambda: int(os.getenv("PARALLEL_LIMIT", "5")))
     max_retry: int = field(default_factory=lambda: int(os.getenv("MAX_RETRY", "5")))
     log_every: int = field(default_factory=lambda: int(os.getenv("LOG_EVERY", "1")))
+    sub_chunk_count: int = field(default_factory=lambda: int(os.getenv("SUB_CHUNK_COUNT", "5")))
+    retry_backoff_base: int = field(
+        default_factory=lambda: int(os.getenv("RETRY_BACKOFF_BASE", "1"))
+    )
+    stream_split_threshold_mb: int = field(
+        default_factory=lambda: int(os.getenv("STREAM_SPLIT_THRESHOLD_MB", "20"))
+    )
 
     # 代理配置
     use_proxy: bool = field(
@@ -209,6 +233,15 @@ class ProcessingConfig:
 
         if self.max_retry < 0:
             raise ConfigurationError("MAX_RETRY不能小于0")
+
+        if self.sub_chunk_count <= 0:
+            raise ConfigurationError("SUB_CHUNK_COUNT必须大于0")
+
+        if self.retry_backoff_base < 0:
+            raise ConfigurationError("RETRY_BACKOFF_BASE不能小于0")
+
+        if self.stream_split_threshold_mb <= 0:
+            raise ConfigurationError("STREAM_SPLIT_THRESHOLD_MB必须大于0")
 
 
 # 创建全局配置实例
@@ -426,16 +459,11 @@ def init_config(create_env_if_missing: bool = True):
     except ImportError:
         # 如果没有安装python-dotenv，尝试手动加载
         env_file = os.path.join(os.path.dirname(__file__), ".env")
-        if os.path.exists(env_file):
-            with open(env_file, encoding="utf-8") as f:
-                for line in f:
-                    line = line.strip()
-                    if line and not line.startswith("#") and "=" in line:
-                        key, value = line.split("=", 1)
-                        key = key.strip()
-                        # 只在环境变量不存在时才设置，保持环境变量优先
-                        if key not in os.environ:
-                            os.environ[key] = value.strip()
+        env_data = load_env_file(env_file)
+        for key, value in env_data.items():
+            # 只在环境变量不存在时才设置，保持环境变量优先
+            if key not in os.environ:
+                os.environ[key] = value
 
     # 检查并创建环境变量文件
     if (

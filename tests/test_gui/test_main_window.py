@@ -163,8 +163,6 @@ def test_on_cancel_processing_sets_event_and_stops_worker(window, monkeypatch):
 
     window.on_cancel_processing()
     assert cancel_event.is_set() is True
-    scheduled_callback = window._after_jobs["job-1"][1]
-    scheduled_callback()
 
     assert window.async_worker is None
     assert window.start_button.cget("state") == "normal"

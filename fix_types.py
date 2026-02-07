@@ -17,28 +17,26 @@ def fix_type_annotations(file_path: Path):
     # 替换模式列表
     replacements = [
         # 基本类型联合 -> Optional
-        (r': str \| None', r': Optional[str]'),
-        (r': int \| None', r': Optional[int]'),
-        (r': float \| None', r': Optional[float]'),
-        (r': bool \| None', r': Optional[bool]'),
-        (r': dict \| None', r': Optional[dict]'),
-        (r': list \| None', r': Optional[list]'),
-        (r': Path \| None', r': Optional[Path]'),
-        (r': Callable\[\[.*?\], None\]', r': Callable[[], None]'),
-
+        (r": str \| None", r": Optional[str]"),
+        (r": int \| None", r": Optional[int]"),
+        (r": float \| None", r": Optional[float]"),
+        (r": bool \| None", r": Optional[bool]"),
+        (r": dict \| None", r": Optional[dict]"),
+        (r": list \| None", r": Optional[list]"),
+        (r": Path \| None", r": Optional[Path]"),
+        (r": Callable\[\[.*?\], None\]", r": Callable[[], None]"),
         # 复杂类型联合
-        (r'\| None\]', r']'),
-        (r'\| None', r' | None'),  # 在 | 周围没有 ] 的情况
-
+        (r"\| None\]", r"]"),
+        (r"\| None", r" | None"),  # 在 | 周围没有 ] 的情况
         # 需要导入 Optional 的情况
-        (r': Optional\[str\]', ': typing.Optional[str]'),
-        (r': Optional\[int\]', ': typing.Optional[int]'),
-        (r': Optional\[float\]', ': typing.Optional[float]'),
-        (r': Optional\[bool\]', ': typing.Optional[bool]'),
-        (r': Optional\[dict\]', ': typing.Optional[dict]'),
-        (r': Optional\[list\]', ': typing.Optional[list]'),
-        (r': Optional\[Path\]', ': typing.Optional[Path]'),
-        (r': Callable\[\[\], None\]', ': Callable[[], None]'),
+        (r": Optional\[str\]", ": typing.Optional[str]"),
+        (r": Optional\[int\]", ": typing.Optional[int]"),
+        (r": Optional\[float\]", ": typing.Optional[float]"),
+        (r": Optional\[bool\]", ": typing.Optional[bool]"),
+        (r": Optional\[dict\]", ": typing.Optional[dict]"),
+        (r": Optional\[list\]", ": typing.Optional[list]"),
+        (r": Optional\[Path\]", ": typing.Optional[Path]"),
+        (r": Callable\[\[\], None\]", ": Callable[[], None]"),
     ]
 
     for pattern, replacement in replacements:
@@ -73,43 +71,43 @@ def main():
 
         # 检查是否使用 Optional 但没有导入
         needs_typing_import = False
-        if 'Optional[' in content and 'from typing import' not in content:
+        if "Optional[" in content and "from typing import" not in content:
             needs_typing_import = True
 
         # 检查是否使用 Callable 但没有导入
-        if 'Callable[' in content and 'from typing import' not in content:
+        if "Callable[" in content and "from typing import" not in content:
             needs_typing_import = True
 
         # 如果需要导入，添加到现有导入中
         if needs_typing_import:
             # 在文件开头添加或插入到现有的 from typing import 行
-            if 'from collections.abc import' in content:
+            if "from collections.abc import" in content:
                 # 在 collections.abc 导入后添加
                 content = re.sub(
-                    r'(from collections\.abc import [^\n]+)',
-                    r'\1\nfrom typing import Optional, Callable',
+                    r"(from collections\.abc import [^\n]+)",
+                    r"\1\nfrom typing import Optional, Callable",
                     content,
-                    count=1
+                    count=1,
                 )
-            elif 'from pathlib import Path' in content:
+            elif "from pathlib import Path" in content:
                 # 在 pathlib 导入后添加
                 content = re.sub(
-                    r'(from pathlib import Path[^\n]+)',
-                    r'\1\nfrom typing import Optional, Callable',
+                    r"(from pathlib import Path[^\n]+)",
+                    r"\1\nfrom typing import Optional, Callable",
                     content,
-                    count=1
+                    count=1,
                 )
-            elif 'import logging' in content:
+            elif "import logging" in content:
                 # 在 logging 导入后添加
                 content = re.sub(
-                    r'(import logging\n)',
-                    r'\1from typing import Optional, Callable\n\n',
+                    r"(import logging\n)",
+                    r"\1from typing import Optional, Callable\n\n",
                     content,
-                    count=1
+                    count=1,
                 )
             else:
                 # 在文件开头添加
-                content = 'from typing import Optional, Callable\n\n' + content
+                content = "from typing import Optional, Callable\n\n" + content
 
             file_path.write_text(content, encoding="utf-8")
 

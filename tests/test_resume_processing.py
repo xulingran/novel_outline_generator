@@ -51,6 +51,7 @@ async def test_resume_processes_remaining_chunks():
     service._save_results = AsyncMock()
     service.file_service = MagicMock()
     service.file_service.remove_backups.return_value = 0
+    service.file_service.get_file_size.return_value = 0
     service._cleanup_intermediate_outputs = MagicMock(return_value=[])
 
     await service.process_novel("test.txt", resume=True)

@@ -8,6 +8,7 @@ import logging
 import os
 import shutil
 import tempfile
+import unicodedata
 from collections.abc import Callable
 from datetime import datetime
 from logging.handlers import TimedRotatingFileHandler
@@ -99,6 +100,26 @@ def setup_logging(level=None, log_dir="logs", log_backup_days=30):
 setup_logging()
 
 logger = logging.getLogger(__name__)
+
+
+def _is_plausible_text(content: str) -> bool:
+    """判断解码结果是否像正常文本，避免将二进制误判为文本。"""
+    if not content:
+        return True
+
+    suspicious_chars = 0
+    total_chars = len(content)
+    allowed_controls = {"\n", "\r", "\t"}
+
+    for char in content:
+        if char in allowed_controls:
+            continue
+        category = unicodedata.category(char)
+        if category.startswith("C"):
+            suspicious_chars += 1
+
+    # 控制/未分配字符占比过高时判定为异常文本
+    return suspicious_chars / total_chars <= 0.1
 
 
 def _ensure_directory(file_path: Path) -> None:
@@ -286,11 +307,29 @@ def safe_read_text(
     if fallback_encodings:
         encodings.extend(fallback_encodings)
 
+    with open(file_path, "rb") as file_obj:
+        file_header = file_obj.read(4)
+
     last_error = None
     for enc in encodings:
+        normalized_enc = enc.lower().replace("_", "-")
+        if normalized_enc == "utf-16" and not (
+            file_header.startswith(b"\xff\xfe") or file_header.startswith(b"\xfe\xff")
+        ):
+            logger.debug(f"跳过编码 {enc}: 缺少 UTF-16 BOM")
+            continue
+        if normalized_enc == "utf-16-le" and not file_header.startswith(b"\xff\xfe"):
+            logger.debug(f"跳过编码 {enc}: 缺少 UTF-16 LE BOM")
+            continue
+        if normalized_enc == "utf-16-be" and not file_header.startswith(b"\xfe\xff"):
+            logger.debug(f"跳过编码 {enc}: 缺少 UTF-16 BE BOM")
+            continue
+
         try:
-            with open(file_path, encoding=enc) as f:
-                content = f.read()
+            with open(file_path, encoding=enc) as file_obj:
+                content = file_obj.read()
+            if not _is_plausible_text(content):
+                raise UnicodeDecodeError(enc, b"", 0, 1, "解码结果疑似二进制数据")
             logger.debug(f"成功读取文件 {file_path}，使用编码: {enc}")
             return content, enc
         except UnicodeDecodeError as e:
@@ -308,6 +347,50 @@ def safe_read_text(
         last_error.start if last_error else 0,
         last_error.end if last_error else 1,
         f"无法使用任何编码读取文件: {', '.join(encodings)}",
+    )
+
+
+def detect_text_encoding(
+    file_path: str | Path,
+    encodings: list[str],
+    sample_size: int = 64 * 1024,
+) -> str:
+    """探测文本编码，仅读取文件前缀样本。"""
+    file_path = Path(file_path)
+    with open(file_path, "rb") as file_obj:
+        raw_sample = file_obj.read(sample_size)
+    if not raw_sample:
+        return encodings[0]
+
+    last_error = None
+    for enc in encodings:
+        normalized_enc = enc.lower().replace("_", "-")
+        if normalized_enc == "utf-16" and not (
+            raw_sample.startswith(b"\xff\xfe") or raw_sample.startswith(b"\xfe\xff")
+        ):
+            continue
+        if normalized_enc == "utf-16-le" and not raw_sample.startswith(b"\xff\xfe"):
+            continue
+        if normalized_enc == "utf-16-be" and not raw_sample.startswith(b"\xfe\xff"):
+            continue
+
+        try:
+            decoded = raw_sample.decode(enc)
+            if not _is_plausible_text(decoded):
+                raise UnicodeDecodeError(
+                    enc, raw_sample, 0, min(len(raw_sample), 1), "解码结果疑似二进制数据"
+                )
+            return enc
+        except UnicodeDecodeError as e:
+            last_error = e
+            continue
+
+    raise UnicodeDecodeError(
+        last_error.encoding if last_error else "unknown",
+        last_error.object if last_error else b"",
+        last_error.start if last_error else 0,
+        last_error.end if last_error else 1,
+        f"无法探测文件编码: {', '.join(encodings)}",
     )
 
 

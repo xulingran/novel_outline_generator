@@ -7,7 +7,14 @@ Tests text splitting by chapters, paragraphs, and tokens.
 import pytest
 
 from exceptions import ProcessingError
-from splitter import TextSplitter, get_splitter, split_by_tokens, split_text, try_split_by_chapter
+from splitter import (
+    TextSplitter,
+    get_splitter,
+    split_by_tokens,
+    split_text,
+    split_text_stream,
+    try_split_by_chapter,
+)
 
 
 class TestTextSplitterInitialization:
@@ -281,6 +288,13 @@ class TestSplitTextConvenience:
         chunks = split_text(text)
         assert isinstance(chunks, list)
         assert len(chunks) > 0
+
+    def test_split_text_stream_function(self):
+        """Test streaming convenience function."""
+        chunks = list(split_text_stream(["A\n\nB\n\nC"]))
+        assert isinstance(chunks, list)
+        assert len(chunks) > 0
+        assert "A" in "".join(chunks)
 
 
 class TestGetSplitter:

@@ -18,6 +18,7 @@ from config import (
     get_api_config,
     get_processing_config,
     init_config,
+    load_env_file,
 )
 from exceptions import ConfigurationError
 
@@ -351,6 +352,9 @@ class TestProcessingConfig:
             assert config.parallel_limit == 5
             assert config.max_retry == 5
             assert config.log_every == 1
+            assert config.sub_chunk_count == 5
+            assert config.retry_backoff_base == 1
+            assert config.stream_split_threshold_mb == 20
             assert config.use_proxy is False
             assert config.proxy_url == "http://127.0.0.1:7897"
 
@@ -364,6 +368,9 @@ class TestProcessingConfig:
                 "PARALLEL_LIMIT": "10",
                 "MAX_RETRY": "3",
                 "LOG_EVERY": "5",
+                "SUB_CHUNK_COUNT": "7",
+                "RETRY_BACKOFF_BASE": "2",
+                "STREAM_SPLIT_THRESHOLD_MB": "30",
                 "USE_PROXY": "true",
                 "PROXY_URL": "http://proxy.example.com:8080",
             },
@@ -374,6 +381,9 @@ class TestProcessingConfig:
             assert config.parallel_limit == 10
             assert config.max_retry == 3
             assert config.log_every == 5
+            assert config.sub_chunk_count == 7
+            assert config.retry_backoff_base == 2
+            assert config.stream_split_threshold_mb == 30
             assert config.use_proxy is True
             assert config.proxy_url == "http://proxy.example.com:8080"
 
@@ -459,6 +469,27 @@ class TestProcessingConfig:
             config = ProcessingConfig()
             config.validate()  # 不应该抛出异常
 
+    def test_validate_sub_chunk_count_zero(self):
+        """测试验证sub_chunk_count为0"""
+        with patch.dict(os.environ, {"SUB_CHUNK_COUNT": "0"}):
+            config = ProcessingConfig()
+            with pytest.raises(ConfigurationError, match="SUB_CHUNK_COUNT必须大于0"):
+                config.validate()
+
+    def test_validate_retry_backoff_base_negative(self):
+        """测试验证retry_backoff_base为负数"""
+        with patch.dict(os.environ, {"RETRY_BACKOFF_BASE": "-1"}):
+            config = ProcessingConfig()
+            with pytest.raises(ConfigurationError, match="RETRY_BACKOFF_BASE不能小于0"):
+                config.validate()
+
+    def test_validate_stream_split_threshold_mb_zero(self):
+        """测试验证stream_split_threshold_mb为0"""
+        with patch.dict(os.environ, {"STREAM_SPLIT_THRESHOLD_MB": "0"}):
+            config = ProcessingConfig()
+            with pytest.raises(ConfigurationError, match="STREAM_SPLIT_THRESHOLD_MB必须大于0"):
+                config.validate()
+
 
 class TestGetAPIConfig:
     """测试get_api_config函数"""
@@ -541,6 +572,19 @@ class TestCreateEnvFile:
         create_env_file()
         # 文件应该保持不变
         assert env_file.read_text(encoding="utf-8") == "existing content"
+
+
+class TestLoadEnvFile:
+    """测试load_env_file函数"""
+
+    def test_load_env_file_parses_key_values(self, tmp_path):
+        env_file = tmp_path / ".env"
+        env_file.write_text(
+            "A=1\n#comment\nINVALID_LINE\nB = value \n",
+            encoding="utf-8",
+        )
+        data = load_env_file(str(env_file))
+        assert data == {"A": "1", "B": "value"}
 
 
 class TestInitConfig:

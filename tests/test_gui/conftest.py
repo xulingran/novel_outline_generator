@@ -6,11 +6,11 @@ GUI 测试配置和 fixtures
 
 import asyncio
 import sys
+from collections.abc import Iterator
 from pathlib import Path
-from typing import AsyncIterator, Iterator
+from types import ModuleType
 
 import pytest
-from pytest_mock import MockerFixture
 
 
 # 创建模拟的 customtkinter 模块（用于没有 tkinter 的环境）
@@ -19,8 +19,11 @@ class MockCTk:
 
     class CTk:
         def __init__(self, *args, **kwargs):
+            self._master = args[0] if args else None
             self._title = ""
             self._geometry = ""
+            self._after_jobs: dict[str, tuple[int, object]] = {}
+            self._after_counter = 0
 
         def mainloop(self):
             pass
@@ -28,18 +31,23 @@ class MockCTk:
         def quit(self):
             pass
 
-        def title(self, title: str = None):
+        def title(self, title: str | None = None):
             if title is not None:
                 self._title = title
+                if self._master is not None and hasattr(self._master, "title"):
+                    self._master.title(title)
             return self._title
 
-        def geometry(self, geometry: str = None):
+        def geometry(self, geometry: str | None = None):
             if geometry is not None:
                 self._geometry = geometry
+                if self._master is not None and hasattr(self._master, "geometry"):
+                    self._master.geometry(geometry)
             return self._geometry
 
         def grab_set(self):
-            pass
+            if self._master is not None and hasattr(self._master, "grab_set"):
+                self._master.grab_set()
 
         def pack(self, *args, **kwargs):
             """Add pack method to base CTk class for all widgets"""
@@ -48,10 +56,25 @@ class MockCTk:
         def pack_forget(self):
             pass
 
+        def configure(self, **kwargs):
+            for key, value in kwargs.items():
+                setattr(self, key, value)
+
+        def cget(self, key: str):
+            return getattr(self, key)
+
+        def after(self, delay_ms: int, callback):
+            self._after_counter += 1
+            job_id = f"job-{self._after_counter}"
+            self._after_jobs[job_id] = (delay_ms, callback)
+            return job_id
+
+        def after_cancel(self, job_id: str):
+            self._after_jobs.pop(job_id, None)
+
     class CTkToplevel(CTk):
         def __init__(self, *args, **kwargs):
             super().__init__(*args, **kwargs)
-            self.title = ""
 
         def destroy(self):
             pass
@@ -209,25 +232,18 @@ class MockCTk:
         def get(self):
             return self._value.lower() == "true"
 
-        def set(self, value: bool):
+        def set(self, value: bool | str):
             self._value = str(value)
 
 
-# 检测 GUI 是否可用
+# GUI 测试默认使用 mock，避免真实窗口在无交互环境阻塞
 GUI_AVAILABLE = True
-
-try:
-    import tkinter
-    # 测试 tkinter 是否真正可用
-    test_tk = tkinter.Tk()
-    test_tk.destroy()
-    # 尝试导入 customtkinter
-    import customtkinter as ctk
-except Exception:
-    GUI_AVAILABLE = False
-    # 如果不可用，将模拟模块添加到 sys.modules
-    sys.modules["customtkinter"] = MockCTk
-    ctk = MockCTk
+mock_module = ModuleType("customtkinter")
+for attr in dir(MockCTk):
+    if not attr.startswith("__"):
+        setattr(mock_module, attr, getattr(MockCTk, attr))
+sys.modules["customtkinter"] = mock_module
+ctk = mock_module
 
 
 @pytest.fixture

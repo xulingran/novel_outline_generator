@@ -6,7 +6,6 @@
 
 import logging
 from pathlib import Path
-from typing import Optional, Callable
 
 import customtkinter as ctk
 

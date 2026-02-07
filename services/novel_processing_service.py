@@ -18,16 +18,12 @@ from models.processing_state import ProcessingState, ProgressData
 from prompts import chunk_prompt, merge_prompt, merge_text_prompt
 from services.eta_estimator import ETAEstimator
 from services.file_service import FileService
-from services.llm_service import create_llm_service
+from services.llm_service import LLMService, create_llm_service
 from services.progress_service import ProgressService
-from splitter import split_text
+from splitter import split_text, split_text_stream
 from tokenizer import count_tokens
 
 logger = logging.getLogger(__name__)
-
-# 常量定义
-SUB_CHUNK_COUNT = 5  # 失败块拆分为的小块数量
-RETRY_BACKOFF_BASE = 1  # 重试退避基数（秒）
 
 
 class NovelProcessingService:
@@ -37,9 +33,10 @@ class NovelProcessingService:
         self,
         progress_callback: Callable[[dict[str, Any]], None] | None = None,
         cancel_event: asyncio.Event | None = None,
+        llm_service: LLMService | None = None,
     ):
         self.processing_config = get_processing_config()
-        self.llm_service = create_llm_service()
+        self.llm_service = llm_service or create_llm_service()
         self.progress_service = ProgressService()
         self.file_service = FileService()
         self.processing_state: ProcessingState | None = None
@@ -99,112 +96,20 @@ class NovelProcessingService:
         Returns:
             Dict[str, Any]: 处理结果
         """
-        # 重置token统计（确保每次处理都是新的统计）
-        self.total_prompt_tokens = 0
-        self.total_completion_tokens = 0
-        self.total_tokens = 0
-
-        # 初始化处理状态，块数后续拆分时再更新
-        self.processing_state = ProcessingState(file_path=file_path, total_chunks=0)
-        self.processing_state.current_phase = "loading"
-        self._emit_progress()
+        self._initialize_processing(file_path)
 
         try:
-            # 1. 读取和分割文本
-            text, encoding = await self._load_and_validate_file(file_path)
-            chunks = self._split_text_into_chunks(text)
-            self.processing_state.total_chunks = len(chunks)
-            if not chunks:
-                raise ProcessingError("未检测到可处理的内容")
-            self._emit_progress()
+            chunks, encoding = await self._prepare_chunks(file_path)
+            outlines = await self._collect_outlines(file_path, chunks, resume, encoding)
+            final_outline = await self._merge_outlines(outlines)
+            await self._save_and_cleanup(file_path, outlines, final_outline, output_dir)
 
-            # 2. 处理或恢复进度
-            progress_data = await self._handle_progress_resume(file_path, chunks, resume, encoding)
-
-            # 3. 处理文本块
-            if progress_data is None:
-                outlines = await self._process_chunks(chunks)
-            else:
-                outlines = list(progress_data.outlines)
-                # 解析失败 chunk IDs（errors 存储为 [{"chunk_id": N, "error": "...", "timestamp": "..."}, ...]）
-                failed_ids = {
-                    error["chunk_id"]
-                    for error in progress_data.errors
-                    if isinstance(error, dict) and "chunk_id" in error
-                }
-                completed_ids = (
-                    progress_data.completed_indices | progress_data.partial_indices | failed_ids
-                )
-                remaining_chunks = [chunk for chunk in chunks if chunk.id not in completed_ids]
-                if remaining_chunks:
-                    logger.info(f"恢复进度: 剩余 {len(remaining_chunks)} 个块待处理")
-                    new_outlines = await self._process_chunks(
-                        remaining_chunks,
-                        progress_data=progress_data,
-                        total_chunks=len(chunks),
-                    )
-                    outlines.extend(new_outlines)
-                else:
-                    logger.info("恢复进度: 所有块已处理，直接进入合并")
-                    self.progress_service.finalize_progress(progress_data)
-
-            if outlines:
-                outlines.sort(
-                    key=lambda item: (item.get("chunk_id", 0) if isinstance(item, dict) else 0)
-                )
-
-            # 4. 合并大纲
-            self.processing_state.current_phase = "merging"
-            self._emit_progress()
-            final_outline = await self.merge_outlines_recursive(outlines)
-            self._emit_progress(
-                token_usage={
-                    "prompt_tokens": self.total_prompt_tokens,
-                    "completion_tokens": self.total_completion_tokens,
-                    "total_tokens": self.total_tokens,
-                }
-            )
-
-            # 5. 保存结果
-            if output_dir:
-                self.processing_config.output_dir = output_dir
-
-            await self._save_results(outlines, final_outline, file_path)
-            # 5.1 清理备份文件（成功完成后删除 outputs 下的 .bak）
-            try:
-                removed = self.file_service.remove_backups(
-                    self.processing_config.output_dir, "*.bak"
-                )
-                logger.debug(f"已清理备份文件: {removed} 个")
-            except Exception as cleanup_err:
-                logger.warning(f"清理备份文件失败: {cleanup_err}")
-
-            # 5.2 清理中间结果文件
-            try:
-                cleaned = self._cleanup_intermediate_outputs(
-                    Path(self.processing_config.output_dir)
-                )
-                if cleaned:
-                    logger.info(f"已清理中间结果文件: {', '.join(cleaned)}")
-            except Exception as cleanup_err:
-                logger.warning(f"清理中间结果文件失败: {cleanup_err}")
-
-            # 6. 完成处理
+            if self.processing_state is None:
+                raise ProcessingError("处理状态未初始化")
             self.processing_state.complete()
             self._emit_progress()
 
-            return {
-                "success": True,
-                "final_outline": final_outline,
-                "chunk_count": len(chunks),
-                "processing_time": self.processing_state.elapsed_time,
-                "output_dir": self.processing_config.output_dir,
-                "token_usage": {
-                    "prompt_tokens": self.total_prompt_tokens,
-                    "completion_tokens": self.total_completion_tokens,
-                    "total_tokens": self.total_tokens,
-                },
-            }
+            return self._build_success_result(final_outline, len(chunks))
 
         except asyncio.CancelledError:
             logger.info("Novel processing cancelled")
@@ -215,6 +120,163 @@ class NovelProcessingService:
                 self._emit_progress()
             logger.error(f"处理小说失败: {e}")
             raise ProcessingError(f"处理小说失败: {str(e)}") from e
+
+    def _initialize_processing(self, file_path: str) -> None:
+        """初始化处理上下文。"""
+        self.total_prompt_tokens = 0
+        self.total_completion_tokens = 0
+        self.total_tokens = 0
+
+        self.processing_state = ProcessingState(file_path=file_path, total_chunks=0)
+        self.processing_state.current_phase = "loading"
+        self._emit_progress()
+
+    async def _prepare_chunks(self, file_path: str) -> tuple[list[TextChunk], str]:
+        """加载文件并切分为文本块。"""
+        if self._should_use_streaming(file_path):
+            return self._prepare_chunks_streaming(file_path)
+
+        text, encoding = await self._load_and_validate_file(file_path)
+        chunks = self._split_text_into_chunks(text)
+
+        if self.processing_state:
+            self.processing_state.total_chunks = len(chunks)
+        if not chunks:
+            raise ProcessingError("未检测到可处理的内容")
+
+        self._emit_progress()
+        return chunks, encoding
+
+    def _should_use_streaming(self, file_path: str) -> bool:
+        """是否启用流式切块。"""
+        file_size = self.file_service.get_file_size(file_path)
+        threshold = self.processing_config.stream_split_threshold_mb * 1024 * 1024
+        return file_size >= threshold
+
+    def _prepare_chunks_streaming(self, file_path: str) -> tuple[list[TextChunk], str]:
+        """大文件流式切块，降低内存峰值。"""
+        logger.info("检测到大文件，启用流式切块")
+        encoding = self.file_service.detect_file_encoding(file_path)
+
+        raw_chunks = split_text_stream(self.file_service.iter_text_file(file_path))
+        chunks: list[TextChunk] = []
+        position = 0
+        for idx, chunk_content in enumerate(raw_chunks, 1):
+            token_count = count_tokens(chunk_content)
+            chunks.append(
+                TextChunk(
+                    id=idx,
+                    content=chunk_content,
+                    token_count=token_count,
+                    start_position=position,
+                    end_position=position + len(chunk_content),
+                )
+            )
+            position += len(chunk_content)
+
+        if self.processing_state:
+            self.processing_state.total_chunks = len(chunks)
+        if not chunks:
+            raise ProcessingError("未检测到可处理的内容")
+
+        self._emit_progress()
+        return chunks, encoding
+
+    async def _collect_outlines(
+        self, file_path: str, chunks: list[TextChunk], resume: bool, encoding: str
+    ) -> list[dict[str, Any]]:
+        """处理或恢复文本块并返回排序后的大纲列表。"""
+        progress_data = await self._handle_progress_resume(file_path, chunks, resume, encoding)
+        if progress_data is None:
+            outlines = await self._process_chunks(chunks)
+        else:
+            outlines = await self._process_remaining_chunks(chunks, progress_data)
+
+        outlines.sort(key=lambda item: (item.get("chunk_id", 0) if isinstance(item, dict) else 0))
+        return outlines
+
+    async def _process_remaining_chunks(
+        self, chunks: list[TextChunk], progress_data: ProgressData
+    ) -> list[dict[str, Any]]:
+        """恢复处理时，仅处理未完成文本块。"""
+        outlines = list(progress_data.outlines)
+        failed_ids = {
+            error["chunk_id"]
+            for error in progress_data.errors
+            if isinstance(error, dict) and "chunk_id" in error
+        }
+        completed_ids = progress_data.completed_indices | progress_data.partial_indices | failed_ids
+        remaining_chunks = [chunk for chunk in chunks if chunk.id not in completed_ids]
+        if remaining_chunks:
+            logger.info(f"恢复进度: 剩余 {len(remaining_chunks)} 个块待处理")
+            new_outlines = await self._process_chunks(
+                remaining_chunks,
+                progress_data=progress_data,
+                total_chunks=len(chunks),
+            )
+            outlines.extend(new_outlines)
+        else:
+            logger.info("恢复进度: 所有块已处理，直接进入合并")
+            self.progress_service.finalize_progress(progress_data)
+        return outlines
+
+    async def _merge_outlines(self, outlines: list[dict[str, Any]]) -> str:
+        """合并分块大纲并上报 token 统计。"""
+        if self.processing_state:
+            self.processing_state.current_phase = "merging"
+        self._emit_progress()
+
+        final_outline = await self.merge_outlines_recursive(outlines)
+        self._emit_progress(
+            token_usage={
+                "prompt_tokens": self.total_prompt_tokens,
+                "completion_tokens": self.total_completion_tokens,
+                "total_tokens": self.total_tokens,
+            }
+        )
+        return final_outline
+
+    async def _save_and_cleanup(
+        self,
+        file_path: str,
+        outlines: list[dict[str, Any]],
+        final_outline: str,
+        output_dir: str | None,
+    ) -> None:
+        """保存结果并执行成功后的清理。"""
+        if output_dir:
+            self.processing_config.output_dir = output_dir
+
+        await self._save_results(outlines, final_outline, file_path)
+
+        try:
+            removed = self.file_service.remove_backups(self.processing_config.output_dir, "*.bak")
+            logger.debug(f"已清理备份文件: {removed} 个")
+        except Exception as cleanup_err:
+            logger.warning(f"清理备份文件失败: {cleanup_err}")
+
+        try:
+            cleaned = self._cleanup_intermediate_outputs(Path(self.processing_config.output_dir))
+            if cleaned:
+                logger.info(f"已清理中间结果文件: {', '.join(cleaned)}")
+        except Exception as cleanup_err:
+            logger.warning(f"清理中间结果文件失败: {cleanup_err}")
+
+    def _build_success_result(self, final_outline: str, chunk_count: int) -> dict[str, Any]:
+        """构建成功返回结果。"""
+        processing_time = self.processing_state.elapsed_time if self.processing_state else 0.0
+        return {
+            "success": True,
+            "final_outline": final_outline,
+            "chunk_count": chunk_count,
+            "processing_time": processing_time,
+            "output_dir": self.processing_config.output_dir,
+            "token_usage": {
+                "prompt_tokens": self.total_prompt_tokens,
+                "completion_tokens": self.total_completion_tokens,
+                "total_tokens": self.total_tokens,
+            },
+        }
 
     async def _load_and_validate_file(self, file_path: str) -> tuple[str, str]:
         """加载并验证文件"""
@@ -492,7 +554,7 @@ class NovelProcessingService:
                         logger.warning(
                             f"块 {chunk_id} 第 {attempt}/{self.processing_config.max_retry} 次尝试失败: {type(e).__name__}: {e}，将重试"
                         )
-                        await asyncio.sleep(RETRY_BACKOFF_BASE * attempt)  # 指数退避
+                        await asyncio.sleep(self.processing_config.retry_backoff_base * attempt)
                     else:
                         logger.error(
                             f"块 {chunk_id} 经过 {self.processing_config.max_retry} 次重试后仍然失败: {type(e).__name__}: {e}"
@@ -505,14 +567,19 @@ class NovelProcessingService:
                     )
                     if attempt < self.processing_config.max_retry:
                         logger.warning(
-                            f"块 {chunk_id} 将在 {RETRY_BACKOFF_BASE * attempt} 秒后重试"
+                            "块 "
+                            f"{chunk_id} 将在 "
+                            f"{self.processing_config.retry_backoff_base * attempt} 秒后重试"
                         )
-                        await asyncio.sleep(RETRY_BACKOFF_BASE * attempt)
+                        await asyncio.sleep(self.processing_config.retry_backoff_base * attempt)
                     else:
                         logger.error(f"块 {chunk_id} 已达到最大重试次数，放弃处理")
 
             # 所有重试都失败后，尝试拆分为多个小块重新处理
-            logger.info(f"块 {chunk_id} 重试失败，尝试拆分为{SUB_CHUNK_COUNT}个小块重新处理")
+            logger.info(
+                "块 "
+                f"{chunk_id} 重试失败，尝试拆分为{self.processing_config.sub_chunk_count}个小块重新处理"
+            )
             try:
                 partial_outlines = await self._process_failing_chunk_as_partial(
                     chunk, sem, progress_data, processing_state
@@ -585,6 +652,7 @@ class NovelProcessingService:
                 sub_outline["sub_chunk_index"] = sub_idx  # 小块索引
                 sub_outline["sub_chunk_id"] = sub_chunk_id  # 唯一标识符
                 sub_outline["original_chunk_id"] = chunk_id  # 原始块ID
+                sub_outline["total_sub_chunks"] = len(sub_chunks)  # 该块实际拆分总数
 
                 successful_sub_outlines.append(sub_outline)
                 logger.debug(f"子块 {sub_chunk_id} 处理成功，耗时: {processing_time:.2f}秒")
@@ -624,17 +692,21 @@ class NovelProcessingService:
         return successful_sub_outlines
 
     def _split_chunk_into_sub_chunks(self, chunk: TextChunk) -> list[TextChunk]:
-        """将一个块拆分为多个小块（数量由SUB_CHUNK_COUNT常量决定）"""
+        """将一个块拆分为多个小块（数量由配置决定）。"""
         text = chunk.content
         total_length = len(text)
-        chunk_size = total_length // SUB_CHUNK_COUNT
+        if total_length == 0:
+            return []
+
+        sub_chunk_count = min(self.processing_config.sub_chunk_count, total_length)
+        chunk_size = total_length // sub_chunk_count
 
         sub_chunks: list[TextChunk] = []
         start_position = chunk.start_position
 
-        for idx in range(SUB_CHUNK_COUNT):
+        for idx in range(sub_chunk_count):
             start = idx * chunk_size
-            if idx == SUB_CHUNK_COUNT - 1:  # 最后一块包含剩余所有内容
+            if idx == sub_chunk_count - 1:  # 最后一块包含剩余所有内容
                 end = total_length
             else:
                 end = start + chunk_size
@@ -930,22 +1002,30 @@ class NovelProcessingService:
         partial = self.processing_state.partial_chunks
 
         # 计算部分完成块的权重
-        # 每个块拆分为5个小块，每个小块权重为 1/5 = 0.2
         partial_weight = 0.0
         if self.current_progress_data and partial > 0:
             # 按chunk_id分组统计成功的小块数量
             from collections import defaultdict
 
             chunk_sub_counts: dict[int, int] = defaultdict(int)
+            chunk_total_sub_counts: dict[int, int] = {}
 
             for outline in self.current_progress_data.partial_outlines:
                 original_chunk_id = outline.get("original_chunk_id") or outline.get("chunk_id")
                 if original_chunk_id in self.current_progress_data.partial_indices:
                     chunk_sub_counts[original_chunk_id] += 1
+                    total_sub_chunks = outline.get("total_sub_chunks")
+                    if isinstance(total_sub_chunks, int) and total_sub_chunks > 0:
+                        existing = chunk_total_sub_counts.get(original_chunk_id)
+                        if existing is None or total_sub_chunks > existing:
+                            chunk_total_sub_counts[original_chunk_id] = total_sub_chunks
 
-            # 计算总权重：每个小块按 1/SUB_CHUNK_COUNT 计算
-            for _chunk_id, sub_count in chunk_sub_counts.items():
-                partial_weight += sub_count / SUB_CHUNK_COUNT
+            # 计算总权重：按每个块实际拆分的小块总数计算
+            for chunk_id_for_weight, sub_count in chunk_sub_counts.items():
+                total_sub_chunks = chunk_total_sub_counts.get(
+                    chunk_id_for_weight, self.processing_config.sub_chunk_count
+                )
+                partial_weight += sub_count / total_sub_chunks
 
         effective_completed = completed + partial_weight
         progress = (effective_completed / total) if total else 0.0

@@ -6,7 +6,6 @@
 
 import logging
 from pathlib import Path
-from typing import Optional, Callable
 
 import customtkinter as ctk
 
@@ -265,6 +264,9 @@ class MainWindow(ctk.CTk):
         """开始处理事件"""
         if not self.current_file:
             return
+        if self.async_worker and self.async_worker.is_alive():
+            logger.warning("已有处理任务正在运行，忽略重复启动")
+            return
 
         logger.info(f"开始处理文件: {self.current_file}")
         self.start_button.configure(state="disabled")
@@ -272,48 +274,56 @@ class MainWindow(ctk.CTk):
 
         # 重置进度
         self.progress_bar_widget.reset()
-
-        # 创建异步处理任务
-        import asyncio
-
-        async def process_file():
-            from services.novel_processing_service import NovelProcessingService
-
-            service = NovelProcessingService()
-
-            # 创建取消事件
-            cancel_event = asyncio.Event()
-
-            # 创建进度回调
-            def progress_callback(progress_data: dict):
-                # 更新进度显示
-                self.progress_bar_widget.update_progress(
-                    completed=progress_data.get("completed_chunks", 0),
-                    total=progress_data.get("total_chunks", 0),
-                    failed=progress_data.get("failed_chunks", 0),
-                    partial=progress_data.get("partial_chunks", 0),
-                    phase=progress_data.get("phase", ""),
-                    eta_seconds=progress_data.get("eta_seconds"),
-                    eta_confidence=progress_data.get("eta_confidence", 0.0),
-                )
-
-            # 处理文件
-            result = await service.process_novel_async(
-                file_path=str(self.current_file),
-                progress_callback=progress_callback,
-                cancel_event=cancel_event,
-            )
-
-            return result
+        resume = self._ask_resume_preference()
+        process_file = self._build_processing_coro(resume=resume)
 
         # 启动异步工作线程
         self.async_worker = AsyncWorker(
-            coro=process_file(),
+            coro=process_file,
             progress_callback=self._on_progress_update,
             completion_callback=self._on_processing_complete,
             error_callback=self._on_processing_error,
         )
         self.async_worker.start()
+
+    def _confirm_resume_dialog(self) -> bool:
+        """询问用户是否从上次进度恢复。"""
+        from tkinter import messagebox
+
+        return bool(messagebox.askyesno("继续处理", "检测到上次进度，是否继续？"))
+
+    def _ask_resume_preference(self) -> bool:
+        """根据进度文件和当前文件判断是否恢复处理。"""
+        if self.current_file is None:
+            return False
+
+        from services.progress_service import ProgressService
+
+        progress = ProgressService().load_progress()
+        if progress is None:
+            return False
+
+        progress_file_name = Path(progress.txt_file).name
+        if progress_file_name != self.current_file.name:
+            return False
+
+        return self._confirm_resume_dialog()
+
+    def _build_processing_coro(self, resume: bool):
+        """构建处理协程，便于测试和回调注入。"""
+        import asyncio
+
+        async def process_file():
+            from services.novel_processing_service import NovelProcessingService
+
+            self.cancel_event = asyncio.Event()
+            service = NovelProcessingService(
+                progress_callback=self._on_progress_update,
+                cancel_event=self.cancel_event,
+            )
+            return await service.process_novel(file_path=str(self.current_file), resume=resume)
+
+        return process_file()
 
     def _on_progress_update(self, progress_data: dict):
         """进度更新回调"""
@@ -363,8 +373,11 @@ class MainWindow(ctk.CTk):
 
     def on_cancel_processing(self):
         """取消处理事件"""
+        if hasattr(self, "cancel_event") and self.cancel_event is not None:
+            self.cancel_event.set()
         if self.async_worker:
             self.async_worker.stop()
+            self.async_worker = None
             logger.info("用户取消处理")
 
         self.reset_ui_state()
@@ -373,8 +386,10 @@ class MainWindow(ctk.CTk):
         """重置 UI 状态"""
         self.start_button.configure(state="normal" if self.current_file else "disabled")
         self.cancel_button.configure(state="disabled")
-        self.select_file_button.configure(state="normal")
-        self.phase_label.configure(text="等待开始...")
+        if hasattr(self, "select_file_button"):
+            self.select_file_button.configure(state="normal")
+        if hasattr(self, "phase_label"):
+            self.phase_label.configure(text="等待开始...")
 
     def on_open_output_dir(self):
         """打开输出目录"""

@@ -5,9 +5,7 @@
 """
 
 import asyncio
-from unittest.mock import MagicMock, patch
-
-import pytest
+from unittest.mock import MagicMock
 
 from gui.async_worker import AsyncWorker, run_async_in_thread
 
@@ -17,6 +15,7 @@ class TestAsyncWorker:
 
     def test_init(self):
         """测试 AsyncWorker 初始化"""
+
         async def dummy_task():
             return "result"
 
@@ -43,6 +42,7 @@ class TestAsyncWorker:
 
     def test_run_success(self, event_loop: asyncio.AbstractEventLoop):
         """测试成功运行任务"""
+
         async def success_task():
             await asyncio.sleep(0.01)
             return {"status": "success", "data": "test_data"}
@@ -67,6 +67,7 @@ class TestAsyncWorker:
 
     def test_run_error(self, event_loop: asyncio.AbstractEventLoop):
         """测试任务出错"""
+
         async def error_task():
             await asyncio.sleep(0.01)
             raise ValueError("Test error")
@@ -93,6 +94,7 @@ class TestAsyncWorker:
 
     def test_stop(self, event_loop: asyncio.AbstractEventLoop):
         """测试停止任务"""
+
         async def long_running_task():
             await asyncio.sleep(10)
             return "should not complete"
@@ -111,6 +113,7 @@ class TestAsyncWorker:
 
     def test_is_stopped(self, event_loop: asyncio.AbstractEventLoop):
         """测试停止状态检查"""
+
         async def dummy_task():
             return "result"
 
@@ -125,6 +128,7 @@ class TestAsyncWorker:
 
     def test_result_property(self, event_loop: asyncio.AbstractEventLoop):
         """测试结果属性"""
+
         async def return_value():
             await asyncio.sleep(0.01)
             return 42
@@ -137,6 +141,7 @@ class TestAsyncWorker:
 
     def test_exception_property(self, event_loop: asyncio.AbstractEventLoop):
         """测试异常属性"""
+
         async def raise_error():
             await asyncio.sleep(0.01)
             raise RuntimeError("Test runtime error")
@@ -150,7 +155,6 @@ class TestAsyncWorker:
 
     def test_progress_callback_integration(self, event_loop: asyncio.AbstractEventLoop):
         """测试进度回调集成"""
-        progress_data = {"progress": 0.5, "message": "Half done"}
 
         async def task_with_progress():
             # 在实际使用中，进度回调会被任务内部调用
@@ -177,6 +181,7 @@ class TestRunAsyncInThread:
 
     def test_run_async_in_thread(self, event_loop: asyncio.AbstractEventLoop):
         """测试通过辅助函数运行异步任务"""
+
         async def simple_task():
             await asyncio.sleep(0.01)
             return "async_result"
@@ -192,10 +197,9 @@ class TestRunAsyncInThread:
         assert worker.result == "async_result"
         assert completion_callback.called
 
-    def test_run_async_in_thread_with_all_callbacks(
-        self, event_loop: asyncio.AbstractEventLoop
-    ):
+    def test_run_async_in_thread_with_all_callbacks(self, event_loop: asyncio.AbstractEventLoop):
         """测试带有所有回调的辅助函数"""
+
         async def task():
             await asyncio.sleep(0.01)
             return "complete"
@@ -217,6 +221,7 @@ class TestRunAsyncInThread:
 
     def test_run_async_in_thread_error_handling(self, event_loop: asyncio.AbstractEventLoop):
         """测试辅助函数的错误处理"""
+
         async def failing_task():
             await asyncio.sleep(0.01)
             raise ValueError("Helper test error")
@@ -238,6 +243,7 @@ class TestAsyncWorkerEdgeCases:
 
     def test_task_with_none_result(self, event_loop: asyncio.AbstractEventLoop):
         """测试返回 None 的任务"""
+
         async def none_task():
             await asyncio.sleep(0.01)
             return None
@@ -252,6 +258,7 @@ class TestAsyncWorkerEdgeCases:
 
     def test_task_with_complex_result(self, event_loop: asyncio.AbstractEventLoop):
         """测试返回复杂结构的任务"""
+
         async def complex_task():
             await asyncio.sleep(0.01)
             return {
@@ -271,6 +278,7 @@ class TestAsyncWorkerEdgeCases:
 
     def test_task_with_multiple_errors(self, event_loop: asyncio.AbstractEventLoop):
         """测试多个错误只记录第一个"""
+
         async def multi_error_task():
             try:
                 raise ValueError("First error")
@@ -288,6 +296,7 @@ class TestAsyncWorkerEdgeCases:
 
     def test_daemon_thread(self, event_loop: asyncio.AbstractEventLoop):
         """验证工作线程是守护线程"""
+
         async def dummy():
             return "result"
 
@@ -296,6 +305,7 @@ class TestAsyncWorkerEdgeCases:
 
     def test_callbacks_can_be_none(self, event_loop: asyncio.AbstractEventLoop):
         """测试回调可以为 None"""
+
         async def dummy():
             return "result"
 

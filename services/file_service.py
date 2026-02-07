@@ -13,6 +13,7 @@ from exceptions import EncodingError, FileValidationError
 from utils import (
     atomic_write_json,
     atomic_write_text,
+    detect_text_encoding,
     safe_read_json,
     safe_read_text,
 )
@@ -79,6 +80,35 @@ class FileService:
         except Exception as e:
             logger.error(f"读取文件失败: {file_path}, 错误: {e}")
             raise
+
+    def detect_file_encoding(self, file_path: str | Path) -> str:
+        """探测文件编码（仅基于文件前缀样本）。"""
+        file_path = validate_file_path(
+            file_path,
+            allowed_extensions=[".txt", ".md", ".text"],
+            max_size_mb=100,
+        )
+        try:
+            return detect_text_encoding(file_path, self.processing_config.encodings)
+        except UnicodeDecodeError as e:
+            raise EncodingError(
+                f"无法读取文件 {file_path}，已尝试编码: {', '.join(self.processing_config.encodings)}"
+            ) from e
+
+    def iter_text_file(self, file_path: str | Path, chunk_size: int = 1024 * 1024):
+        """按块迭代读取文本文件。"""
+        file_path = validate_file_path(
+            file_path,
+            allowed_extensions=[".txt", ".md", ".text"],
+            max_size_mb=100,
+        )
+        encoding = self.detect_file_encoding(file_path)
+        with open(file_path, encoding=encoding) as file_obj:
+            while True:
+                data = file_obj.read(chunk_size)
+                if not data:
+                    break
+                yield data
 
     def write_text_file(self, file_path: str | Path, content: str, encoding: str = "utf-8") -> None:
         """
