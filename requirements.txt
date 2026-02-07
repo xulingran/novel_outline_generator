@@ -13,16 +13,28 @@ zhipuai>=2.0.0
 # AiHubMix API 支持（可选，仅在 API_PROVIDER="aihubmix" 时需要）
 requests>=2.28.0
 
- 
+
 # Web API
 fastapi>=0.115.0
 uvicorn>=0.23.0
 python-multipart>=0.0.9
 
 
+# GUI 框架
+customtkinter>=5.2.0
+pillow>=10.0.0
+
+# 打包工具
+pyinstaller>=6.0.0
+
+# 平台特定依赖
+pywin32>=305; sys_platform == "win32"
+
+
 # 测试依赖
 pytest>=7.0.0
 pytest-asyncio>=0.21.0
+pytest-mock>=3.0.0
 
 # 代码质量工具
 black>=23.0.0

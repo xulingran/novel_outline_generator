@@ -43,6 +43,8 @@ class NovelOutlineApp:
                 await self._process_novel_mode()
             elif mode == "web_ui":
                 self._start_web_ui()
+            elif mode == "gui":
+                self._start_gui()
 
         except KeyboardInterrupt:
             print("\n用户中断操作")
@@ -55,7 +57,8 @@ class NovelOutlineApp:
             logger.exception("未预期的错误")
             print(f"\n❌ 发生未知错误: {e}")
             print("请查看日志文件 novel_outline.log 获取详细信息")
-            print("\n提示：如需使用 Web UI，请确认已安装 fastapi/uvicorn 等依赖，并选择模式 2。")
+            print("\n提示：如需使用 Web UI，请确认已安装 fastapi/uvicorn 等依赖，并选择模式 1。")
+            print("提示：如需使用 GUI 桌面应用，请确认已安装 customtkinter 依赖，并选择模式 3。")
 
     def _print_welcome(self) -> None:
         """打印欢迎信息"""
@@ -74,16 +77,19 @@ class NovelOutlineApp:
             print("请选择模式：")
             print("  1. 启用 Web UI（需要 uvicorn / fastapi 支持）")
             print("  2. 处理新文件（分析小说并生成大纲）")
+            print("  3. GUI 桌面应用（需要 customtkinter 支持）")
 
-            choice = input("\n请输入选项 (1/2，直接回车默认 Web UI): ").strip()
+            choice = input("\n请输入选项 (1/2/3，直接回车默认 Web UI): ").strip()
             if not choice:
                 return "web_ui"
             if choice == "1":
                 return "web_ui"
             elif choice == "2":
                 return "process"
+            elif choice == "3":
+                return "gui"
             else:
-                print("❌ 无效选项，请输入 1 或 2\n")
+                print("❌ 无效选项，请输入 1、2 或 3\n")
 
     async def _process_novel_mode(self) -> None:
         """处理小说模式"""
@@ -130,6 +136,23 @@ class NovelOutlineApp:
             print("❌ 启动失败：未安装 fastapi/uvicorn。请先运行: pip install -r requirements.txt")
         except Exception as e:
             print(f"❌ 启动 Web UI 失败: {e}")
+
+    def _start_gui(self) -> None:
+        """启动 GUI 桌面应用"""
+        try:
+            print("\n🚀 正在启动 GUI 桌面应用...")
+
+            # 导入并启动 GUI
+            from gui.main_window import MainWindow
+
+            app = MainWindow()
+            app.mainloop()
+
+        except ImportError as e:
+            print("❌ 启动失败：未安装 customtkinter。请先运行: pip install -r requirements.txt")
+            print(f"   详细错误: {e}")
+        except Exception as e:
+            print(f"❌ 启动 GUI 失败: {e}")
 
     def _get_input_file_path(self) -> str:
         """获取输入文件路径"""
