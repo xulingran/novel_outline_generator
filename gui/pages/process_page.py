@@ -483,3 +483,45 @@ class ProcessPage(ctk.CTkFrame):
 
         self._start_button.configure(state="disabled")
         self._cancel_button.configure(state="disabled")
+
+    def _calculate_merge_progress(
+        self,
+        merge_level: int,
+        merge_batch_current: int,
+        merge_batch_total: int,
+        merge_outlines_count: int,
+    ) -> float:
+        """
+        计算合并阶段进度
+
+        公式: 进度 = 层级进度 * 0.4 + 批次进度 * 0.4 + 大纲缩减进度 * 0.2
+
+        Args:
+            merge_level: 合并层级（当前递归深度）
+            merge_batch_current: 当前批次索引
+            merge_batch_total: 总批次数
+            merge_outlines_count: 当前正在合并的大纲数量
+
+        Returns:
+            0-1 之间的进度值
+        """
+        # 层级进度：越接近顶层（level=1），进度越高
+        level_progress = 1.0 - (merge_level / (merge_level + 5)) if merge_level > 0 else 0.8
+
+        # 批次进度
+        if merge_batch_total > 0:
+            batch_progress = merge_batch_current / merge_batch_total
+        else:
+            batch_progress = 0.0
+
+        # 大纲缩减进度
+        if self._initial_outline_count > 0:
+            reduction_progress = 1.0 - (merge_outlines_count / self._initial_outline_count)
+            # 根据是否有缩减进度分配权重
+            total = level_progress * 0.4 + batch_progress * 0.4 + reduction_progress * 0.2
+        else:
+            # 没有初始大纲数量时，重新分配权重给层级和批次
+            total = level_progress * 0.5 + batch_progress * 0.5
+
+        # 限制在 [0, 1] 范围
+        return max(0.0, min(1.0, total))
