@@ -44,6 +44,7 @@ class Card(ctk.CTkFrame):
             padding_value = int(padding)
 
         # 设置卡片样式
+        border_color: str | tuple[str, str] | None
         match variant:
             case "bordered":
                 fg_color = get_color("bg_secondary", mode="auto")
@@ -51,21 +52,27 @@ class Card(ctk.CTkFrame):
                 border_width = 1
             case "elevated":
                 fg_color = get_color("bg_secondary", mode="auto")
-                border_color = "transparent"
+                border_color = get_color("border", mode="auto")
+                border_width = 1
+            case "ghost":
+                fg_color = "transparent"
+                border_color = None
                 border_width = 0
             case _:
                 fg_color = get_color("bg_secondary", mode="auto")
-                border_color = "transparent"
-                border_width = 0
+                border_color = get_color("border", mode="auto")
+                border_width = 1
 
-        super().__init__(
-            master,
-            fg_color=fg_color,
-            border_color=border_color,
-            border_width=border_width,
-            corner_radius=CORNER_RADIUS["lg"],
+        frame_kwargs = {
+            "fg_color": fg_color,
+            "border_width": border_width,
+            "corner_radius": CORNER_RADIUS["lg"],
             **kwargs,
-        )
+        }
+        if border_color is not None:
+            frame_kwargs["border_color"] = border_color
+
+        super().__init__(master, **frame_kwargs)
 
         self._title = title
         self._subtitle = subtitle
@@ -178,7 +185,7 @@ class StatCard(Card):
 
         if self._stat_icon:
             try:
-                from gui.components.icon import Icon
+                from gui.components.icon import Icon, IconSize
 
                 icon_widget = Icon(main_frame, name=self._stat_icon, size=IconSize.MD)
                 icon_widget.pack(side="left", padx=(0, SPACING["sm"]))
@@ -217,10 +224,3 @@ class StatCard(Card):
     def update_value(self, value: str | int | float, unit: str = ""):
         """更新数值显示"""
         self.value_label.configure(text=f"{value}{unit}")
-
-
-# 导入 IconSize（放在最后避免循环导入）
-try:
-    from gui.components.icon import IconSize
-except ImportError:
-    IconSize = None

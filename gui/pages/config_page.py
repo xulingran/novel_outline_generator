@@ -5,6 +5,7 @@
 """
 
 import logging
+import platform
 from pathlib import Path
 
 import customtkinter as ctk
@@ -13,6 +14,13 @@ from config import SUPPORTED_API_PROVIDERS, _refresh_config_cache
 from gui.theme_manager import SPACING, get_color
 
 logger = logging.getLogger(__name__)
+
+PROVIDER_LABELS = {
+    "openai": "OpenAI",
+    "gemini": "Gemini",
+    "zhipu": "Zhipu",
+    "aihubmix": "AiHubMix",
+}
 
 
 class ConfigPage(ctk.CTkFrame):
@@ -23,6 +31,8 @@ class ConfigPage(ctk.CTkFrame):
     """
 
     def __init__(self, master, **kwargs):
+        if "fg_color" not in kwargs:
+            kwargs["fg_color"] = get_color("bg_primary", mode="auto")
         super().__init__(master, **kwargs)
 
         self._config_data = {}
@@ -55,7 +65,8 @@ class ConfigPage(ctk.CTkFrame):
             fg_color="transparent",
         )
         scrollable.pack(fill="both", expand=True)
-        scrollable.grid_propagate(False)
+        self._scrollable = scrollable
+        self._setup_scroll_support(scrollable)
 
         # API 配置卡片
         self._setup_api_card(scrollable)
@@ -88,7 +99,8 @@ class ConfigPage(ctk.CTkFrame):
         )
         provider_label.pack(anchor="w", pady=(0, SPACING["sm"]))
 
-        self._provider_var = ctk.StringVar(value=self.api_config.provider)
+        provider_value = self._normalize_provider(self.api_config.provider)
+        self._provider_var = ctk.StringVar(value=provider_value)
 
         # 使用 Segmented Button 风格的选择器
         provider_selector = ctk.CTkFrame(
@@ -101,7 +113,7 @@ class ConfigPage(ctk.CTkFrame):
         for provider in SUPPORTED_API_PROVIDERS:
             btn = ctk.CTkRadioButton(
                 provider_selector,
-                text=provider,
+                text=PROVIDER_LABELS.get(provider, provider),
                 variable=self._provider_var,
                 value=provider,
                 command=self._on_provider_change,
@@ -123,11 +135,12 @@ class ConfigPage(ctk.CTkFrame):
         for widget in self._api_fields_frame.winfo_children():
             widget.destroy()
 
-        provider = self._provider_var.get()
+        provider = self._normalize_provider(self._provider_var.get())
+        self._provider_var.set(provider)
 
         # 根据提供商创建对应字段
         match provider:
-            case "OpenAI":
+            case "openai":
                 self._create_api_key_field(
                     "OpenAI API Key", "openai_key", self.api_config.openai_key or ""
                 )
@@ -140,7 +153,7 @@ class ConfigPage(ctk.CTkFrame):
                 self._create_text_field(
                     "OpenAI 模型", "openai_model", self.api_config.openai_model, "gpt-4o-mini"
                 )
-            case "Gemini":
+            case "gemini":
                 self._create_api_key_field(
                     "Gemini API Key", "gemini_key", self.api_config.gemini_key or ""
                 )
@@ -150,7 +163,7 @@ class ConfigPage(ctk.CTkFrame):
                     self.api_config.gemini_model,
                     "gemini-2.0-flash-exp",
                 )
-            case "Zhipu":
+            case "zhipu":
                 self._create_api_key_field(
                     "智谱 API Key", "zhipu_key", self.api_config.zhipu_key or ""
                 )
@@ -163,7 +176,7 @@ class ConfigPage(ctk.CTkFrame):
                 self._create_text_field(
                     "智谱模型", "zhipu_model", self.api_config.zhipu_model, "glm-4-flash"
                 )
-            case "AiHubMix":
+            case "aihubmix":
                 self._create_api_key_field(
                     "AiHubMix API Key", "aihubmix_key", self.api_config.aihubmix_api_key or ""
                 )
@@ -178,6 +191,8 @@ class ConfigPage(ctk.CTkFrame):
                 )
             case _:
                 pass
+
+        self._bind_scroll_events_to_children(self._api_fields_frame)
 
     def _create_api_key_field(self, label: str, key: str, default: str):
         """创建 API 密钥字段"""
@@ -210,9 +225,9 @@ class ConfigPage(ctk.CTkFrame):
             frame,
             text="显示",
             width=60,
-            command=lambda: self._toggle_password(entry, show_button),
             font=ctk.CTkFont(size=11),
         )
+        show_button.configure(command=lambda: self._toggle_password(entry, show_button))
         show_button.pack(side="left", padx=(SPACING["sm"], 0))
 
     def _create_text_field(self, label: str, key: str, default: str, placeholder: str = ""):
@@ -251,6 +266,8 @@ class ConfigPage(ctk.CTkFrame):
 
     def _on_provider_change(self):
         """提供商变更事件"""
+        provider = self._normalize_provider(self._provider_var.get())
+        self._provider_var.set(provider)
         self._update_api_fields()
 
     def _setup_processing_card(self, parent):
@@ -436,23 +453,23 @@ class ConfigPage(ctk.CTkFrame):
         config_lines = []
 
         # API 配置
-        config_lines.append(f"API_PROVIDER={self._provider_var.get()}")
+        provider = self._normalize_provider(self._provider_var.get())
+        config_lines.append(f"API_PROVIDER={provider}")
 
         # 根据提供商保存对应配置
-        provider = self._provider_var.get()
         match provider:
-            case "OpenAI":
+            case "openai":
                 config_lines.append(f"OPENAI_API_KEY={self._openai_key_var.get()}")
                 config_lines.append(f"OPENAI_API_BASE={self._openai_base_var.get()}")
                 config_lines.append(f"OPENAI_MODEL={self._openai_model_var.get()}")
-            case "Gemini":
+            case "gemini":
                 config_lines.append(f"GEMINI_API_KEY={self._gemini_key_var.get()}")
                 config_lines.append(f"GEMINI_MODEL={self._gemini_model_var.get()}")
-            case "Zhipu":
+            case "zhipu":
                 config_lines.append(f"ZHIPU_API_KEY={self._zhipu_key_var.get()}")
                 config_lines.append(f"ZHIPU_API_BASE={self._zhipu_base_var.get()}")
                 config_lines.append(f"ZHIPU_MODEL={self._zhipu_model_var.get()}")
-            case "AiHubMix":
+            case "aihubmix":
                 config_lines.append(f"AIHUBMIX_API_KEY={self._aihubmix_key_var.get()}")
                 config_lines.append(f"AIHUBMIX_API_BASE={self._aihubmix_base_var.get()}")
                 config_lines.append(f"AIHUBMIX_MODEL={self._aihubmix_model_var.get()}")
@@ -490,5 +507,77 @@ class ConfigPage(ctk.CTkFrame):
         from tkinter import messagebox
 
         if messagebox.askyesno("确认", "确定要重置为默认配置吗？"):
-            # TODO: 实现重置逻辑
-            pass
+            # API 默认值
+            self._provider_var.set("openai")
+            self._update_api_fields()
+
+            # 安全设置字段（若当前提供商页面存在这些变量）
+            if hasattr(self, "_openai_key_var"):
+                self._openai_key_var.set("")
+            if hasattr(self, "_openai_base_var"):
+                self._openai_base_var.set("https://api.openai.com/v1")
+            if hasattr(self, "_openai_model_var"):
+                self._openai_model_var.set("gpt-4o-mini")
+
+            # 处理参数默认值
+            self._chunk_size_var.set(6000)
+            self._parallel_var.set(5)
+            self._retry_var.set(5)
+            self._chunk_value_label.configure(text="6000")
+
+            # 代理默认值
+            self._proxy_enabled_var.set(False)
+            self._proxy_url_var.set("")
+
+            messagebox.showinfo("完成", "已恢复默认配置（未自动保存）")
+
+    def _normalize_provider(self, provider: str | None) -> str:
+        """将 provider 统一为受支持的小写值。"""
+        value = (provider or "").strip().lower()
+        if value in SUPPORTED_API_PROVIDERS:
+            return value
+        return "openai"
+
+    def _setup_scroll_support(self, scrollable: ctk.CTkScrollableFrame):
+        """为配置页启用触控板/滚轮滚动支持。"""
+        canvas = getattr(scrollable, "_parent_canvas", None)
+        if canvas is None:
+            return
+
+        def on_mousewheel(event):
+            delta = 0
+            if hasattr(event, "num") and event.num in (4, 5):
+                delta = -1 if event.num == 4 else 1
+            elif getattr(event, "delta", 0):
+                if platform.system() == "Darwin":
+                    delta = -1 if event.delta > 0 else 1
+                else:
+                    delta = int(-event.delta / 120)
+
+            if delta:
+                try:
+                    canvas.yview_scroll(delta, "units")
+                except Exception:
+                    logger.debug("配置页滚动处理失败", exc_info=True)
+                return "break"
+            return None
+
+        for event_name in ("<MouseWheel>", "<Button-4>", "<Button-5>"):
+            canvas.bind(event_name, on_mousewheel, add="+")
+
+        self._scroll_handler = on_mousewheel
+        self.after(100, lambda: self._bind_scroll_events_to_children(scrollable, on_mousewheel))
+
+    def _bind_scroll_events_to_children(self, widget, handler=None):
+        """为子组件递归绑定滚轮事件，避免输入控件吞掉滚动事件。"""
+        active_handler = handler or getattr(self, "_scroll_handler", None)
+        if active_handler is None:
+            return
+
+        if hasattr(widget, "bind"):
+            for event_name in ("<MouseWheel>", "<Button-4>", "<Button-5>"):
+                widget.bind(event_name, active_handler, add="+")
+
+        if hasattr(widget, "winfo_children"):
+            for child in widget.winfo_children():
+                self._bind_scroll_events_to_children(child, handler)

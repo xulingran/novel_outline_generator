@@ -4,13 +4,17 @@ Token计数器模块
 """
 
 import logging
-from typing import Protocol
-
-import tiktoken
+from importlib import import_module
+from typing import Any, Protocol
 
 from exceptions import EncodingError
 
 logger = logging.getLogger(__name__)
+
+try:
+    tiktoken: Any | None = import_module("tiktoken")
+except ImportError:
+    tiktoken = None
 
 
 class TokenEncoder(Protocol):
@@ -39,12 +43,16 @@ def get_encoder() -> TokenEncoder:
     """获取编码器实例（单例模式）"""
     global _encoder
     if _encoder is None:
-        try:
-            _encoder = tiktoken.get_encoding("cl100k_base")
-            logger.debug("初始化tiktoken编码器: cl100k_base")
-        except Exception as e:
-            logger.warning(f"初始化编码器失败，使用简化编码器: {e}")
+        if tiktoken is None:
+            logger.warning("未安装 tiktoken，使用简化编码器")
             _encoder = _FallbackEncoder()
+        else:
+            try:
+                _encoder = tiktoken.get_encoding("cl100k_base")
+                logger.debug("初始化tiktoken编码器: cl100k_base")
+            except Exception as e:
+                logger.warning(f"初始化编码器失败，使用简化编码器: {e}")
+                _encoder = _FallbackEncoder()
     return _encoder
 
 

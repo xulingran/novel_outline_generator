@@ -96,7 +96,11 @@ def apply_easing(t: float, easing: Easing) -> float:
 def hex_to_rgb(hex_color: str) -> tuple[int, int, int]:
     """将十六进制颜色转换为 RGB"""
     hex_color = hex_color.lstrip("#")
-    return tuple(int(hex_color[i : i + 2], 16) for i in (0, 2, 4))
+    return (
+        int(hex_color[0:2], 16),
+        int(hex_color[2:4], 16),
+        int(hex_color[4:6], 16),
+    )
 
 
 def rgb_to_hex(r: int, g: int, b: int) -> str:
@@ -151,6 +155,10 @@ class Animation:
     def _tick(self, master: ctk.CTk) -> None:
         """动画帧更新"""
         if not self._is_running:
+            return
+        if self._start_time is None:
+            # 防御式处理：未初始化起始时间时直接终止动画
+            self._complete()
             return
 
         current_time = time.time() * 1000

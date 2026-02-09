@@ -155,7 +155,9 @@ class Button(ctk.CTkButton):
                     "text_color": get_color("bg_primary", mode="auto"),
                 }
 
-    def _adjust_color(self, hex_color: str, percent: int) -> str:
+    def _adjust_color(
+        self, hex_color: str | tuple[str, str], percent: int
+    ) -> str | tuple[str, str]:
         """调整颜色亮度（用于 hover 效果）"""
         # 简化实现：返回原色
         return hex_color
