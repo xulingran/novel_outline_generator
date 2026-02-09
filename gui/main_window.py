@@ -249,6 +249,12 @@ class MainWindow(ctk.CTk):
         phase = progress_data.get("phase", "")
         eta_seconds = progress_data.get("eta_seconds", 0)
 
+        # 合并相关参数
+        merge_level = progress_data.get("merge_level", 0)
+        merge_batch_current = progress_data.get("merge_batch_current", 0)
+        merge_batch_total = progress_data.get("merge_batch_total", 0)
+        merge_outlines_count = progress_data.get("merge_outlines_count", 0)
+
         process_page.update_progress(
             completed=completed,
             total=total,
@@ -256,6 +262,10 @@ class MainWindow(ctk.CTk):
             partial=partial,
             phase=phase,
             eta_seconds=eta_seconds,
+            merge_level=merge_level,
+            merge_batch_current=merge_batch_current,
+            merge_batch_total=merge_batch_total,
+            merge_outlines_count=merge_outlines_count,
         )
 
     def _on_processing_complete(self, result: dict):
