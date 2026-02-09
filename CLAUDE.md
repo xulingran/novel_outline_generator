@@ -75,14 +75,13 @@ GUI 采用**三层组件架构**：
 - `icon.py`：Phosphor 图标组件（30+ 图标，支持尺寸/粗细）
 - `card.py`：卡片容器（统一圆角、阴影、间距）
 - `button.py`：按钮组件（primary/secondary/ghost 变体）
-- `progress_ring.py`：环形进度条（支持阶段显示）
 - `sidebar.py`：侧边导航栏（导航项、主题切换）
 
 ### 业务组件（Widgets）
 
 - `file_selector.py`：文件选择器（拖放区域、token/块数估算）
-- `progress_bar.py`：线性进度条（阶段、ETA、百分比）
-- `log_viewer.py`：日志查看器（级别过滤、自动滚动）
+- `progress_bar.py`：线性进度条（阶段、ETA、百分比、统计信息）
+- `log_viewer.py`：日志查看器（级别、过滤、自动滚动）
 
 ### 页面组件（Pages）
 

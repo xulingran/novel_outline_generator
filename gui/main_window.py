@@ -107,7 +107,7 @@ class MainWindow(ctk.CTk):
         self._pages[NavItem.ABOUT] = AboutPage(self._content_frame)
 
     def _show_page(self, nav_item: NavItem):
-        """显示指定页面"""
+        """显示指定页面（带淡入动画效果）"""
         # 隐藏当前页面
         if self._current_page:
             self._pages[self._current_page].pack_forget()
@@ -125,8 +125,47 @@ class MainWindow(ctk.CTk):
         # 更新侧边栏激活状态
         self._sidebar.set_active_item(nav_item)
 
-        # TODO: 添加页面切换动画
+        # 页面切换淡入动画
+        self._animate_page_transition(page)
+
         logger.debug(f"Showing page: {nav_item.value}")
+
+    def _animate_page_transition(self, page, duration_ms: int = 150) -> None:
+        """执行页面切换淡入动画
+
+        Args:
+            page: 要动画显示的页面
+            duration_ms: 动画持续时间（毫秒）
+        """
+        try:
+            # 保存原始透明度
+            original_alpha = page.cget("fg_color")
+
+            # 设置初始透明度（通过降低亮度模拟）
+            page.configure(fg_color=get_color("bg_secondary", mode="auto"))
+
+            # 渐变动画
+            def fade_in(step: int = 0, steps: int = 5) -> None:
+                if step >= steps:
+                    # 恢复原始颜色
+                    page.configure(fg_color=original_alpha)
+                    return
+
+                # 计算中间颜色（简化处理：直接使用背景色）
+                progress = step / steps
+                if progress > 0.5:
+                    page.configure(fg_color=get_color("bg_primary", mode="auto"))
+
+                # 调度下一帧
+                delay = duration_ms // steps
+                self.after(delay, lambda: fade_in(step + 1, steps))
+
+            # 启动动画
+            fade_in()
+
+        except Exception:
+            # 动画失败不影响功能
+            logger.debug("Page transition animation failed", exc_info=True)
 
     def _on_navigation(self, nav_item: NavItem):
         """导航回调"""

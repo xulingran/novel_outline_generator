@@ -199,6 +199,7 @@ MAX_JOBS = 100
 JOB_MAX_AGE_HOURS = 24
 
 job_manager = JobManager(max_jobs=MAX_JOBS, max_age_hours=JOB_MAX_AGE_HOURS)
+# 向后兼容：JOBS 是 job_manager.jobs 的别名，测试代码使用
 JOBS: dict[str, Job] = job_manager.jobs
 _cleanup_task: asyncio.Task | None = None
 

@@ -14,7 +14,7 @@ from services.task_queue import QueueTask
 
 @pytest.fixture(autouse=True)
 def isolate_web_api_state(monkeypatch, tmp_path):
-    web_api.JOBS.clear()
+    web_api.job_manager.jobs.clear()
     monkeypatch.setattr(web_api, "rate_limiter", web_api.RateLimiter())
     upload_dir = tmp_path / "uploads"
     monkeypatch.setattr(web_api, "UPLOAD_DIR", upload_dir)
@@ -388,23 +388,23 @@ def test_cleanup_expired_jobs(monkeypatch):
     monkeypatch.setattr(web_api.time, "time", lambda: now)
     old_job = web_api.Job(id="old", created_at=now - web_api.JOB_MAX_AGE_HOURS * 3600 - 1)
     new_job = web_api.Job(id="new", created_at=now)
-    web_api.JOBS["old"] = old_job
-    web_api.JOBS["new"] = new_job
+    web_api.job_manager.jobs["old"] = old_job
+    web_api.job_manager.jobs["new"] = new_job
     web_api.cleanup_expired_jobs()
-    assert "old" not in web_api.JOBS
-    assert "new" in web_api.JOBS
+    assert "old" not in web_api.job_manager.jobs
+    assert "new" in web_api.job_manager.jobs
 
 
 def test_cleanup_excess_jobs_prioritizes_finished(monkeypatch):
     monkeypatch.setattr(web_api, "MAX_JOBS", 2)
-    web_api.JOBS.clear()
-    web_api.JOBS["s1"] = web_api.Job(id="s1", status="success", created_at=1.0)
-    web_api.JOBS["e1"] = web_api.Job(id="e1", status="error", created_at=2.0)
-    web_api.JOBS["p1"] = web_api.Job(id="p1", status="pending", created_at=3.0)
-    web_api.JOBS["r1"] = web_api.Job(id="r1", status="running", created_at=4.0)
+    web_api.job_manager.jobs.clear()
+    web_api.job_manager.jobs["s1"] = web_api.Job(id="s1", status="success", created_at=1.0)
+    web_api.job_manager.jobs["e1"] = web_api.Job(id="e1", status="error", created_at=2.0)
+    web_api.job_manager.jobs["p1"] = web_api.Job(id="p1", status="pending", created_at=3.0)
+    web_api.job_manager.jobs["r1"] = web_api.Job(id="r1", status="running", created_at=4.0)
     web_api.cleanup_excess_jobs()
-    assert len(web_api.JOBS) == 2
-    assert "p1" in web_api.JOBS or "r1" in web_api.JOBS
+    assert len(web_api.job_manager.jobs) == 2
+    assert "p1" in web_api.job_manager.jobs or "r1" in web_api.job_manager.jobs
 
 
 def test_resolve_upload_path_security(tmp_path, monkeypatch):

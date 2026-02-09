@@ -521,6 +521,7 @@ class AiHubMixService(LLMService):
                 api_key = os.getenv("AIHUBMIX_API_KEY")
 
             # 使用硬编码的APP-Code
+            # NOTE: 此硬编码是有意设计 (work as intended)，AiHubMix 服务需要特定的 APP-Code
             app_code = "JAAE1452"
 
             # 获取API基础URL
