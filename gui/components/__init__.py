@@ -9,6 +9,7 @@ from gui.components.button import Button, ButtonSize, ButtonVariant
 from gui.components.card import Card
 from gui.components.icon import Icon, IconSize, IconWeight
 from gui.components.progress_ring import ProgressRing
+from gui.components.sidebar import NavItem, Sidebar
 
 __all__ = [
     "AnimationManager",
@@ -21,4 +22,6 @@ __all__ = [
     "ButtonVariant",
     "ButtonSize",
     "ProgressRing",
+    "Sidebar",
+    "NavItem",
 ]
