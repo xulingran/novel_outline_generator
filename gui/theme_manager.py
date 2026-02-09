@@ -38,24 +38,24 @@ NORD_COLORS = {
     },
     "light": {
         # 背景色
-        "bg_primary": "#ECEFF4",  # Nord6
-        "bg_secondary": "#D8DEE9",  # Nord4
-        "bg_tertiary": "#E5E9F0",  # Nord5
+        "bg_primary": "#F3F5F9",  # 应用主背景
+        "bg_secondary": "#FFFFFF",  # 卡片/浮层背景
+        "bg_tertiary": "#E9EEF6",  # 侧栏与弱强调背景
         # 前景色
-        "fg_primary": "#2E3440",  # Nord0
-        "fg_secondary": "#434C5E",  # Nord2
-        "fg_tertiary": "#4C566A",  # Nord3
+        "fg_primary": "#1F2937",  # 主文本
+        "fg_secondary": "#4B5563",  # 次级文本
+        "fg_tertiary": "#6B7280",  # 弱文本
         # 强调色
-        "accent": "#5E81AC",  # Nord10 - 蓝色强调
-        "accent_secondary": "#81A1C1",  # Nord9
+        "accent": "#2F6FEB",  # 主按钮/激活态
+        "accent_secondary": "#5B8CFF",  # hover/次强调
         # 状态色
-        "success": "#A3BE8C",  # Nord14
-        "warning": "#D08770",  # Nord12
-        "error": "#BF616A",  # Nord11
-        "info": "#5E81AC",  # Nord10
+        "success": "#1F9D6A",
+        "warning": "#C97A12",
+        "error": "#C0392B",
+        "info": "#2F6FEB",
         # 边框色
-        "border": "#D8DEE9",  # Nord4
-        "border_dark": "#4C566A",  # Nord3
+        "border": "#D7DFEA",
+        "border_dark": "#9AA9BF",
     },
 }
 

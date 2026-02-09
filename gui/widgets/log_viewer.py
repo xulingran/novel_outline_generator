@@ -9,6 +9,8 @@ from pathlib import Path
 
 import customtkinter as ctk
 
+from gui.theme_manager import SPACING, get_color
+
 logger = logging.getLogger(__name__)
 
 
@@ -56,42 +58,84 @@ class LogViewer(ctk.CTkFrame):
         """设置 UI"""
         # 工具栏
         toolbar = ctk.CTkFrame(self, fg_color="transparent")
-        toolbar.pack(fill="x", pady=(10, 5))
+        toolbar.pack(fill="x", pady=(SPACING["md"], SPACING["sm"]))
 
         # 标题
         title_label = ctk.CTkLabel(
-            toolbar, text="系统日志", font=ctk.CTkFont(size=16, weight="bold")
+            toolbar,
+            text="系统日志",
+            font=ctk.CTkFont(size=16, weight="bold"),
+            text_color=get_color("fg_primary", mode="auto"),
         )
-        title_label.pack(side="left", padx=10)
+        title_label.pack(side="left", padx=SPACING["md"])
 
         # 日志级别选择
-        level_label = ctk.CTkLabel(toolbar, text="级别:")
-        level_label.pack(side="left", padx=(20, 5))
+        level_label = ctk.CTkLabel(
+            toolbar,
+            text="级别:",
+            text_color=get_color("fg_secondary", mode="auto"),
+        )
+        level_label.pack(side="left", padx=(SPACING["lg"], SPACING["sm"]))
 
         self.level_menu = ctk.CTkOptionMenu(
-            toolbar, values=self.log_levels, command=self._on_level_change
+            toolbar,
+            values=self.log_levels,
+            command=self._on_level_change,
+            fg_color=get_color("bg_secondary", mode="auto"),
+            button_color=get_color("accent", mode="auto"),
+            button_hover_color=get_color("accent_secondary", mode="auto"),
+            text_color=get_color("fg_primary", mode="auto"),
         )
         self.level_menu.set("ALL")
-        self.level_menu.pack(side="left", padx=5)
+        self.level_menu.pack(side="left", padx=SPACING["sm"])
 
         # 刷新按钮
-        refresh_button = ctk.CTkButton(toolbar, text="刷新", command=self.refresh_log, width=80)
-        refresh_button.pack(side="right", padx=5)
+        refresh_button = ctk.CTkButton(
+            toolbar,
+            text="刷新",
+            command=self.refresh_log,
+            width=80,
+            fg_color=get_color("accent", mode="auto"),
+            hover_color=get_color("accent_secondary", mode="auto"),
+            text_color=get_color("bg_primary", mode="auto"),
+        )
+        refresh_button.pack(side="right", padx=SPACING["sm"])
 
         # 清空按钮
-        clear_button = ctk.CTkButton(toolbar, text="清空", command=self.clear_log, width=80)
-        clear_button.pack(side="right", padx=5)
+        clear_button = ctk.CTkButton(
+            toolbar,
+            text="清空",
+            command=self.clear_log,
+            width=80,
+            fg_color=get_color("bg_secondary", mode="auto"),
+            hover_color=get_color("bg_tertiary", mode="auto"),
+            text_color=get_color("fg_primary", mode="auto"),
+        )
+        clear_button.pack(side="right", padx=SPACING["sm"])
 
         # 自动滚动开关
         self.auto_scroll_var = ctk.BooleanVar(value=True)
         auto_scroll_checkbox = ctk.CTkCheckBox(
-            toolbar, text="自动滚动", variable=self.auto_scroll_var
+            toolbar,
+            text="自动滚动",
+            variable=self.auto_scroll_var,
+            text_color=get_color("fg_secondary", mode="auto"),
+            fg_color=get_color("accent", mode="auto"),
+            hover_color=get_color("accent_secondary", mode="auto"),
         )
-        auto_scroll_checkbox.pack(side="right", padx=10)
+        auto_scroll_checkbox.pack(side="right", padx=SPACING["md"])
 
         # 日志显示区域
-        self.log_text = ctk.CTkTextbox(self, font=ctk.CTkFont(family="Consolas", size=11))
-        self.log_text.pack(fill="both", expand=True, padx=10, pady=(5, 10))
+        self.log_text = ctk.CTkTextbox(
+            self,
+            font=ctk.CTkFont(family="Consolas", size=11),
+            fg_color=get_color("bg_primary", mode="auto"),
+            text_color=get_color("fg_primary", mode="auto"),
+            border_color=get_color("border", mode="auto"),
+        )
+        self.log_text.pack(
+            fill="both", expand=True, padx=SPACING["md"], pady=(SPACING["sm"], SPACING["md"])
+        )
 
     def _start_auto_refresh(self):
         """启动自动刷新"""

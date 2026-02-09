@@ -8,6 +8,8 @@ import logging
 
 import customtkinter as ctk
 
+from gui.theme_manager import SPACING, get_color
+
 logger = logging.getLogger(__name__)
 
 
@@ -39,29 +41,47 @@ class ProgressBar(ctk.CTkFrame):
     def _setup_ui(self):
         """设置 UI"""
         # 标题
-        title_label = ctk.CTkLabel(self, text="处理进度", font=ctk.CTkFont(size=16, weight="bold"))
-        title_label.pack(pady=(10, 10))
+        title_label = ctk.CTkLabel(
+            self,
+            text="处理进度",
+            font=ctk.CTkFont(size=16, weight="bold"),
+            text_color=get_color("fg_primary", mode="auto"),
+        )
+        title_label.pack(pady=(SPACING["md"], SPACING["md"]))
 
         # 进度条
-        self.progress_bar = ctk.CTkProgressBar(self, width=400)
-        self.progress_bar.pack(pady=10)
+        self.progress_bar = ctk.CTkProgressBar(
+            self,
+            width=400,
+            progress_color=get_color("accent", mode="auto"),
+            fg_color=get_color("bg_secondary", mode="auto"),
+        )
+        self.progress_bar.pack(pady=SPACING["md"])
         self.progress_bar.set(0)
 
         # 统计信息框架
         stats_frame = ctk.CTkFrame(self, fg_color="transparent")
-        stats_frame.pack(pady=5)
+        stats_frame.pack(pady=SPACING["sm"])
 
         # 已完成
         self.completed_label = ctk.CTkLabel(
-            stats_frame, text="已完成: 0/0", width=150, font=ctk.CTkFont(size=12)
+            stats_frame,
+            text="已完成: 0/0",
+            width=150,
+            font=ctk.CTkFont(size=12),
+            text_color=get_color("fg_primary", mode="auto"),
         )
-        self.completed_label.pack(side="left", padx=10)
+        self.completed_label.pack(side="left", padx=SPACING["md"])
 
         # 失败
         self.failed_label = ctk.CTkLabel(
-            stats_frame, text="失败: 0", width=100, font=ctk.CTkFont(size=12), text_color="red"
+            stats_frame,
+            text="失败: 0",
+            width=100,
+            font=ctk.CTkFont(size=12),
+            text_color=get_color("error", mode="auto"),
         )
-        self.failed_label.pack(side="left", padx=10)
+        self.failed_label.pack(side="left", padx=SPACING["md"])
 
         # 部分完成
         self.partial_label = ctk.CTkLabel(
@@ -69,21 +89,27 @@ class ProgressBar(ctk.CTkFrame):
             text="部分完成: 0",
             width=100,
             font=ctk.CTkFont(size=12),
-            text_color="orange",
+            text_color=get_color("warning", mode="auto"),
         )
-        self.partial_label.pack(side="left", padx=10)
+        self.partial_label.pack(side="left", padx=SPACING["md"])
 
         # 当前阶段
         self.phase_label = ctk.CTkLabel(
-            self, text="等待开始...", font=ctk.CTkFont(size=12), text_color="gray"
+            self,
+            text="等待开始...",
+            font=ctk.CTkFont(size=12),
+            text_color=get_color("fg_secondary", mode="auto"),
         )
-        self.phase_label.pack(pady=5)
+        self.phase_label.pack(pady=SPACING["sm"])
 
         # ETA 显示
         self.eta_label = ctk.CTkLabel(
-            self, text="预估剩余时间: --", font=ctk.CTkFont(size=12), text_color="gray"
+            self,
+            text="预估剩余时间: --",
+            font=ctk.CTkFont(size=12),
+            text_color=get_color("fg_secondary", mode="auto"),
         )
-        self.eta_label.pack(pady=(5, 10))
+        self.eta_label.pack(pady=(SPACING["sm"], SPACING["md"]))
 
     def update_progress(
         self,
@@ -92,8 +118,9 @@ class ProgressBar(ctk.CTkFrame):
         failed: int = 0,
         partial: int = 0,
         phase: str = "",
-        eta_seconds: int | None = None,
-        eta_confidence: float = 0.0,
+        eta_seconds: int | float | str | None = None,
+        eta_confidence: float | str = 0.0,
+        progress: float | None = None,
     ):
         """
         更新进度
@@ -105,20 +132,26 @@ class ProgressBar(ctk.CTkFrame):
             partial: 部分完成块数
             phase: 当前阶段
             eta_seconds: 预估剩余时间（秒）
-            eta_confidence: 置信度（0-1）
+            eta_confidence: 置信度（0-1）或等级字符串（low/medium/high）
+            progress: 进度值（0-1），优先于 completed/total 计算
         """
         self.completed_chunks = completed
         self.total_chunks = total
         self.failed_chunks = failed
         self.partial_chunks = partial
         self.current_phase = phase
-        self.eta_seconds = eta_seconds or 0
-        self.eta_confidence = eta_confidence
+        normalized_eta_seconds = self._normalize_eta_seconds(eta_seconds)
+        normalized_confidence = self._normalize_confidence(eta_confidence)
+        self.eta_seconds = normalized_eta_seconds
+        self.eta_confidence = normalized_confidence
 
         # 更新进度条
-        if total > 0:
-            progress = completed / total
-            self.progress_bar.set(progress)
+        progress_value = progress
+        if progress_value is None and total > 0:
+            progress_value = completed / total
+        if progress_value is not None:
+            progress_value = max(0.0, min(1.0, progress_value))
+            self.progress_bar.set(progress_value)
 
         # 更新统计标签
         self.completed_label.configure(text=f"已完成: {completed}/{total}")
@@ -132,11 +165,42 @@ class ProgressBar(ctk.CTkFrame):
             self.phase_label.configure(text="处理中...")
 
         # 更新 ETA
-        if eta_seconds and eta_seconds > 0:
-            eta_text = self._format_eta(eta_seconds, eta_confidence)
+        if normalized_eta_seconds > 0:
+            eta_text = self._format_eta(normalized_eta_seconds, normalized_confidence)
             self.eta_label.configure(text=eta_text)
         else:
             self.eta_label.configure(text="预估剩余时间: 计算中...")
+
+    def _normalize_eta_seconds(self, seconds: int | float | str | None) -> int:
+        """将 ETA 秒数归一化为非负整数。"""
+        if seconds is None:
+            return 0
+        try:
+            return max(0, int(float(seconds)))
+        except (TypeError, ValueError):
+            return 0
+
+    def _normalize_confidence(self, confidence: float | str | None) -> float:
+        """将置信度统一为 0-1 浮点值。"""
+        if isinstance(confidence, str):
+            mapping = {
+                "low": 0.3,
+                "medium": 0.6,
+                "high": 0.9,
+            }
+            key = confidence.strip().lower()
+            if key in mapping:
+                return mapping[key]
+            try:
+                value = float(key)
+            except ValueError:
+                return 0.0
+            return max(0.0, min(1.0, value))
+        try:
+            value = float(confidence) if confidence is not None else 0.0
+        except (TypeError, ValueError):
+            return 0.0
+        return max(0.0, min(1.0, value))
 
     def _format_eta(self, seconds: int, confidence: float) -> str:
         """

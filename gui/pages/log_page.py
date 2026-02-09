@@ -29,7 +29,17 @@ class LogPage(ctk.CTkFrame):
         "ERROR": get_color("error", mode="auto"),
     }
 
+    @staticmethod
+    def _resolve_tk_color(color: str | tuple[str, str]) -> str:
+        """将 auto 颜色元组转换为 Tk 可识别的单色值"""
+        if isinstance(color, tuple):
+            appearance = ctk.get_appearance_mode()
+            return color[0] if appearance == "Light" else color[1]
+        return color
+
     def __init__(self, master, log_file: Path | None = None, **kwargs):
+        if "fg_color" not in kwargs:
+            kwargs["fg_color"] = get_color("bg_primary", mode="auto")
         super().__init__(master, **kwargs)
 
         self._log_file = log_file
@@ -134,9 +144,9 @@ class LogPage(ctk.CTkFrame):
                 text_color=get_color("fg_secondary", mode="auto"),
                 anchor="w",
             )
-            label.pack(side="left", padx=SPACING["sm"], pady=SPACING["xs"])
             if width > 0:
-                label.pack(side="left", width=width, padx=SPACING["sm"], pady=SPACING["xs"])
+                label.configure(width=width)
+            label.pack(side="left", padx=SPACING["sm"], pady=SPACING["xs"])
 
         # 日志显示（使用 Textbox）
         self._log_text = ctk.CTkTextbox(
@@ -148,10 +158,18 @@ class LogPage(ctk.CTkFrame):
         self._log_text.pack(fill="both", expand=True, padx=SPACING["sm"], pady=(0, SPACING["sm"]))
 
         # 配置标签样式
-        self._log_text.tag_config("DEBUG", foreground=self.LEVEL_COLORS["DEBUG"])
-        self._log_text.tag_config("INFO", foreground=self.LEVEL_COLORS["INFO"])
-        self._log_text.tag_config("WARNING", foreground=self.LEVEL_COLORS["WARNING"])
-        self._log_text.tag_config("ERROR", foreground=self.LEVEL_COLORS["ERROR"])
+        self._log_text.tag_config(
+            "DEBUG", foreground=self._resolve_tk_color(self.LEVEL_COLORS["DEBUG"])
+        )
+        self._log_text.tag_config(
+            "INFO", foreground=self._resolve_tk_color(self.LEVEL_COLORS["INFO"])
+        )
+        self._log_text.tag_config(
+            "WARNING", foreground=self._resolve_tk_color(self.LEVEL_COLORS["WARNING"])
+        )
+        self._log_text.tag_config(
+            "ERROR", foreground=self._resolve_tk_color(self.LEVEL_COLORS["ERROR"])
+        )
 
     def _load_logs(self):
         """加载日志文件"""

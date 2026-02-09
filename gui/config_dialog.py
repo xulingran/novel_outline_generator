@@ -65,6 +65,9 @@ class ConfigDialog(ctk.CTkToplevel):
         # 代理配置区域
         self._setup_proxy_config(main_frame)
 
+        # 为 macOS 触控板添加滚动支持
+        self._setup_macos_scroll(main_frame)
+
         # 按钮区域
         button_frame = ctk.CTkFrame(self, fg_color="transparent")
         button_frame.pack(fill="x", padx=20, pady=(0, 20))
@@ -372,3 +375,75 @@ class ConfigDialog(ctk.CTkToplevel):
             except Exception as e:
                 logger.error(f"导出配置失败: {e}")
                 messagebox.showerror("错误", f"导出配置失败: {e}")
+
+    def _setup_macos_scroll(self, scrollable_frame):
+        """为 macOS 触控板设置滚动支持
+
+        CustomTkinter 的 CTkScrollableFrame 在 macOS 上对触控板滚动的支持不完善，
+        需要显式绑定鼠标滚轮事件。
+        """
+        import platform
+
+        # 只在 macOS 上执行
+        if platform.system() != "Darwin":
+            return
+
+        def on_mousewheel(event):
+            """处理鼠标滚轮和触控板滚动事件"""
+            try:
+                # macOS 上的 delta 值需要特殊处理
+                # 触控板滚动时 delta 值通常是 1 或 -1
+                delta = event.delta
+
+                # 滚动速度调整
+                scroll_amount = -delta * 3
+
+                # 执行滚动
+                canvas = scrollable_frame._parent_canvas
+                if canvas and canvas.winfo_exists():
+                    canvas.yview_scroll(scroll_amount, "units")
+            except Exception as e:
+                logger.debug(f"滚动处理出错: {e}")
+
+        def on_trackpad_gesture(event):
+            """处理 macOS 触控板手势"""
+            try:
+                # 获取滑动方向
+                if hasattr(event, "num"):
+                    if event.num == 4:  # 向上滑动
+                        delta = -1
+                    elif event.num == 5:  # 向下滑动
+                        delta = 1
+                    else:
+                        return
+                else:
+                    return
+
+                canvas = scrollable_frame._parent_canvas
+                if canvas and canvas.winfo_exists():
+                    canvas.yview_scroll(delta * 2, "units")
+            except Exception as e:
+                logger.debug(f"触控板手势处理出错: {e}")
+
+        # 获取内部的 canvas 和 frame
+        canvas = scrollable_frame._parent_canvas
+
+        # 绑定鼠标滚轮事件 (支持鼠标和触控板)
+        canvas.bind("<MouseWheel>", on_mousewheel, add="+")
+
+        # 绑定 macOS 触控板手势事件
+        canvas.bind("<Button-4>", on_trackpad_gesture, add="+")  # 向上滑动
+        canvas.bind("<Button-5>", on_trackpad_gesture, add="+")  # 向下滑动
+
+        # 为所有子 widget 也绑定事件
+        def bind_to_children(widget):
+            if hasattr(widget, "bind"):
+                widget.bind("<MouseWheel>", on_mousewheel, add="+")
+                widget.bind("<Button-4>", on_trackpad_gesture, add="+")
+                widget.bind("<Button-5>", on_trackpad_gesture, add="+")
+            if hasattr(widget, "winfo_children"):
+                for child in widget.winfo_children():
+                    bind_to_children(child)
+
+        # 延迟绑定到子 widget，确保所有 widget 都已创建
+        self.after(100, lambda: bind_to_children(scrollable_frame))

@@ -7,6 +7,6 @@
 
 | ID | Time | T | Title | Read |
 |----|------|---|-------|------|
-| #156 | 10:00 AM | ✅ | Old Main Window Tests Archived | ~181 |
-| #155 | 9:59 AM | 🔵 | GUI Test Suite Implementation | ~257 |
+| #237 | 12:08 PM | 🔴 | Config Dialog Tests Fail Due to Missing _parent_canvas Attribute in Mock | ~273 |
+| #176 | 10:12 AM | ✅ | GUI Test Suite Updated | ~228 |
 </claude-mem-context>

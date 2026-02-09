@@ -130,9 +130,9 @@ class TestThemeManager:
         assert tm.get_color("success", mode="dark") == "#A3BE8C"
 
         # 亮色主题
-        assert tm.get_color("bg_primary", mode="light") == "#ECEFF4"
-        assert tm.get_color("accent", mode="light") == "#5E81AC"
-        assert tm.get_color("error", mode="light") == "#BF616A"
+        assert tm.get_color("bg_primary", mode="light") == "#F3F5F9"
+        assert tm.get_color("accent", mode="light") == "#2F6FEB"
+        assert tm.get_color("error", mode="light") == "#C0392B"
 
     def test_get_color_invalid_name(self, temp_settings):
         """测试获取不存在的颜色"""

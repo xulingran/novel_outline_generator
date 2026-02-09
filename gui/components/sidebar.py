@@ -74,7 +74,7 @@ class Sidebar(ctk.CTkFrame):
         super().__init__(
             master,
             width=width,
-            fg_color=get_color("bg_secondary", mode="auto"),
+            fg_color=get_color("bg_tertiary", mode="auto"),
             corner_radius=0,
             **kwargs,
         )
@@ -209,7 +209,7 @@ class Sidebar(ctk.CTkFrame):
     def _on_nav_enter(self, button: ctk.CTkFrame, item_id: NavItem):
         """导航项悬停进入"""
         if item_id != self._active_item:
-            button.configure(fg_color=get_color("bg_tertiary", mode="auto"))
+            button.configure(fg_color=get_color("bg_secondary", mode="auto"))
 
     def _on_nav_leave(self, button: ctk.CTkFrame, item_id: NavItem):
         """导航项悬停离开"""
@@ -223,7 +223,7 @@ class Sidebar(ctk.CTkFrame):
 
             if is_active:
                 # 激活状态
-                button.configure(fg_color=get_color("bg_tertiary", mode="auto"))
+                button.configure(fg_color=get_color("bg_secondary", mode="auto"))
                 button._indicator.configure(fg_color=get_color("accent", mode="auto"))
 
                 if hasattr(button, "_icon"):
@@ -322,7 +322,7 @@ class Sidebar(ctk.CTkFrame):
             # 悬停效果
             toggle_button.bind(
                 "<Enter>",
-                lambda e: toggle_button.configure(fg_color=get_color("bg_tertiary", mode="auto")),
+                lambda e: toggle_button.configure(fg_color=get_color("bg_secondary", mode="auto")),
             )
             toggle_button.bind("<Leave>", lambda e: toggle_button.configure(fg_color="transparent"))
 

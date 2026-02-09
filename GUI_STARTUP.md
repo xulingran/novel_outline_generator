@@ -12,10 +12,10 @@ macOS 上 Python 3.14 没有内置 tkinter 支持，这是 Python 3.14 在 macOS
 
 ```bash
 # 1. 安装 PyInstaller
-.venv/bin/python -m pip install pyinstaller
+venv_system/bin/python -m pip install pyinstaller
 
 # 2. 打包应用
-.venv/bin/python -m PyInstaller build/app.spec --onefile --windowed
+venv_system/bin/python -m PyInstaller build/app.spec --onefile --windowed
 
 # 3. 运行打包后的应用
 ./dist/小说大纲生成器
@@ -41,7 +41,7 @@ python gui_launcher.py
 
 ```bash
 # 使用命令行模式，无需 GUI
-.venv/bin/python main.py
+venv_system/bin/python main.py
 # 选择模式 2
 ```
 
@@ -49,7 +49,7 @@ python gui_launcher.py
 
 ```bash
 # 启动 Web 服务
-.venv/bin/python -m uvicorn web_api:app --reload --port 8000
+venv_system/bin/python -m uvicorn web_api:app --reload --port 8000
 
 # 在浏览器中打开
 open http://localhost:8000
@@ -76,4 +76,3 @@ open http://localhost:8000
 2. ✅ 自动处理 tkinter 兼容性问题
 3. ✅ 独立可执行文件，双击即可运行
 4. ✅ 跨平台支持（Windows/macOS/Linux）
-

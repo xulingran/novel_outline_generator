@@ -19,18 +19,20 @@ class ProcessPage(ctk.CTkFrame):
     """
     处理页面
 
-    三栏布局：
-    - 左栏：文件选择和信息
-    - 中栏：进度可视化
-    - 右栏：实时日志
+    固定两行布局：
+    - 上行：左侧文件区 + 右侧进度区
+    - 下行：日志区
     """
 
     def __init__(self, master, **kwargs):
+        if "fg_color" not in kwargs:
+            kwargs["fg_color"] = get_color("bg_primary", mode="auto")
         super().__init__(master, **kwargs)
 
         self._current_file: Path | None = None
         self._on_start_callback: Callable | None = None
         self._on_cancel_callback: Callable | None = None
+        self._all_logs: list[str] = []
 
         self._setup_ui()
 
@@ -40,29 +42,37 @@ class ProcessPage(ctk.CTkFrame):
         main_container = ctk.CTkFrame(self, fg_color="transparent")
         main_container.pack(fill="both", expand=True, padx=40, pady=40)
 
-        # 三栏布局
-        # 左栏：文件区 (280px)
-        left_frame = ctk.CTkFrame(main_container, fg_color="transparent", width=280)
-        left_frame.pack(side="left", fill="y", padx=(0, SPACING["lg"]))
-        left_frame.pack_propagate(False)
+        main_container.grid_columnconfigure(0, weight=32, minsize=320)
+        main_container.grid_columnconfigure(1, weight=68, minsize=520)
+        main_container.grid_rowconfigure(0, weight=4)
+        main_container.grid_rowconfigure(1, weight=3)
+        main_container.grid_rowconfigure(2, weight=0)
 
-        self._setup_file_section(left_frame)
+        # 上行：文件区 + 进度区
+        top_left = ctk.CTkFrame(main_container, fg_color="transparent")
+        top_left.grid(
+            row=0, column=0, sticky="nsew", padx=(0, SPACING["lg"]), pady=(0, SPACING["lg"])
+        )
 
-        # 中栏：进度区 (弹性)
-        middle_frame = ctk.CTkFrame(main_container, fg_color="transparent", width=400)
-        middle_frame.pack(side="left", fill="both", expand=True, padx=(0, SPACING["lg"]))
+        top_right = ctk.CTkFrame(main_container, fg_color="transparent")
+        top_right.grid(row=0, column=1, sticky="nsew", pady=(0, SPACING["lg"]))
 
-        self._setup_progress_section(middle_frame)
+        self._setup_file_section(top_left)
+        self._setup_progress_section(top_right)
 
-        # 右栏：日志区 (320px)
-        right_frame = ctk.CTkFrame(main_container, fg_color="transparent", width=320)
-        right_frame.pack(side="left", fill="y")
-        right_frame.pack_propagate(False)
-
-        self._setup_log_section(right_frame)
+        # 下行：日志区整行
+        bottom_log = ctk.CTkFrame(main_container, fg_color="transparent")
+        bottom_log.grid(row=1, column=0, columnspan=2, sticky="nsew", pady=(0, SPACING["lg"]))
+        self._setup_log_section(bottom_log)
 
         # 底部操作栏
-        self._setup_action_bar(main_container)
+        action_row = ctk.CTkFrame(main_container, fg_color="transparent")
+        action_row.grid(row=2, column=0, columnspan=2, sticky="ew")
+        self._setup_action_bar(action_row)
+
+    def refresh_layout(self):
+        """固定布局，无需动态重排。"""
+        return
 
     def _setup_file_section(self, parent):
         """设置文件选择区"""
@@ -149,29 +159,23 @@ class ProcessPage(ctk.CTkFrame):
         # 进度可视化卡片
         from gui.components.card import Card
 
-        progress_card = Card(parent, title="", padding="lg")
+        progress_card = Card(parent, title="处理进度", padding="lg")
         progress_card.pack(fill="both", expand=True, pady=(0, SPACING["md"]))
 
-        # 圆形进度条
-        try:
-            from gui.components.progress_ring import PhaseProgressRing
+        self._progress_bar = ctk.CTkProgressBar(
+            progress_card.content,
+            height=16,
+        )
+        self._progress_bar.pack(fill="x", pady=(SPACING["md"], SPACING["sm"]))
+        self._progress_bar.set(0)
 
-            self._progress_ring = PhaseProgressRing(
-                progress_card.content,
-                phases=["准备", "分析", "处理", "合并"],
-                size=200,
-            )
-            self._progress_ring.pack(pady=SPACING["lg"])
-        except Exception as e:
-            logger.debug(f"Failed to create progress ring: {e}")
-            # 回退到简单进度条
-            self._progress_bar = ctk.CTkProgressBar(
-                progress_card.content,
-                width=300,
-                height=20,
-            )
-            self._progress_bar.pack(pady=SPACING["lg"])
-            self._progress_bar.set(0)
+        self._progress_text_label = ctk.CTkLabel(
+            progress_card.content,
+            text="0%",
+            font=ctk.CTkFont(size=12, weight="bold"),
+            text_color=get_color("fg_secondary", mode="auto"),
+        )
+        self._progress_text_label.pack(anchor="e", pady=(0, SPACING["sm"]))
 
         # 统计卡片网格
         stats_frame = ctk.CTkFrame(progress_card.content, fg_color="transparent")
@@ -182,7 +186,9 @@ class ProcessPage(ctk.CTkFrame):
         for key, label in [("completed", "已完成"), ("failed", "失败"), ("partial", "部分完成")]:
             stat_card = ctk.CTkFrame(
                 stats_frame,
-                fg_color=get_color("bg_tertiary", mode="auto"),
+                fg_color=get_color("bg_secondary", mode="auto"),
+                border_width=1,
+                border_color=get_color("border", mode="auto"),
                 corner_radius=8,
                 height=80,
             )
@@ -262,7 +268,7 @@ class ProcessPage(ctk.CTkFrame):
     def _setup_action_bar(self, parent):
         """设置底部操作栏"""
         action_frame = ctk.CTkFrame(parent, fg_color="transparent")
-        action_frame.pack(fill="x", pady=(SPACING["lg"], 0))
+        action_frame.pack(fill="x")
 
         from gui.components.button import Button, ButtonSize, ButtonVariant
 
@@ -375,7 +381,9 @@ class ProcessPage(ctk.CTkFrame):
         import platform
         import subprocess
 
-        output_dir = Path("output")
+        from config import get_processing_config
+
+        output_dir = Path(get_processing_config().output_dir)
         if not output_dir.exists():
             output_dir = Path.cwd()
 
@@ -391,8 +399,17 @@ class ProcessPage(ctk.CTkFrame):
 
     def _filter_logs(self):
         """过滤日志"""
-        # TODO: 实现日志过滤
-        pass
+        if not hasattr(self, "_log_text"):
+            return
+
+        selected_level = self._log_level_var.get()
+        self._log_text.delete("1.0", "end")
+
+        for message in self._all_logs:
+            if selected_level != "ALL" and f" - {selected_level} - " not in message:
+                continue
+            self._log_text.insert("end", message + "\n")
+        self._log_text.see("end")
 
     def update_progress(
         self,
@@ -405,9 +422,11 @@ class ProcessPage(ctk.CTkFrame):
     ):
         """更新进度"""
         # 更新进度条
-        if hasattr(self, "_progress_ring"):
-            progress = completed / total if total > 0 else 0
-            self._progress_ring.set_progress(progress)
+        progress = completed / total if total > 0 else 0
+        if hasattr(self, "_progress_bar"):
+            self._progress_bar.set(progress)
+        if hasattr(self, "_progress_text_label"):
+            self._progress_text_label.configure(text=f"{int(progress * 100)}%")
 
         # 更新统计
         self._stat_labels["completed"].configure(text=str(completed))
@@ -436,8 +455,8 @@ class ProcessPage(ctk.CTkFrame):
 
     def append_log(self, message: str):
         """追加日志"""
-        self._log_text.insert("end", message + "\n")
-        self._log_text.see("end")
+        self._all_logs.append(message)
+        self._filter_logs()
 
     def set_callbacks(self, on_start: Callable | None = None, on_cancel: Callable | None = None):
         """设置回调函数"""
@@ -446,10 +465,10 @@ class ProcessPage(ctk.CTkFrame):
 
     def reset(self):
         """重置页面状态"""
-        if hasattr(self, "_progress_ring"):
-            self._progress_ring.set_progress(0)
-        elif hasattr(self, "_progress_bar"):
+        if hasattr(self, "_progress_bar"):
             self._progress_bar.set(0)
+        if hasattr(self, "_progress_text_label"):
+            self._progress_text_label.configure(text="0%")
 
         for label in self._stat_labels.values():
             label.configure(text="0")

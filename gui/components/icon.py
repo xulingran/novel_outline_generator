@@ -1,9 +1,8 @@
 """
 图标组件
 
-集成 Phosphor Icons，提供统一的图标风格和样式。
-
-Phosphor Icons: https://phosphoricons.com/
+使用 Canvas 绘制简单几何图形图标。
+设计原则：简洁、清晰、易于识别。
 """
 
 import logging
@@ -28,179 +27,18 @@ class IconSize(Enum):
 
 
 class IconWeight(Enum):
-    """图标权重 (Phosphor 风格)"""
+    """图标权重"""
 
     REGULAR = "regular"
     BOLD = "bold"
-    FILL = "fill"
-    DUOTONE = "duotone"
-    THIN = "thin"
     LIGHT = "light"
-
-
-# Phosphor Icons 路径数据 (精选常用图标)
-# 来源: https://phosphoricons.com/
-# 使用 SVG path 数据在 Canvas 上绘制
-PHOSPHOR_ICONS = {
-    # 导航图标
-    "house": {
-        "regular": "M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z",
-        "fill": "M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z M12 3L3 11v9h18v-9L12 3z",
-        "bold": "M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z",
-    },
-    "gear": {
-        "regular": "M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z",
-        "fill": "M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z",
-        "bold": "M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z",
-    },
-    "file-text": {
-        "regular": "M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z M14 2v6h6 M16 13H8 M16 17H8 M10 9H8",
-        "fill": "M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z M14 2v6h6",
-        "bold": "M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z M14.5 2v6h6 M16 13H8 M16 17H8 M10 9H8",
-    },
-    "clock": {
-        "regular": "M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z M12 6v6l4 2",
-        "fill": "M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z",
-        "bold": "M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20z M12 6v6l4 2",
-    },
-    "check-circle": {
-        "regular": "M22 11.08V12a10 10 0 1 1-5.93-9.14 M22 4L12 14.01l-3-3",
-        "fill": "M22 11.08V12a10 10 0 1 1-5.93-9.14",
-        "bold": "M22 11.08V12a10 10 0 1 1-5.93-9.14 M22 4L12 14.01l-3-3",
-    },
-    "warning": {
-        "regular": "M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z M12 9v4 M12 17h.01",
-        "fill": "M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z M12 9v4 M12 17h.01",
-        "bold": "M12 9v4 M12 17h.01 M3.5 18l7-12 7 12H3.5z",
-    },
-    "warning-circle": {
-        "regular": "M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z M12 8v4 M12 16h.01",
-        "fill": "M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z",
-        "bold": "M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20z M12 8v4 M12 16h.01",
-    },
-    "x-circle": {
-        "regular": "M22 11.08V12a10 10 0 1 1-5.93-9.14 M8.5 9.5l7 7 M15.5 9.5l-7 7",
-        "fill": "M22 11.08V12a10 10 0 1 1-5.93-9.14",
-        "bold": "M22 11.08V12a10 10 0 1 1-5.93-9.14 M8.5 9.5l7 7 M15.5 9.5l-7 7",
-    },
-    "info": {
-        "regular": "M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z M12 16v-4 M12 8h.01",
-        "fill": "M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z",
-        "bold": "M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20z M12 16v-4 M12 8h.01",
-    },
-    "play": {
-        "regular": "M5 3l14 9-14 9V3z",
-        "fill": "M5 3l14 9-14 9V3z",
-        "bold": "M7 5v14l11-7-11-7z",
-    },
-    "pause": {
-        "regular": "M6 4h4v16H6zM14 4h4v16h-4z",
-        "fill": "M6 4h4v16H6zM14 4h4v16h-4z",
-        "bold": "M5 4h6v16H5zM13 4h6v16h-6z",
-    },
-    "stop": {
-        "regular": "M6 6h12v12H6z",
-        "fill": "M6 6h12v12H6z",
-        "bold": "M5 5h14v14H5z",
-    },
-    "x": {
-        "regular": "M6 6l12 12M18 6L6 18",
-        "fill": "M6 6l12 12M18 6L6 18",
-        "bold": "M6 6l12 12M18 6L6 18",
-    },
-    "plus": {
-        "regular": "M12 5v14M5 12h14",
-        "fill": "M12 5v14M5 12h14",
-        "bold": "M12 5v14M5 12h14",
-    },
-    "folder": {
-        "regular": "M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z",
-        "fill": "M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z",
-        "bold": "M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z",
-    },
-    "folder-open": {
-        "regular": "M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z M2 14h20",
-        "fill": "M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z",
-        "bold": "M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z M2 14h20",
-    },
-    "moon": {
-        "regular": "M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z",
-        "fill": "M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z",
-        "bold": "M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z",
-    },
-    "sun": {
-        "regular": "M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41 M12 6a6 6 0 1 0 0 12 6 6 0 0 0 0-12z",
-        "fill": "M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41 M12 6a6 6 0 1 0 0 12 6 6 0 0 0 0-12z",
-        "bold": "M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41 M12 6a6 6 0 1 0 0 12 6 6 0 0 0 0-12z",
-    },
-    "desktop": {
-        "regular": "M21 4H3a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h7l-2 3v1h8v-1l-2-3h7a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2z",
-        "fill": "M21 4H3a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h7l-2 3v1h8v-1l-2-3h7a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2z",
-        "bold": "M21 4H3a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h7l-2 3v1h8v-1l-2-3h7a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2z",
-    },
-    "terminal": {
-        "regular": "M4 17l6-6-6-6M12 19h8",
-        "fill": "M4 17l6-6-6-6M12 19h8",
-        "bold": "M4 17l6-6-6-6M12 19h8",
-    },
-    "activity": {
-        "regular": "M22 12h-4l-3 9L9 3l-3 9H2",
-        "fill": "M22 12h-4l-3 9L9 3l-3 9H2",
-        "bold": "M22 12h-4l-3 9L9 3l-3 9H2",
-    },
-    "chart-line": {
-        "regular": "M3 3v18h18 M18.7 8l-5.1 5.2-2.8-2.7L7 14.3",
-        "fill": "M3 3v18h18",
-        "bold": "M3 3v18h18 M18.7 8l-5.1 5.2-2.8-2.7L7 14.3",
-    },
-    "list": {
-        "regular": "M8 6h13 M8 12h13 M8 18h13 M3 6h.01 M3 12h.01 M3 18h.01",
-        "fill": "M8 6h13 M8 12h13 M8 18h13",
-        "bold": "M8 6h13 M8 12h13 M8 18h13 M3 6h.01 M3 12h.01 M3 18h.01",
-    },
-    "sliders": {
-        "regular": "M4 6a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6z M12 12v-3 M8 15v-6 M16 15v-3",
-        "fill": "M4 6a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6z",
-        "bold": "M4 6a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6z M12 12v-3 M8 15v-6 M16 15v-3",
-    },
-    "funnel": {
-        "regular": "M22 3H2l8 9.46V19l4 2v-8.54L22 3z",
-        "fill": "M22 3H2l8 9.46V19l4 2v-8.54L22 3z",
-        "bold": "M22 3H2l8 9.46V19l4 2v-8.54L22 3z",
-    },
-    "trash": {
-        "regular": "M3 6h18 M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2",
-        "fill": "M3 6h18 M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2",
-        "bold": "M3 6h18 M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2",
-    },
-    "download": {
-        "regular": "M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4 M7 10l5 5 5-5 M12 15V3",
-        "fill": "M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4 M7 10l5 5 5-5 M12 15V3",
-        "bold": "M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4 M7 10l5 5 5-5 M12 15V3",
-    },
-    "upload": {
-        "regular": "M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4 M17 8l-5-5-5 5 M12 3v12",
-        "fill": "M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4 M17 8l-5-5-5 5 M12 3v12",
-        "bold": "M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4 M17 8l-5-5-5 5 M12 3v12",
-    },
-    "rocket": {
-        "regular": "M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 0 0-2.91-.09z M12 15l-3-3a22 22 0 0 1 2-3.95A12.88 12.88 0 0 1 22 2c0 2.72-.78 7.5-6 11a22.35 22.35 0 0 1-4 2z M9 12H4s.55-3.03 2-4c1.62-1.08 5 0 5 0 M12 15v5s3.03-.55 4-2c1.08-1.62 0-5 0-5 M15 12l5-5",
-        "fill": "M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 0 0-2.91-.09z M12 15l-3-3a22 22 0 0 1 2-3.95A12.88 12.88 0 0 1 22 2c0 2.72-.78 7.5-6 11a22.35 22.35 0 0 1-4 2z M15 12l5-5",
-        "bold": "M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 0 0-2.91-.09z M12 15l-3-3a22 22 0 0 1 2-3.95A12.88 12.88 0 0 1 22 2c0 2.72-.78 7.5-6 11a22.35 22.35 0 0 1-4 2z M9 12H4s.55-3.03 2-4c1.62-1.08 5 0 5 0 M12 15v5s3.03-.55 4-2c1.08-1.62 0-5 0-5 M15 12l5-5",
-    },
-    "books": {
-        "regular": "M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1 0-5H20 M4 10h16 M8 2v18",
-        "fill": "M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1 0-5H20",
-        "bold": "M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1 0-5H20",
-    },
-}
 
 
 class Icon(ctk.CTkCanvas):
     """
     图标组件
 
-    基于 Canvas 绘制 Phosphor 风格图标。
+    使用 Canvas 绘制简洁的几何图标。
 
     Args:
         master: 父容器
@@ -211,8 +49,46 @@ class Icon(ctk.CTkCanvas):
         **kwargs: 其他 Canvas 参数
     """
 
-    # 24x24 的标准 viewBox (模拟 SVG)
-    VIEWBOX_SIZE = 24
+    # 支持的图标列表
+    AVAILABLE_ICONS = {
+        # 导航图标
+        "house",
+        "gear",
+        "settings",  # gear 的别名
+        "file-text",
+        "file",  # 简化版文件图标
+        "clock",
+        "check-circle",
+        "check",
+        "warning",
+        "warning-circle",
+        "x-circle",
+        "x",
+        "info",
+        "play",
+        "pause",
+        "stop",
+        "plus",
+        "minus",
+        "rocket",
+        "folder",
+        "folder-open",
+        "moon",
+        "sun",
+        "desktop",
+        "terminal",
+        "activity",
+        "list",
+        "sliders",
+        "funnel",
+        "trash",
+        "download",
+        "upload",
+        "book",
+        "books",
+        "document",
+        "home",  # house 的别名
+    }
 
     def __init__(
         self,
@@ -229,165 +105,952 @@ class Icon(ctk.CTkCanvas):
         else:
             pixel_size = int(size)
 
-        # 设置画布大小
-        super().__init__(master, width=pixel_size, height=pixel_size, **kwargs)
+        # 设置画布大小（添加一些 padding）
+        padding = 2
+        super().__init__(
+            master,
+            width=pixel_size + padding * 2,
+            height=pixel_size + padding * 2,
+            **kwargs,
+        )
 
-        self._name = name
+        self._name = self._normalize_name(name)
         self._weight = weight
         self._color = color or get_color("fg_primary", mode="auto")
         self._size = pixel_size
+        self._padding = padding
 
         # 绘制图标
         self._draw()
 
-    def _get_path_data(self) -> str | None:
-        """获取图标路径数据"""
-        weight_key = self._weight.value
+    def _normalize_name(self, name: str) -> str:
+        """标准化图标名称"""
+        aliases = {
+            "home": "house",
+            "settings": "gear",
+            "config": "gear",
+        }
+        return aliases.get(name.lower(), name.lower())
 
-        # 如果请求的权重不存在，回退到 regular
-        if self._name in PHOSPHOR_ICONS:
-            if weight_key in PHOSPHOR_ICONS[self._name]:
-                return PHOSPHOR_ICONS[self._name][weight_key]
-            elif "regular" in PHOSPHOR_ICONS[self._name]:
-                return PHOSPHOR_ICONS[self._name]["regular"]
+    def _get_color(self) -> str:
+        """获取当前颜色"""
+        color = self._color
+        if isinstance(color, tuple):
+            appearance = ctk.get_appearance_mode()
+            color = color[0] if appearance == "Light" else color[1]
+        return color
 
-        # 如果图标不存在，返回占位符
-        logger.warning(f"Icon '{self._name}' not found, using placeholder")
-        return "M12 2L2 22h20L12 2z"
+    def _resolve_color_value(self, color: str | tuple[str, str] | list[str]) -> str:
+        """将颜色值统一解析为 Tk 可用的单一颜色字符串。"""
+        if isinstance(color, (tuple, list)) and len(color) >= 2:
+            appearance = ctk.get_appearance_mode()
+            return color[0] if appearance == "Light" else color[1]
+        if isinstance(color, str):
+            return color
+        return self._resolve_color_value(get_color("fg_primary", mode="dark"))
+
+    def _get_line_width(self) -> float:
+        """获取线条宽度"""
+        base_width = 1.5
+        if self._weight == IconWeight.BOLD:
+            return base_width * 1.5
+        elif self._weight == IconWeight.LIGHT:
+            return base_width * 0.7
+        return base_width
 
     def _draw(self) -> None:
         """绘制图标"""
         self.delete("all")
 
-        path_data = self._get_path_data()
-        if not path_data:
+        if self._name not in self.AVAILABLE_ICONS:
+            logger.warning(f"Icon '{self._name}' not found, drawing placeholder")
+            self._draw_placeholder()
             return
 
-        # 计算缩放比例
-        scale = self._size / self.VIEWBOX_SIZE
+        # 获取绘制参数
+        color = self._get_color()
+        line_width = self._get_line_width()
+        size = self._size
+        pad = self._padding
 
-        # 解析路径数据并绘制
-        self._render_path(path_data, scale)
+        # 根据图标名称调用对应的绘制方法
+        method_name = self._name.replace("-", "_")
+        draw_method = getattr(self, f"_draw_{method_name}", None)
+        if draw_method:
+            draw_method(pad, size, color, line_width)
+        else:
+            self._draw_placeholder()
 
-    def _render_path(self, path_data: str, scale: float) -> None:
-        """
-        渲染 SVG 路径数据
+    def _draw_placeholder(
+        self, pad: int = 2, size: int = 24, color: str = "", line_width: float = 1.5
+    ) -> None:
+        """绘制占位符（问号）"""
+        cx, cy = size / 2 + pad, size / 2 + pad
+        r = size / 3
+        self.create_oval(cx - r, cy - r, cx + r, cy + r, outline=color, width=line_width)
+        self.create_text(cx, cy, text="?", fill=color, font=("Arial", int(size * 0.6)))
 
-        简化的 SVG 路径解析器，支持 M, L, H, V, A 命令
-        """
-        # 获取颜色
-        color = self._color
-        if isinstance(color, tuple):
-            # 自适应颜色：根据当前主题选择
-            appearance = ctk.get_appearance_mode()
-            color = color[0] if appearance == "Light" else color[1]
+    # ============ 导航图标 ============
 
-        # 简化处理：将路径转换为多边形
-        # 这里做一个简化的实现，将 SVG 路径转换为线条
-        commands = self._parse_path(path_data)
+    def _draw_house(self, pad: int, size: int, color: str, line_width: float) -> None:
+        """房屋图标"""
+        s = size
+        p = pad
+        # 屋顶
+        self.create_polygon(
+            p,
+            s * 0.7 + p,  # 左下
+            s * 0.5 + p,
+            p,  # 顶
+            s + p,
+            s * 0.7 + p,  # 右下
+            outline=color,
+            width=line_width,
+            fill="",
+            joinstyle=ctk.ROUND,
+        )
+        # 房身
+        self.create_rectangle(
+            s * 0.25 + p, s * 0.7 + p, s * 0.75 + p, s + p, outline=color, width=line_width, fill=""
+        )
+        # 门
+        self.create_rectangle(
+            s * 0.42 + p,
+            s * 0.82 + p,
+            s * 0.58 + p,
+            s + p,
+            outline=color,
+            width=line_width,
+            fill="",
+        )
 
-        for cmd in commands:
-            if cmd["type"] == "M":
-                # 移动命令
-                self._start_point = self._scale_point(cmd["x"], cmd["y"], scale)
-            elif cmd["type"] == "L":
-                # 直线命令
-                if hasattr(self, "_start_point"):
-                    end = self._scale_point(cmd["x"], cmd["y"], scale)
-                    self.create_line(
-                        self._start_point[0],
-                        self._start_point[1],
-                        end[0],
-                        end[1],
-                        fill=color,
-                        width=2,
-                        capstyle=ctk.ROUND,
-                    )
-                    self._start_point = end
-            elif cmd["type"] == "H":
-                # 水平线
-                if hasattr(self, "_start_point"):
-                    end = self._scale_point(cmd["x"], self._start_point[1] / scale, scale)
-                    self.create_line(
-                        self._start_point[0],
-                        self._start_point[1],
-                        end[0],
-                        end[1],
-                        fill=color,
-                        width=2,
-                        capstyle=ctk.ROUND,
-                    )
-                    self._start_point = end
-            elif cmd["type"] == "V":
-                # 垂直线
-                if hasattr(self, "_start_point"):
-                    end = self._scale_point(self._start_point[0] / scale, cmd["y"], scale)
-                    self.create_line(
-                        self._start_point[0],
-                        self._start_point[1],
-                        end[0],
-                        end[1],
-                        fill=color,
-                        width=2,
-                        capstyle=ctk.ROUND,
-                    )
-                    self._start_point = end
-            elif cmd["type"] == "A":
-                # 圆弧命令 - 简化为直线
-                if hasattr(self, "_start_point"):
-                    end = self._scale_point(cmd["x"], cmd["y"], scale)
-                    self.create_line(
-                        self._start_point[0],
-                        self._start_point[1],
-                        end[0],
-                        end[1],
-                        fill=color,
-                        width=2,
-                        capstyle=ctk.ROUND,
-                    )
-                    self._start_point = end
+    def _draw_gear(self, pad: int, size: int, color: str, line_width: float) -> None:
+        """齿轮图标"""
+        import math
 
-    def _parse_path(self, path_data: str) -> list[dict]:
-        """解析 SVG 路径数据"""
-        commands = []
-        parts = path_data.split()
+        cx, cy = size / 2 + pad, size / 2 + pad
+        outer_r = size * 0.45
+        inner_r = size * 0.2
 
-        i = 0
-        while i < len(parts):
-            part = parts[i]
+        # 绘制齿轮齿
+        num_teeth = 8
+        for i in range(num_teeth):
+            angle = (2 * math.pi / num_teeth) * i
+            # 齿的外端点
+            x1 = cx + outer_r * 1.15 * math.cos(angle)
+            y1 = cy + outer_r * 1.15 * math.sin(angle)
+            # 齿的根点
+            x2 = cx + outer_r * 0.85 * math.cos(angle)
+            y2 = cy + outer_r * 0.85 * math.sin(angle)
 
-            if part in "MLHVA":
-                cmd_type = part
-                i += 1
+            # 绘制齿（用粗线表示）
+            self.create_line(x1, y1, x2, y2, fill=color, width=line_width * 2, capstyle=ctk.ROUND)
 
-                if cmd_type in "ML":
-                    # M x y 或 L x y
-                    x = float(parts[i])
-                    y = float(parts[i + 1])
-                    commands.append({"type": cmd_type, "x": x, "y": y})
-                    i += 2
-                elif cmd_type == "H":
-                    # H x
-                    x = float(parts[i])
-                    commands.append({"type": "H", "x": x})
-                    i += 1
-                elif cmd_type == "V":
-                    # V y
-                    y = float(parts[i])
-                    commands.append({"type": "V", "y": y})
-                    i += 1
-                elif cmd_type == "A":
-                    # A rx ry rotation large-arc sweep x y
-                    x = float(parts[i + 5])
-                    y = float(parts[i + 6])
-                    commands.append({"type": "A", "x": x, "y": y})
-                    i += 7
+        # 外圆
+        self.create_oval(
+            cx - outer_r, cy - outer_r, cx + outer_r, cy + outer_r, outline=color, width=line_width
+        )
+        # 内圆（孔）
+        self.create_oval(
+            cx - inner_r, cy - inner_r, cx + inner_r, cy + inner_r, outline=color, width=line_width
+        )
 
-        return commands
+    # ============ 文件图标 ============
 
-    def _scale_point(self, x: float, y: float, scale: float) -> tuple[int, int]:
-        """缩放坐标点"""
-        return (int(x * scale), int(y * scale))
+    def _draw_file(self, pad: int, size: int, color: str, line_width: float) -> None:
+        """简单文件图标"""
+        s = size
+        p = pad
+        # 文件主体
+        self.create_rectangle(
+            s * 0.25 + p,
+            s * 0.1 + p,
+            s * 0.85 + p,
+            s * 0.9 + p,
+            outline=color,
+            width=line_width,
+            fill="",
+        )
+        # 折角
+        self.create_line(
+            s * 0.6 + p, s * 0.1 + p, s * 0.85 + p, s * 0.35 + p, fill=color, width=line_width
+        )
+        self.create_line(
+            s * 0.85 + p, s * 0.35 + p, s * 0.6 + p, s * 0.35 + p, fill=color, width=line_width
+        )
+
+    def _draw_file_text(self, pad: int, size: int, color: str, line_width: float) -> None:
+        """带文本的文件图标"""
+        self._draw_file(pad, size, color, line_width)
+        s = size
+        p = pad
+        # 文本行
+        y_start = s * 0.45 + p
+        line_height = s * 0.12
+        for i in range(3):
+            y = y_start + i * line_height
+            self.create_line(
+                s * 0.35 + p, y, s * 0.75 + p, y, fill=color, width=line_width, capstyle=ctk.ROUND
+            )
+
+    # ============ 状态图标 ============
+
+    def _draw_clock(self, pad: int, size: int, color: str, line_width: float) -> None:
+        """时钟图标"""
+        cx, cy = size / 2 + pad, size / 2 + pad
+        r = size * 0.42
+
+        # 表盘
+        self.create_oval(cx - r, cy - r, cx + r, cy + r, outline=color, width=line_width)
+        # 时针
+        self.create_line(
+            cx, cy, cx, cy - r * 0.5, fill=color, width=line_width * 1.2, capstyle=ctk.ROUND
+        )
+        # 分针
+        self.create_line(cx, cy, cx + r * 0.7, cy, fill=color, width=line_width, capstyle=ctk.ROUND)
+        # 中心点
+        dot_r = max(1, line_width)
+        self.create_oval(cx - dot_r, cy - dot_r, cx + dot_r, cy + dot_r, fill=color, outline="")
+
+    def _draw_check(self, pad: int, size: int, color: str, line_width: float) -> None:
+        """勾选图标"""
+        s = size
+        p = pad
+        # 绘制勾
+        self.create_line(
+            s * 0.25 + p,
+            s * 0.55 + p,
+            s * 0.42 + p,
+            s * 0.72 + p,
+            s * 0.75 + p,
+            s * 0.28 + p,
+            fill=color,
+            width=line_width * 1.5,
+            capstyle=ctk.ROUND,
+            joinstyle=ctk.ROUND,
+        )
+
+    def _draw_check_circle(self, pad: int, size: int, color: str, line_width: float) -> None:
+        """圆形勾选图标"""
+        cx, cy = size / 2 + pad, size / 2 + pad
+        r = size * 0.42
+
+        # 圆圈
+        self.create_oval(cx - r, cy - r, cx + r, cy + r, outline=color, width=line_width)
+        # 勾
+        self._draw_check(pad, size, color, line_width)
+
+    def _draw_x(self, pad: int, size: int, color: str, line_width: float) -> None:
+        """X 图标"""
+        s = size
+        p = pad
+        self.create_line(
+            s * 0.3 + p,
+            s * 0.3 + p,
+            s * 0.7 + p,
+            s * 0.7 + p,
+            fill=color,
+            width=line_width * 1.3,
+            capstyle=ctk.ROUND,
+        )
+        self.create_line(
+            s * 0.7 + p,
+            s * 0.3 + p,
+            s * 0.3 + p,
+            s * 0.7 + p,
+            fill=color,
+            width=line_width * 1.3,
+            capstyle=ctk.ROUND,
+        )
+
+    def _draw_x_circle(self, pad: int, size: int, color: str, line_width: float) -> None:
+        """圆形 X 图标"""
+        cx, cy = size / 2 + pad, size / 2 + pad
+        r = size * 0.42
+
+        self.create_oval(cx - r, cy - r, cx + r, cy + r, outline=color, width=line_width)
+        self._draw_x(pad, size, color, line_width)
+
+    def _draw_warning(self, pad: int, size: int, color: str, line_width: float) -> None:
+        """警告图标（三角形）"""
+        s = size
+        p = pad
+        # 三角形
+        self.create_polygon(
+            s * 0.5 + p,
+            s * 0.15 + p,  # 顶
+            s * 0.15 + p,
+            s * 0.82 + p,  # 左下
+            s * 0.85 + p,
+            s * 0.82 + p,  # 右下
+            outline=color,
+            width=line_width,
+            fill="",
+            joinstyle=ctk.ROUND,
+        )
+        # 感叹号
+        self.create_line(
+            s * 0.5 + p,
+            s * 0.35 + p,
+            s * 0.5 + p,
+            s * 0.6 + p,
+            fill=color,
+            width=line_width * 1.5,
+            capstyle=ctk.ROUND,
+        )
+        self.create_oval(
+            s * 0.47 + p, s * 0.7 + p, s * 0.53 + p, s * 0.76 + p, fill=color, outline=""
+        )
+
+    def _draw_warning_circle(self, pad: int, size: int, color: str, line_width: float) -> None:
+        """圆形警告图标"""
+        cx, cy = size / 2 + pad, size / 2 + pad
+        r = size * 0.42
+
+        self.create_oval(cx - r, cy - r, cx + r, cy + r, outline=color, width=line_width)
+        # 感叹号
+        self.create_line(
+            cx,
+            cy - r * 0.3,
+            cx,
+            cy + r * 0.1,
+            fill=color,
+            width=line_width * 1.5,
+            capstyle=ctk.ROUND,
+        )
+        dot_r = max(1.5, line_width)
+        self.create_oval(
+            cx - dot_r,
+            cy + r * 0.3 - dot_r,
+            cx + dot_r,
+            cy + r * 0.3 + dot_r,
+            fill=color,
+            outline="",
+        )
+
+    def _draw_info(self, pad: int, size: int, color: str, line_width: float) -> None:
+        """信息图标"""
+        cx, cy = size / 2 + pad, size / 2 + pad
+        r = size * 0.42
+
+        self.create_oval(cx - r, cy - r, cx + r, cy + r, outline=color, width=line_width)
+        # i
+        self.create_line(
+            cx,
+            cy - r * 0.2,
+            cx,
+            cy + r * 0.35,
+            fill=color,
+            width=line_width * 1.5,
+            capstyle=ctk.ROUND,
+        )
+        dot_r = max(1.5, line_width)
+        self.create_oval(
+            cx - dot_r,
+            cy - r * 0.5 - dot_r,
+            cx + dot_r,
+            cy - r * 0.5 + dot_r,
+            fill=color,
+            outline="",
+        )
+
+    # ============ 控制图标 ============
+
+    def _draw_play(self, pad: int, size: int, color: str, line_width: float) -> None:
+        """播放图标"""
+        s = size
+        p = pad
+        cx = s / 2 + p
+        cy = s / 2 + p
+        h = s * 0.5
+        w = s * 0.4
+
+        self.create_polygon(
+            cx - w / 2, cy - h / 2, cx - w / 2, cy + h / 2, cx + w / 2, cy, fill=color, outline=""
+        )
+
+    def _draw_pause(self, pad: int, size: int, color: str, line_width: float) -> None:
+        """暂停图标"""
+        s = size
+        bar_w = s * 0.15
+        bar_h = s * 0.5
+
+        cx = s / 2 + pad
+        cy = s / 2 + pad
+        gap = s * 0.1
+
+        # 左条
+        self.create_rectangle(
+            cx - gap - bar_w, cy - bar_h / 2, cx - gap, cy + bar_h / 2, fill=color, outline=""
+        )
+        # 右条
+        self.create_rectangle(
+            cx + gap, cy - bar_h / 2, cx + gap + bar_w, cy + bar_h / 2, fill=color, outline=""
+        )
+
+    def _draw_stop(self, pad: int, size: int, color: str, line_width: float) -> None:
+        """停止图标"""
+        s = size
+        box_s = s * 0.55
+        cx = s / 2 + pad
+        cy = s / 2 + pad
+
+        self.create_rectangle(
+            cx - box_s / 2, cy - box_s / 2, cx + box_s / 2, cy + box_s / 2, fill=color, outline=""
+        )
+
+    def _draw_plus(self, pad: int, size: int, color: str, line_width: float) -> None:
+        """加号图标"""
+        s = size
+        cx = s / 2 + pad
+        cy = s / 2 + pad
+        length = s * 0.5
+
+        self.create_line(
+            cx - length / 2,
+            cy,
+            cx + length / 2,
+            cy,
+            fill=color,
+            width=line_width * 1.5,
+            capstyle=ctk.ROUND,
+        )
+        self.create_line(
+            cx,
+            cy - length / 2,
+            cx,
+            cy + length / 2,
+            fill=color,
+            width=line_width * 1.5,
+            capstyle=ctk.ROUND,
+        )
+
+    def _draw_minus(self, pad: int, size: int, color: str, line_width: float) -> None:
+        """减号图标"""
+        s = size
+        cx = s / 2 + pad
+        cy = s / 2 + pad
+        length = s * 0.5
+
+        self.create_line(
+            cx - length / 2,
+            cy,
+            cx + length / 2,
+            cy,
+            fill=color,
+            width=line_width * 1.5,
+            capstyle=ctk.ROUND,
+        )
+
+    def _draw_rocket(self, pad: int, size: int, color: str, line_width: float) -> None:
+        """火箭图标"""
+        s = size
+        p = pad
+        # 机身
+        self.create_polygon(
+            s * 0.5 + p,
+            s * 0.1 + p,
+            s * 0.7 + p,
+            s * 0.45 + p,
+            s * 0.5 + p,
+            s * 0.9 + p,
+            s * 0.3 + p,
+            s * 0.45 + p,
+            outline=color,
+            width=line_width,
+            fill="",
+            joinstyle=ctk.ROUND,
+        )
+        # 窗口
+        self.create_oval(
+            s * 0.43 + p,
+            s * 0.32 + p,
+            s * 0.57 + p,
+            s * 0.46 + p,
+            outline=color,
+            width=line_width,
+        )
+        # 尾焰
+        self.create_polygon(
+            s * 0.5 + p,
+            s * 0.9 + p,
+            s * 0.58 + p,
+            s + p,
+            s * 0.42 + p,
+            s + p,
+            outline=color,
+            width=line_width,
+            fill="",
+            joinstyle=ctk.ROUND,
+        )
+
+    # ============ 文件夹图标 ============
+
+    def _draw_folder(self, pad: int, size: int, color: str, line_width: float) -> None:
+        """文件夹图标"""
+        s = size
+        p = pad
+        # 后层
+        self.create_rectangle(
+            s * 0.15 + p,
+            s * 0.35 + p,
+            s * 0.85 + p,
+            s * 0.8 + p,
+            outline=color,
+            width=line_width,
+            fill="",
+        )
+        # 前层
+        self.create_rectangle(
+            p, s * 0.45 + p, s + p, s * 0.8 + p, outline=color, width=line_width, fill=""
+        )
+        # 标签
+        self.create_line(p, s * 0.45 + p, s * 0.35 + p, s * 0.45 + p, fill=color, width=line_width)
+        self.create_line(
+            s * 0.35 + p, s * 0.45 + p, s * 0.35 + p, s * 0.35 + p, fill=color, width=line_width
+        )
+
+    def _draw_folder_open(self, pad: int, size: int, color: str, line_width: float) -> None:
+        """打开的文件夹图标"""
+        s = size
+        p = pad
+        # 后盖（打开状态）
+        self.create_polygon(
+            p,
+            s * 0.4 + p,
+            s * 0.4 + p,
+            s * 0.15 + p,
+            s + p,
+            s * 0.3 + p,
+            s + p,
+            s * 0.5 + p,
+            outline=color,
+            width=line_width,
+            fill="",
+        )
+        # 前盖
+        self.create_rectangle(
+            p, s * 0.5 + p, s + p, s * 0.8 + p, outline=color, width=line_width, fill=""
+        )
+        # 标签
+        self.create_line(p, s * 0.5 + p, s * 0.35 + p, s * 0.5 + p, fill=color, width=line_width)
+        self.create_line(
+            s * 0.35 + p, s * 0.5 + p, s * 0.35 + p, s * 0.4 + p, fill=color, width=line_width
+        )
+
+    # ============ 主题图标 ============
+
+    def _draw_moon(self, pad: int, size: int, color: str, line_width: float) -> None:
+        """月亮图标"""
+
+        cx, cy = size / 2 + pad, size / 2 + pad
+        r = size * 0.4
+
+        # 绘制月牙形（用两个圆相减的效果）
+        # 主圆
+        self.create_oval(cx - r, cy - r, cx + r, cy + r, outline=color, width=line_width)
+        # 遮挡圆（用背景色填充模拟）
+        bg_color = self.cget("fg_color")
+        if not bg_color or bg_color == "transparent":
+            bg_color = get_color("bg_primary", mode="auto")
+        bg_color = self._resolve_color_value(bg_color)
+
+        offset_x = r * 0.5
+        self.create_oval(
+            cx + offset_x - r * 0.85,
+            cy - r * 0.85,
+            cx + offset_x + r * 0.85,
+            cy + r * 0.85,
+            fill=bg_color,
+            outline=bg_color,
+        )
+
+    def _draw_sun(self, pad: int, size: int, color: str, line_width: float) -> None:
+        """太阳图标"""
+        import math
+
+        cx, cy = size / 2 + pad, size / 2 + pad
+        r = size * 0.2
+
+        # 太阳圆
+        self.create_oval(cx - r, cy - r, cx + r, cy + r, fill=color, outline="")
+
+        # 光芒
+        num_rays = 8
+        ray_length = size * 0.18
+        for i in range(num_rays):
+            angle = (2 * math.pi / num_rays) * i
+            if i % 2 == 0:
+                # 主方向（水平垂直）
+                x1 = cx + r * 1.3 * math.cos(angle)
+                y1 = cy + r * 1.3 * math.sin(angle)
+                x2 = cx + (r + ray_length) * math.cos(angle)
+                y2 = cy + (r + ray_length) * math.sin(angle)
+            else:
+                # 对角方向（稍短）
+                x1 = cx + r * 1.2 * math.cos(angle)
+                y1 = cy + r * 1.2 * math.sin(angle)
+                x2 = cx + (r + ray_length * 0.8) * math.cos(angle)
+                y2 = cy + (r + ray_length * 0.8) * math.sin(angle)
+
+            self.create_line(x1, y1, x2, y2, fill=color, width=line_width, capstyle=ctk.ROUND)
+
+    # ============ 其他图标 ============
+
+    def _draw_desktop(self, pad: int, size: int, color: str, line_width: float) -> None:
+        """桌面显示器图标"""
+        s = size
+        p = pad
+        # 屏幕
+        self.create_rectangle(
+            s * 0.15 + p,
+            s * 0.15 + p,
+            s * 0.85 + p,
+            s * 0.65 + p,
+            outline=color,
+            width=line_width,
+            fill="",
+        )
+        # 底座
+        self.create_line(
+            s * 0.35 + p, s * 0.65 + p, s * 0.35 + p, s * 0.8 + p, fill=color, width=line_width
+        )
+        self.create_line(
+            s * 0.65 + p, s * 0.65 + p, s * 0.65 + p, s * 0.8 + p, fill=color, width=line_width
+        )
+        self.create_line(
+            s * 0.25 + p, s * 0.8 + p, s * 0.75 + p, s * 0.8 + p, fill=color, width=line_width
+        )
+
+    def _draw_terminal(self, pad: int, size: int, color: str, line_width: float) -> None:
+        """终端图标"""
+        s = size
+        p = pad
+        # 外框
+        self.create_rectangle(
+            s * 0.15 + p,
+            s * 0.2 + p,
+            s * 0.85 + p,
+            s * 0.8 + p,
+            outline=color,
+            width=line_width,
+            fill="",
+        )
+        # 提示符
+        self.create_line(
+            s * 0.25 + p,
+            s * 0.45 + p,
+            s * 0.35 + p,
+            s * 0.45 + p,
+            fill=color,
+            width=line_width,
+            capstyle=ctk.ROUND,
+        )
+        self.create_line(
+            s * 0.25 + p,
+            s * 0.38 + p,
+            s * 0.25 + p,
+            s * 0.52 + p,
+            fill=color,
+            width=line_width,
+            capstyle=ctk.ROUND,
+        )
+        # 光标
+        self.create_line(
+            s * 0.4 + p,
+            s * 0.42 + p,
+            s * 0.4 + p,
+            s * 0.52 + p,
+            fill=color,
+            width=line_width * 1.5,
+            capstyle=ctk.ROUND,
+        )
+
+    def _draw_activity(self, pad: int, size: int, color: str, line_width: float) -> None:
+        """活动图表图标"""
+        s = size
+        p = pad
+        # 折线图
+        points = [
+            s * 0.2 + p,
+            s * 0.7 + p,
+            s * 0.35 + p,
+            s * 0.5 + p,
+            s * 0.5 + p,
+            s * 0.6 + p,
+            s * 0.65 + p,
+            s * 0.35 + p,
+            s * 0.8 + p,
+            s * 0.45 + p,
+        ]
+        self.create_line(
+            *points, fill=color, width=line_width, capstyle=ctk.ROUND, joinstyle=ctk.ROUND
+        )
+        # 坐标轴
+        self.create_line(
+            s * 0.15 + p,
+            s * 0.25 + p,
+            s * 0.15 + p,
+            s * 0.75 + p,
+            fill=color,
+            width=line_width,
+            capstyle=ctk.ROUND,
+        )
+        self.create_line(
+            s * 0.15 + p,
+            s * 0.75 + p,
+            s * 0.85 + p,
+            s * 0.75 + p,
+            fill=color,
+            width=line_width,
+            capstyle=ctk.ROUND,
+        )
+
+    def _draw_list(self, pad: int, size: int, color: str, line_width: float) -> None:
+        """列表图标"""
+        s = size
+        p = pad
+        # 项目符号
+        for i in range(3):
+            y = s * 0.3 + p + i * s * 0.18
+            dot_r = max(1, line_width)
+            self.create_oval(
+                s * 0.2 + p - dot_r,
+                y - dot_r,
+                s * 0.2 + p + dot_r,
+                y + dot_r,
+                fill=color,
+                outline="",
+            )
+            # 线条
+            self.create_line(
+                s * 0.32 + p, y, s * 0.8 + p, y, fill=color, width=line_width, capstyle=ctk.ROUND
+            )
+
+    def _draw_sliders(self, pad: int, size: int, color: str, line_width: float) -> None:
+        """滑块图标"""
+        s = size
+        p = pad
+        # 三条水平线
+        for i in range(3):
+            y = s * 0.28 + p + i * s * 0.22
+            self.create_line(
+                s * 0.2 + p, y, s * 0.8 + p, y, fill=color, width=line_width, capstyle=ctk.ROUND
+            )
+            # 滑块
+            cx = s * 0.4 + p + i * s * 0.1
+            self.create_oval(
+                cx - line_width * 1.5,
+                y - line_width * 1.5,
+                cx + line_width * 1.5,
+                y + line_width * 1.5,
+                fill=color,
+                outline="",
+            )
+
+    def _draw_funnel(self, pad: int, size: int, color: str, line_width: float) -> None:
+        """漏斗图标"""
+        s = size
+        p = pad
+        # 漏斗形状
+        self.create_polygon(
+            s * 0.15 + p,
+            s * 0.2 + p,
+            s * 0.85 + p,
+            s * 0.2 + p,
+            s * 0.6 + p,
+            s * 0.5 + p,
+            s * 0.6 + p,
+            s * 0.8 + p,
+            s * 0.4 + p,
+            s * 0.8 + p,
+            s * 0.4 + p,
+            s * 0.5 + p,
+            outline=color,
+            width=line_width,
+            fill="",
+            joinstyle=ctk.ROUND,
+        )
+
+    def _draw_trash(self, pad: int, size: int, color: str, line_width: float) -> None:
+        """垃圾桶图标"""
+        s = size
+        p = pad
+        # 盖子
+        self.create_line(
+            s * 0.2 + p,
+            s * 0.2 + p,
+            s * 0.8 + p,
+            s * 0.2 + p,
+            fill=color,
+            width=line_width * 1.3,
+            capstyle=ctk.ROUND,
+        )
+        self.create_line(
+            s * 0.35 + p,
+            s * 0.2 + p,
+            s * 0.35 + p,
+            s * 0.15 + p,
+            s * 0.65 + p,
+            s * 0.15 + p,
+            s * 0.65 + p,
+            s * 0.2 + p,
+            fill=color,
+            width=line_width * 1.3,
+            capstyle=ctk.ROUND,
+        )
+        # 箱体
+        self.create_rectangle(
+            s * 0.28 + p,
+            s * 0.25 + p,
+            s * 0.72 + p,
+            s * 0.8 + p,
+            outline=color,
+            width=line_width,
+            fill="",
+        )
+        # 竖线（纹理）
+        self.create_line(
+            s * 0.4 + p, s * 0.25 + p, s * 0.4 + p, s * 0.8 + p, fill=color, width=line_width * 0.8
+        )
+        self.create_line(
+            s * 0.6 + p, s * 0.25 + p, s * 0.6 + p, s * 0.8 + p, fill=color, width=line_width * 0.8
+        )
+
+    def _draw_download(self, pad: int, size: int, color: str, line_width: float) -> None:
+        """下载图标"""
+        s = size
+        p = pad
+        cx = s / 2 + p
+        # 箭头
+        self.create_line(
+            cx, s * 0.2 + p, cx, s * 0.6 + p, fill=color, width=line_width, capstyle=ctk.ROUND
+        )
+        # 箭头头部
+        self.create_line(
+            s * 0.35 + p,
+            s * 0.5 + p,
+            cx,
+            s * 0.65 + p,
+            s * 0.65 + p,
+            s * 0.5 + p,
+            fill=color,
+            width=line_width,
+            capstyle=ctk.ROUND,
+            joinstyle=ctk.ROUND,
+        )
+        # 底线
+        self.create_line(
+            s * 0.25 + p,
+            s * 0.75 + p,
+            s * 0.75 + p,
+            s * 0.75 + p,
+            fill=color,
+            width=line_width * 1.5,
+            capstyle=ctk.ROUND,
+        )
+
+    def _draw_upload(self, pad: int, size: int, color: str, line_width: float) -> None:
+        """上传图标"""
+        s = size
+        p = pad
+        cx = s / 2 + p
+        # 箭头
+        self.create_line(
+            cx, s * 0.65 + p, cx, s * 0.25 + p, fill=color, width=line_width, capstyle=ctk.ROUND
+        )
+        # 箭头头部
+        self.create_line(
+            s * 0.35 + p,
+            s * 0.4 + p,
+            cx,
+            s * 0.25 + p,
+            s * 0.65 + p,
+            s * 0.4 + p,
+            fill=color,
+            width=line_width,
+            capstyle=ctk.ROUND,
+            joinstyle=ctk.ROUND,
+        )
+        # 底线
+        self.create_line(
+            s * 0.25 + p,
+            s * 0.75 + p,
+            s * 0.75 + p,
+            s * 0.75 + p,
+            fill=color,
+            width=line_width * 1.5,
+            capstyle=ctk.ROUND,
+        )
+
+    def _draw_book(self, pad: int, size: int, color: str, line_width: float) -> None:
+        """书籍图标"""
+        s = size
+        p = pad
+        # 书的主体
+        self.create_rectangle(
+            s * 0.25 + p,
+            s * 0.2 + p,
+            s * 0.75 + p,
+            s * 0.8 + p,
+            outline=color,
+            width=line_width,
+            fill="",
+        )
+        # 书脊
+        self.create_line(
+            s * 0.35 + p, s * 0.2 + p, s * 0.35 + p, s * 0.8 + p, fill=color, width=line_width
+        )
+        # 装饰线
+        self.create_line(
+            s * 0.4 + p, s * 0.35 + p, s * 0.7 + p, s * 0.35 + p, fill=color, width=line_width * 0.7
+        )
+
+    def _draw_books(self, pad: int, size: int, color: str, line_width: float) -> None:
+        """多本书籍图标"""
+        s = size
+        p = pad
+        # 后面的书（倾斜）
+        self.create_polygon(
+            s * 0.55 + p,
+            s * 0.15 + p,
+            s * 0.75 + p,
+            s * 0.15 + p,
+            s * 0.8 + p,
+            s * 0.85 + p,
+            s * 0.6 + p,
+            s * 0.85 + p,
+            outline=color,
+            width=line_width,
+            fill="",
+        )
+        # 前面的书
+        self.create_polygon(
+            s * 0.2 + p,
+            s * 0.2 + p,
+            s * 0.5 + p,
+            s * 0.2 + p,
+            s * 0.55 + p,
+            s * 0.8 + p,
+            s * 0.25 + p,
+            s * 0.8 + p,
+            outline=color,
+            width=line_width,
+            fill="",
+        )
+        # 装饰线
+        self.create_line(
+            s * 0.28 + p,
+            s * 0.35 + p,
+            s * 0.47 + p,
+            s * 0.35 + p,
+            fill=color,
+            width=line_width * 0.7,
+        )
+
+    def _draw_document(self, pad: int, size: int, color: str, line_width: float) -> None:
+        """文档图标（file_text 的别名）"""
+        self._draw_file_text(pad, size, color, line_width)
 
     def configure(self, **kwargs) -> None:
         """
@@ -400,7 +1063,7 @@ class Icon(ctk.CTkCanvas):
         - color: 图标颜色
         """
         if "name" in kwargs:
-            self._name = kwargs.pop("name")
+            self._name = self._normalize_name(kwargs.pop("name"))
         if "weight" in kwargs:
             self._weight = kwargs.pop("weight")
         if "color" in kwargs:
@@ -412,18 +1075,9 @@ class Icon(ctk.CTkCanvas):
             else:
                 self._size = int(size)
             # 更新画布大小
-            self.configure(width=self._size, height=self._size)
+            super().configure(
+                width=self._size + self._padding * 2, height=self._size + self._padding * 2
+            )
 
         super().configure(**kwargs)
         self._draw()
-
-    @classmethod
-    def register_icon(cls, name: str, paths: dict[str, str]) -> None:
-        """
-        注册自定义图标
-
-        Args:
-            name: 图标名称
-            paths: 路径数据字典，格式: {"regular": "path", "bold": "path", ...}
-        """
-        PHOSPHOR_ICONS[name] = paths

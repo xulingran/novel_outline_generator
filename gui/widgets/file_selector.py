@@ -11,6 +11,7 @@ from pathlib import Path
 import customtkinter as ctk
 
 from config import get_processing_config
+from gui.theme_manager import SPACING, get_color
 from tokenizer import count_tokens
 
 logger = logging.getLogger(__name__)
@@ -50,39 +51,74 @@ class FileSelector(ctk.CTkFrame):
     def _setup_ui(self):
         """设置 UI"""
         # 标题
-        title_label = ctk.CTkLabel(self, text=self.title, font=ctk.CTkFont(size=16, weight="bold"))
-        title_label.pack(pady=(10, 5))
+        title_label = ctk.CTkLabel(
+            self,
+            text=self.title,
+            font=ctk.CTkFont(size=16, weight="bold"),
+            text_color=get_color("fg_primary", mode="auto"),
+        )
+        title_label.pack(pady=(SPACING["md"], SPACING["sm"]))
 
         # 文件路径显示
-        self.file_path_label = ctk.CTkLabel(self, text="未选择文件", text_color="gray")
-        self.file_path_label.pack(pady=5)
+        self.file_path_label = ctk.CTkLabel(
+            self,
+            text="未选择文件",
+            text_color=get_color("fg_secondary", mode="auto"),
+        )
+        self.file_path_label.pack(pady=SPACING["sm"])
 
         # 文件信息显示
         self.file_info_frame = ctk.CTkFrame(self, fg_color="transparent")
-        self.file_info_frame.pack(pady=5, fill="x")
+        self.file_info_frame.pack(pady=SPACING["sm"], fill="x")
 
         # 大小
-        self.size_label = ctk.CTkLabel(self.file_info_frame, text="大小: --", width=200)
-        self.size_label.pack(side="left", padx=5)
+        self.size_label = ctk.CTkLabel(
+            self.file_info_frame,
+            text="大小: --",
+            width=200,
+            text_color=get_color("fg_primary", mode="auto"),
+        )
+        self.size_label.pack(side="left", padx=SPACING["sm"])
 
         # Tokens
-        self.tokens_label = ctk.CTkLabel(self.file_info_frame, text="Tokens: --", width=200)
-        self.tokens_label.pack(side="left", padx=5)
+        self.tokens_label = ctk.CTkLabel(
+            self.file_info_frame,
+            text="Tokens: --",
+            width=200,
+            text_color=get_color("fg_primary", mode="auto"),
+        )
+        self.tokens_label.pack(side="left", padx=SPACING["sm"])
 
         # 预估块数
-        self.chunks_label = ctk.CTkLabel(self.file_info_frame, text="预估块数: --", width=150)
-        self.chunks_label.pack(side="left", padx=5)
+        self.chunks_label = ctk.CTkLabel(
+            self.file_info_frame,
+            text="预估块数: --",
+            width=150,
+            text_color=get_color("fg_primary", mode="auto"),
+        )
+        self.chunks_label.pack(side="left", padx=SPACING["sm"])
 
         # 修改时间
-        self.mtime_label = ctk.CTkLabel(self.file_info_frame, text="", text_color="gray", width=200)
-        self.mtime_label.pack(side="left", padx=5)
+        self.mtime_label = ctk.CTkLabel(
+            self.file_info_frame,
+            text="",
+            text_color=get_color("fg_secondary", mode="auto"),
+            width=200,
+        )
+        self.mtime_label.pack(side="left", padx=SPACING["sm"])
 
         # 选择按钮
         button_frame = ctk.CTkFrame(self, fg_color="transparent")
-        button_frame.pack(pady=(10, 10))
+        button_frame.pack(pady=(SPACING["md"], SPACING["md"]))
 
         self.select_button = ctk.CTkButton(
-            button_frame, text="选择文件", command=self._on_select_file, width=120
+            button_frame,
+            text="选择文件",
+            command=self._on_select_file,
+            width=120,
+            fg_color=get_color("accent", mode="auto"),
+            hover_color=get_color("accent_secondary", mode="auto"),
+            text_color=get_color("bg_primary", mode="auto"),
         )
         self.select_button.pack()
 

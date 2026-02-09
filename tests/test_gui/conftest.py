@@ -17,6 +17,8 @@ import pytest
 class MockCTk:
     """Mock CustomTkinter for testing without GUI"""
 
+    ROUND = "round"
+
     class CTk:
         def __init__(self, *args, **kwargs):
             self._master = args[0] if args else None
@@ -90,8 +92,37 @@ class MockCTk:
         def pack_forget(self):
             pass
 
+    class CTkCanvas(CTk):
+        def __init__(self, *args, **kwargs):
+            super().__init__(*args, **kwargs)
+            self._items = []
+
+        def delete(self, *args, **kwargs):
+            self._items.clear()
+
+        def create_line(self, *args, **kwargs):
+            self._items.append(("line", args, kwargs))
+
+        def create_oval(self, *args, **kwargs):
+            self._items.append(("oval", args, kwargs))
+
+        def create_rectangle(self, *args, **kwargs):
+            self._items.append(("rect", args, kwargs))
+
+        def create_polygon(self, *args, **kwargs):
+            self._items.append(("polygon", args, kwargs))
+
+        def create_text(self, *args, **kwargs):
+            self._items.append(("text", args, kwargs))
+
     class CTkScrollableFrame(CTkFrame):
-        pass
+        def __init__(self, *args, **kwargs):
+            super().__init__(*args, **kwargs)
+            self._parent_canvas = self  # Mock _parent_canvas for macOS scroll support
+
+        def bind(self, event, callback, **kwargs):
+            """Mock bind method for event handling"""
+            pass
 
     class CTkTabview(CTk):
         def __init__(self, *args, **kwargs):

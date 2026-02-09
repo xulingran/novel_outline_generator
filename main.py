@@ -3,6 +3,7 @@
 重构后的版本，使用新的服务架构
 """
 
+import argparse
 import asyncio
 import logging
 import webbrowser
@@ -30,14 +31,14 @@ class NovelOutlineApp:
         self.file_service = FileService()
         self.processing_config = get_processing_config()
 
-    async def run(self) -> None:
+    async def run(self, forced_mode: str | None = None) -> None:
         """运行主程序"""
         try:
             # 显示欢迎信息
             self._print_welcome()
 
             # 选择模式
-            mode = self._select_mode()
+            mode = forced_mode or self._select_mode()
 
             if mode == "process":
                 await self._process_novel_mode()
@@ -277,10 +278,18 @@ class NovelOutlineApp:
 
 async def main():
     """主入口函数"""
+    parser = argparse.ArgumentParser(description="小说大纲生成工具")
+    parser.add_argument(
+        "--mode",
+        choices=["web_ui", "process", "gui"],
+        help="直接指定启动模式，未指定时使用交互菜单",
+    )
+    args = parser.parse_args()
+
     # 初始化配置（加载 .env 文件并检查 API 密钥）
     init_config()
     app = NovelOutlineApp()
-    await app.run()
+    await app.run(forced_mode=args.mode)
 
 
 if __name__ == "__main__":

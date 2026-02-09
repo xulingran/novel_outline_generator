@@ -7,7 +7,5 @@
 
 | ID | Time | T | Title | Read |
 |----|------|---|-------|------|
-| #132 | 9:55 AM | 🔄 | Sidebar Component Logging Import | ~223 |
-| #125 | " | 🔄 | Animation Component Type Refinement | ~248 |
-| #120 | 9:54 AM | 🔄 | Animation Module Type Hinting Fix | ~209 |
+| #185 | 10:18 AM | 🔵 | GUI Components Module Exports | ~229 |
 </claude-mem-context>

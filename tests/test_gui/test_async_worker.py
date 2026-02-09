@@ -23,8 +23,9 @@ class TestAsyncWorker:
         completion_callback = MagicMock()
         error_callback = MagicMock()
 
+        coro = dummy_task()
         worker = AsyncWorker(
-            dummy_task(),
+            coro,
             progress_callback=progress_callback,
             completion_callback=completion_callback,
             error_callback=error_callback,
@@ -39,6 +40,7 @@ class TestAsyncWorker:
         assert worker.result is None
         assert worker.exception is None
         assert worker.daemon is True
+        coro.close()
 
     def test_run_success(self, event_loop: asyncio.AbstractEventLoop):
         """测试成功运行任务"""
@@ -117,7 +119,8 @@ class TestAsyncWorker:
         async def dummy_task():
             return "result"
 
-        worker = AsyncWorker(dummy_task())
+        coro = dummy_task()
+        worker = AsyncWorker(coro)
 
         # 初始状态
         assert not worker.is_stopped()
@@ -125,6 +128,7 @@ class TestAsyncWorker:
         # 停止后
         worker._stop_event.set()
         assert worker.is_stopped()
+        coro.close()
 
     def test_result_property(self, event_loop: asyncio.AbstractEventLoop):
         """测试结果属性"""
@@ -300,8 +304,10 @@ class TestAsyncWorkerEdgeCases:
         async def dummy():
             return "result"
 
-        worker = AsyncWorker(dummy())
+        coro = dummy()
+        worker = AsyncWorker(coro)
         assert worker.daemon is True
+        coro.close()
 
     def test_callbacks_can_be_none(self, event_loop: asyncio.AbstractEventLoop):
         """测试回调可以为 None"""

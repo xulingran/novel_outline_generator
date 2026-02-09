@@ -139,6 +139,29 @@ class TestProgressBarETAFormatting:
         assert "低" in progress_bar._format_eta(60, 0.3)
         assert "低" in progress_bar._format_eta(60, 0.0)
 
+    @pytest.mark.skipif(not hasattr(ctk, "CTkProgressBar"), reason="CustomTkinter not available")
+    def test_update_progress_accepts_string_confidence(self, progress_bar):
+        """测试字符串置信度（high/medium/low）兼容"""
+        progress_bar.update_progress(
+            completed=1,
+            total=10,
+            eta_seconds=120,
+            eta_confidence="high",
+        )
+        assert progress_bar.eta_confidence == pytest.approx(0.9)
+
+    @pytest.mark.skipif(not hasattr(ctk, "CTkProgressBar"), reason="CustomTkinter not available")
+    def test_update_progress_accepts_string_numeric_confidence(self, progress_bar):
+        """测试字符串数值置信度兼容"""
+        progress_bar.update_progress(
+            completed=1,
+            total=10,
+            eta_seconds="120",
+            eta_confidence="0.7",
+        )
+        assert progress_bar.eta_seconds == 120
+        assert progress_bar.eta_confidence == pytest.approx(0.7)
+
 
 class TestProgressBarStatistics:
     """测试统计功能"""
@@ -246,6 +269,12 @@ class TestProgressBarProgressCalculation:
         # 不应该崩溃
         assert progress_bar.total_chunks == 0
         assert progress_bar.completed_chunks == 0
+
+    @pytest.mark.skipif(not hasattr(ctk, "CTkProgressBar"), reason="CustomTkinter not available")
+    def test_progress_uses_explicit_value(self, progress_bar):
+        """测试优先使用显式进度值"""
+        progress_bar.update_progress(completed=0, total=10, progress=0.45)
+        assert progress_bar.get_progress() == pytest.approx(0.45)
 
 
 class TestProgressBarIntegration:
