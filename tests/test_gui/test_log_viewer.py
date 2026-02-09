@@ -305,6 +305,67 @@ class TestLogViewerSearch:
         # 在模拟环境中可能返回 0
         assert isinstance(count, int)
 
+    def test_search_uses_underlying_text_widget(self, log_viewer):
+        """测试优先使用底层 _textbox 的 search/tag 能力"""
+
+        class FakeTextBackend:
+            def __init__(self, content: str):
+                self.content = content
+                self.tags: list[tuple[str, str, str]] = []
+                self.clear_calls = 0
+
+            @staticmethod
+            def _to_char_index(index: str) -> int:
+                if index == "1.0":
+                    return 0
+                if "+" in index and index.endswith("c"):
+                    base, delta = index.split("+", 1)
+                    return FakeTextBackend._to_char_index(base) + int(delta[:-1])
+                line, col = index.split(".", 1)
+                if line != "1":
+                    return 0
+                return int(col)
+
+            @staticmethod
+            def _to_tk_index(char_index: int) -> str:
+                return f"1.{char_index}"
+
+            def search(self, keyword: str, start: str, stopindex: str = "end"):
+                del stopindex
+                start_idx = self._to_char_index(start)
+                found = self.content.find(keyword, start_idx)
+                if found < 0:
+                    return ""
+                return self._to_tk_index(found)
+
+            def tag_config(self, *_args, **_kwargs):
+                pass
+
+            def tag_add(self, tag: str, start: str, end: str):
+                self.tags.append((tag, start, end))
+
+            def tag_remove(self, tag: str, start: str, end: str):
+                del tag, start, end
+                self.clear_calls += 1
+
+        class FakeTextbox:
+            def __init__(self, content: str):
+                self._textbox = FakeTextBackend(content)
+                self._content = content
+
+            def get(self, _start: str, _end: str):
+                return self._content
+
+        content = "Test message 1\nError message\nTest message 2\n"
+        fake_textbox = FakeTextbox(content)
+        log_viewer.log_text = fake_textbox
+
+        count = log_viewer.search("Test")
+
+        assert count == 2
+        assert fake_textbox._textbox.clear_calls == 1
+        assert len(fake_textbox._textbox.tags) == 2
+
 
 class TestLogViewerEdgeCases:
     """测试边界情况"""

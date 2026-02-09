@@ -294,7 +294,7 @@ class LogViewer(ctk.CTkFrame):
 
     def search(self, keyword: str) -> int:
         """
-        搜索日志内容
+        搜索日志内容并高亮显示
 
         Args:
             keyword: 搜索关键字
@@ -302,9 +302,81 @@ class LogViewer(ctk.CTkFrame):
         Returns:
             匹配数量
         """
-        content = self.get_text()
-        count = content.count(keyword)
+        # 清除之前的高亮
+        self._clear_highlight()
 
-        # TODO: 实现高亮显示功能
+        if not keyword:
+            return 0
+
+        # 优先使用底层 Tk Text 的 search（CTkTextbox 本身不一定暴露 search）
+        count = self._count_matches(keyword)
+
+        if count > 0:
+            self._highlight_text(keyword)
 
         return count
+
+    def _resolve_text_widget(self):
+        """获取可用于 search/tag_* 的文本组件。"""
+        backend = getattr(self.log_text, "_textbox", None)
+        if backend is not None:
+            return backend
+        return self.log_text
+
+    def _count_matches(self, keyword: str) -> int:
+        """统计关键字匹配数量。"""
+        text_widget = self._resolve_text_widget()
+
+        if hasattr(text_widget, "search"):
+            count = 0
+            start = "1.0"
+            while True:
+                pos = text_widget.search(keyword, start, stopindex="end")
+                if not pos:
+                    break
+                count += 1
+                start = f"{pos}+{len(keyword)}c"
+            return count
+
+        # 降级方案：无法使用 Tk search 时，退回纯文本统计
+        return self.get_text().count(keyword)
+
+    def _highlight_text(self, keyword: str) -> None:
+        """高亮显示指定文本
+
+        Args:
+            keyword: 要高亮的关键字
+        """
+        text_widget = self._resolve_text_widget()
+
+        if not hasattr(text_widget, "search") or not hasattr(text_widget, "tag_config"):
+            return
+
+        # 配置高亮标签样式
+        try:
+            text_widget.tag_config(
+                "search_highlight",
+                background=get_color("accent", mode="auto"),
+                foreground=get_color("bg_primary", mode="auto"),
+            )
+        except Exception:
+            return
+
+        # 查找并标记所有匹配项
+        start = "1.0"
+        while True:
+            pos = text_widget.search(keyword, start, stopindex="end")
+            if not pos:
+                break
+            end_pos = f"{pos}+{len(keyword)}c"
+            text_widget.tag_add("search_highlight", pos, end_pos)
+            start = end_pos
+
+    def _clear_highlight(self) -> None:
+        """清除所有高亮标记"""
+        text_widget = self._resolve_text_widget()
+        if hasattr(text_widget, "tag_remove"):
+            try:
+                text_widget.tag_remove("search_highlight", "1.0", "end")
+            except Exception:
+                pass
