@@ -433,16 +433,27 @@ class ProcessPage(ctk.CTkFrame):
         """更新进度（支持生成和合并阶段）"""
 
         # 进入合并阶段（从任何阶段或空阶段）
+        phase_changed = phase != self._last_phase
         if phase == "merging" and not self._is_merge_phase:
             self._is_merge_phase = True
             # 如果从生成阶段切换，保存初始大纲数量
             if self._last_phase == "processing":
                 self._initial_outline_count = completed
-            # 重置进度条
-            if hasattr(self, "_progress_bar"):
-                self._progress_bar.set(0)
-            if hasattr(self, "_progress_text_label"):
-                self._progress_text_label.configure(text="0%")
+                # 重置进度条
+                if hasattr(self, "_progress_bar"):
+                    self._progress_bar.set(0)
+                if hasattr(self, "_progress_text_label"):
+                    self._progress_text_label.configure(text="0%")
+            # 从其他阶段直接进入合并阶段（使用当前大纲数量作为初始值）
+            elif phase_changed:
+                # 如果没有初始大纲数量，使用当前大纲数量作为初始值
+                if self._initial_outline_count == 0 and merge_outlines_count > 0:
+                    self._initial_outline_count = merge_outlines_count
+                # 重置进度条
+                if hasattr(self, "_progress_bar"):
+                    self._progress_bar.set(0)
+                if hasattr(self, "_progress_text_label"):
+                    self._progress_text_label.configure(text="0%")
 
         # 离开合并阶段
         elif phase != "merging" and self._is_merge_phase:
@@ -519,6 +530,9 @@ class ProcessPage(ctk.CTkFrame):
                 self._progress_text_label.configure(text="100%")
             if hasattr(self, "_phase_label"):
                 self._phase_label.configure(text="当前阶段: 正在保存结果...")
+        else:
+            # 未知阶段，记录警告但保持静默（不影响现有流程）
+            logger.debug(f"Unknown phase: {phase}")
 
     def append_log(self, message: str):
         """追加日志"""
