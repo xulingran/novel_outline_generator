@@ -94,3 +94,19 @@ class TestMergeProgressCalculation:
         # 综合: 0.8*0.4 + 1.0*0.4 + 0.5*0.2 = 0.32 + 0.4 + 0.1 = 0.82
         expected = 0.8 * 0.4 + 1.0 * 0.4 + 0.5 * 0.2
         assert abs(progress - expected) < 0.01
+
+    def test_calculate_merge_progress_zero_total_batches(self):
+        """总批次数为 0 时，批次进度应为 0"""
+        # 使用 object.__new__ 跳过 __init__ 避免实际 UI 初始化
+        page = object.__new__(ProcessPage)
+        page._initial_outline_count = 100
+
+        progress = page._calculate_merge_progress(
+            merge_level=1, merge_batch_current=0, merge_batch_total=0, merge_outlines_count=50
+        )
+
+        # 应该只使用层级进度（批次进度为 0）
+        # 层级进度: 1 - 1/(1+5) ≈ 0.833
+        # 缩减进度: 1 - 50/100 = 0.5
+        expected = 0.833 * 0.4 + 0.0 * 0.4 + 0.5 * 0.2
+        assert abs(progress - expected) < 0.01
