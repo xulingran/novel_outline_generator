@@ -110,3 +110,85 @@ class TestMergeProgressCalculation:
         # 缩减进度: 1 - 50/100 = 0.5
         expected = 0.833 * 0.4 + 0.0 * 0.4 + 0.5 * 0.2
         assert abs(progress - expected) < 0.01
+
+
+class TestUpdateProgressMergeParameters:
+    """测试 update_progress 方法接收合并参数"""
+
+    def test_update_progress_accepts_merge_params(self):
+        """update_progress 应接受合并相关参数"""
+        # 使用 object.__new__ 跳过 __init__ 避免实际 UI 初始化
+        page = object.__new__(ProcessPage)
+        page._progress_bar = MagicMock()
+        page._progress_text_label = MagicMock()
+        page._stat_labels = {
+            "completed": MagicMock(),
+            "failed": MagicMock(),
+            "partial": MagicMock(),
+        }
+        page._phase_label = MagicMock()
+        page._eta_label = MagicMock()
+        page._last_phase = ""
+        page._initial_outline_count = 100
+        page._is_merge_phase = False
+
+        # 调用带合并参数的 update_progress
+        page.update_progress(
+            completed=50,
+            total=100,
+            failed=2,
+            partial=1,
+            phase="merging",
+            eta_seconds=0,
+            merge_level=2,
+            merge_batch_current=1,
+            merge_batch_total=3,
+            merge_outlines_count=34,
+        )
+
+        # 验证阶段已更新为合并模式
+        assert page._is_merge_phase is True
+        assert page._last_phase == "merging"
+        assert page._initial_outline_count == 100  # 应保持不变（已在生成阶段设置）
+
+    def test_update_progress_resets_on_phase_switch_to_merge(self):
+        """切换到合并阶段时，应保存初始大纲数量"""
+        # 使用 object.__new__ 跳过 __init__ 避免实际 UI 初始化
+        page = object.__new__(ProcessPage)
+        page._progress_bar = MagicMock()
+        page._progress_text_label = MagicMock()
+        page._stat_labels = {
+            "completed": MagicMock(),
+            "failed": MagicMock(),
+            "partial": MagicMock(),
+        }
+        page._phase_label = MagicMock()
+        page._eta_label = MagicMock()
+        page._last_phase = "processing"
+        page._initial_outline_count = 0
+        page._is_merge_phase = False
+
+        # 模拟从生成阶段切换到合并阶段
+        page.update_progress(
+            completed=100,
+            total=100,
+            failed=0,
+            partial=0,
+            phase="merging",
+            eta_seconds=0,
+            merge_level=1,
+            merge_batch_current=0,
+            merge_batch_total=1,
+            merge_outlines_count=100,
+        )
+
+        # 应保存初始大纲数量
+        assert page._initial_outline_count == 100
+        assert page._is_merge_phase is True
+        # 进度条应被重置为 0（至少调用过一次）
+        page._progress_bar.set.assert_any_call(0)
+        # 最后的调用应该是合并进度计算的结果
+        # merge_level=1, batch_current=0, batch_total=1, outlines_count=100, initial=100
+        # level_progress = 1 - 1/(1+5) = 0.833, batch_progress = 0/1 = 0, reduction_progress = 0
+        # expected = 0.833 * 0.4 + 0 * 0.4 + 0 * 0.2 = 0.333
+        assert abs(page._progress_bar.set.call_args_list[-1][0][0] - 0.333) < 0.01

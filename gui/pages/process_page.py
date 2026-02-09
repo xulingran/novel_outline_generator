@@ -424,39 +424,101 @@ class ProcessPage(ctk.CTkFrame):
         partial: int = 0,
         phase: str = "",
         eta_seconds: int = 0,
+        # 新增合并相关参数
+        merge_level: int = 0,
+        merge_batch_current: int = 0,
+        merge_batch_total: int = 0,
+        merge_outlines_count: int = 0,
     ):
-        """更新进度"""
-        # 更新进度条
-        progress = completed / total if total > 0 else 0
-        if hasattr(self, "_progress_bar"):
-            self._progress_bar.set(progress)
-        if hasattr(self, "_progress_text_label"):
-            self._progress_text_label.configure(text=f"{int(progress * 100)}%")
+        """更新进度（支持生成和合并阶段）"""
 
-        # 更新统计
-        self._stat_labels["completed"].configure(text=str(completed))
-        self._stat_labels["failed"].configure(text=str(failed))
-        self._stat_labels["partial"].configure(text=str(partial))
+        # 进入合并阶段（从任何阶段或空阶段）
+        if phase == "merging" and not self._is_merge_phase:
+            self._is_merge_phase = True
+            # 如果从生成阶段切换，保存初始大纲数量
+            if self._last_phase == "processing":
+                self._initial_outline_count = completed
+            # 重置进度条
+            if hasattr(self, "_progress_bar"):
+                self._progress_bar.set(0)
+            if hasattr(self, "_progress_text_label"):
+                self._progress_text_label.configure(text="0%")
 
-        # 更新阶段
-        if phase:
-            self._phase_label.configure(text=f"当前阶段: {phase}")
+        # 离开合并阶段
+        elif phase != "merging" and self._is_merge_phase:
+            self._is_merge_phase = False
 
-        # 更新 ETA
-        if eta_seconds > 0:
-            hours = eta_seconds // 3600
-            minutes = (eta_seconds % 3600) // 60
-            secs = eta_seconds % 60
+        # 更新最后阶段
+        self._last_phase = phase
 
-            time_parts = []
-            if hours > 0:
-                time_parts.append(f"{hours}小时")
-            if minutes > 0:
-                time_parts.append(f"{minutes}分钟")
-            if secs > 0 or not time_parts:
-                time_parts.append(f"{secs}秒")
+        # 根据阶段更新进度
+        if phase == "merging" and self._is_merge_phase:
+            # 合并阶段：使用合并进度计算
+            progress = self._calculate_merge_progress(
+                merge_level=merge_level,
+                merge_batch_current=merge_batch_current,
+                merge_batch_total=merge_batch_total,
+                merge_outlines_count=merge_outlines_count,
+            )
 
-            self._eta_label.configure(text=f"预估剩余时间: {''.join(time_parts)}")
+            # 更新进度条
+            if hasattr(self, "_progress_bar"):
+                self._progress_bar.set(progress)
+            if hasattr(self, "_progress_text_label"):
+                self._progress_text_label.configure(text=f"{int(progress * 100)}%")
+
+            # 更新阶段文本（显示合并详情）
+            if hasattr(self, "_phase_label"):
+                self._phase_label.configure(
+                    text=f"当前阶段: 正在合并大纲 (层级 {merge_level}, 批次 {merge_batch_current}/{merge_batch_total})"
+                )
+
+            # 合并阶段不显示 ETA
+            if hasattr(self, "_eta_label"):
+                self._eta_label.configure(text="合并中...")
+
+        elif phase == "processing":
+            # 生成阶段：使用原有逻辑
+            progress = completed / total if total > 0 else 0
+            if hasattr(self, "_progress_bar"):
+                self._progress_bar.set(progress)
+            if hasattr(self, "_progress_text_label"):
+                self._progress_text_label.configure(text=f"{int(progress * 100)}%")
+
+            # 更新统计
+            if hasattr(self, "_stat_labels"):
+                self._stat_labels["completed"].configure(text=str(completed))
+                self._stat_labels["failed"].configure(text=str(failed))
+                self._stat_labels["partial"].configure(text=str(partial))
+
+            # 更新阶段
+            if hasattr(self, "_phase_label"):
+                self._phase_label.configure(text=f"当前阶段: 正在生成大纲 ({completed}/{total})")
+
+            # 更新 ETA
+            if eta_seconds > 0 and hasattr(self, "_eta_label"):
+                hours = eta_seconds // 3600
+                minutes = (eta_seconds % 3600) // 60
+                secs = eta_seconds % 60
+
+                time_parts = []
+                if hours > 0:
+                    time_parts.append(f"{hours}小时")
+                if minutes > 0:
+                    time_parts.append(f"{minutes}分钟")
+                if secs > 0 or not time_parts:
+                    time_parts.append(f"{secs}秒")
+
+                self._eta_label.configure(text=f"预估剩余时间: {''.join(time_parts)}")
+
+        elif phase == "saving":
+            # 保存阶段：显示完成状态
+            if hasattr(self, "_progress_bar"):
+                self._progress_bar.set(1.0)
+            if hasattr(self, "_progress_text_label"):
+                self._progress_text_label.configure(text="100%")
+            if hasattr(self, "_phase_label"):
+                self._phase_label.configure(text="当前阶段: 正在保存结果...")
 
     def append_log(self, message: str):
         """追加日志"""
