@@ -34,6 +34,11 @@ class ProcessPage(ctk.CTkFrame):
         self._on_cancel_callback: Callable | None = None
         self._all_logs: list[str] = []
 
+        # 合并进度状态管理
+        self._last_phase: str = ""
+        self._initial_outline_count: int = 0
+        self._is_merge_phase: bool = False
+
         self._setup_ui()
 
     def _setup_ui(self):
