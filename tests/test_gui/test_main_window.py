@@ -97,7 +97,7 @@ async def test_build_processing_coro_runs_service_and_updates_progress(
     window.cancel_event = __import__("asyncio").Event()
 
     captured: dict[str, object] = {}
-    monkeypatch.setattr(window, "after", lambda _delay, callback: callback())
+    monkeypatch.setattr(window, "_is_window_alive", lambda: False)
 
     class FakeService:
         def __init__(self, progress_callback=None, cancel_event=None):
@@ -123,6 +123,7 @@ async def test_build_processing_coro_runs_service_and_updates_progress(
     monkeypatch.setattr("services.novel_processing_service.NovelProcessingService", FakeService)
 
     result = await window._build_processing_coro(resume=True)
+    window._drain_ui_events()
     assert result["output_dir"] == "outputs"
     assert captured["file_path"] == str(test_file)
     assert captured["resume"] is True
@@ -195,22 +196,20 @@ def test_on_start_processing_ignores_when_worker_alive(window, monkeypatch, tmp_
     assert called["build"] is False
 
 
-def test_async_callbacks_schedule_handlers(window, monkeypatch):
-    scheduled_callbacks = []
-    monkeypatch.setattr(
-        window, "after", lambda _delay, callback: scheduled_callbacks.append(callback)
-    )
-
+def test_async_callbacks_enqueue_and_dispatch(window, monkeypatch):
     complete = MagicMock()
     error = MagicMock()
+    progress = MagicMock()
+    monkeypatch.setattr(window, "_is_window_alive", lambda: False)
+    monkeypatch.setattr(window, "_do_progress_update", progress)
     monkeypatch.setattr(window, "_do_processing_complete", complete)
     monkeypatch.setattr(window, "_do_processing_error", error)
 
+    window._on_progress_update({"completed_chunks": 1, "total_chunks": 2})
     window._on_processing_complete({"output_dir": "outputs"})
     window._on_processing_error(RuntimeError("boom"))
 
-    assert len(scheduled_callbacks) == 2
-    scheduled_callbacks[0]()
-    scheduled_callbacks[1]()
+    window._drain_ui_events()
+    progress.assert_called_once()
     complete.assert_called_once()
     error.assert_called_once()

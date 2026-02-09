@@ -6,12 +6,15 @@
 
 import logging
 from pathlib import Path
+from queue import Empty, SimpleQueue
+from typing import Any
 
 import customtkinter as ctk
 
 from config import get_api_config, get_processing_config, init_config
 from gui.async_worker import AsyncWorker
 from gui.config_dialog import ConfigDialog
+from gui.theme_manager import SPACING, ThemeManager, get_color
 from gui.widgets.file_selector import FileSelector
 from gui.widgets.log_viewer import LogViewer
 from gui.widgets.progress_bar import ProgressBar
@@ -29,6 +32,9 @@ class MainWindow(ctk.CTk):
     def __init__(self):
         super().__init__()
 
+        # 初始化主题管理器
+        self.theme_manager = ThemeManager()
+
         # 窗口基本设置
         self.title("小说大纲生成器 v2.0")
         self.geometry("1000x700")
@@ -44,13 +50,19 @@ class MainWindow(ctk.CTk):
         # 异步任务工作线程
         self.async_worker: AsyncWorker | None = None
 
-        # 设置外观模式
-        ctk.set_appearance_mode("dark")  # 可选: "light", "dark", "system"
-        ctk.set_default_color_theme("blue")  # 可选: "blue", "green", "dark-blue"
+        # 跨线程 UI 事件队列（仅主线程消费）
+        self._ui_event_queue: SimpleQueue[tuple[str, Any]] = SimpleQueue()
+        self._ui_poll_interval_ms = 50
+
+        # 应用主题
+        self.theme_manager.apply_theme()
+
+        # 添加主题切换UI
+        self._setup_theme_switcher()
 
         # 创建标签页
         self.tab_view = ctk.CTkTabview(self)
-        self.tab_view.pack(fill="both", expand=True, padx=10, pady=10)
+        self.tab_view.pack(fill="both", expand=True, padx=SPACING["md"], pady=SPACING["md"])
 
         self.tab_view.add("处理")
         self.tab_view.add("配置")
@@ -68,6 +80,9 @@ class MainWindow(ctk.CTk):
         self.setup_config_tab()
         self.setup_log_tab()
         self.setup_about_tab()
+
+        # 启动 UI 事件轮询（必须在主线程）
+        self.after(self._ui_poll_interval_ms, self._drain_ui_events)
 
         logger.info("主窗口初始化完成")
 
@@ -327,8 +342,8 @@ class MainWindow(ctk.CTk):
 
     def _on_progress_update(self, progress_data: dict):
         """进度更新回调"""
-        # 此方法由异步线程调用，需要在主线程中更新 UI
-        self.after(0, lambda: self._do_progress_update(progress_data))
+        # 此方法可能由异步线程调用，不能直接触碰 Tk
+        self._post_ui_event("progress", progress_data)
 
     def _do_progress_update(self, progress_data: dict):
         """在主线程中执行进度更新"""
@@ -340,12 +355,13 @@ class MainWindow(ctk.CTk):
             phase=progress_data.get("phase", ""),
             eta_seconds=progress_data.get("eta_seconds"),
             eta_confidence=progress_data.get("eta_confidence", 0.0),
+            progress=progress_data.get("progress"),
         )
 
     def _on_processing_complete(self, result: dict):
         """处理完成回调"""
         logger.info(f"处理完成: {result}")
-        self.after(0, lambda: self._do_processing_complete(result))
+        self._post_ui_event("complete", result)
 
     def _do_processing_complete(self, result: dict):
         """在主线程中处理完成"""
@@ -362,7 +378,38 @@ class MainWindow(ctk.CTk):
     def _on_processing_error(self, error: Exception):
         """处理错误回调"""
         logger.error(f"处理失败: {error}")
-        self.after(0, lambda: self._do_processing_error(error))
+        self._post_ui_event("error", error)
+
+    def _post_ui_event(self, event_type: str, payload: Any) -> None:
+        """线程安全地投递 UI 事件，交由主线程处理。"""
+        self._ui_event_queue.put((event_type, payload))
+
+    def _drain_ui_events(self) -> None:
+        """主线程轮询并消费 UI 事件队列。"""
+        try:
+            while True:
+                event_type, payload = self._ui_event_queue.get_nowait()
+                if event_type == "progress":
+                    self._do_progress_update(payload)
+                elif event_type == "complete":
+                    self._do_processing_complete(payload)
+                elif event_type == "error":
+                    self._do_processing_error(payload)
+        except Empty:
+            pass
+        finally:
+            if self._is_window_alive():
+                self.after(self._ui_poll_interval_ms, self._drain_ui_events)
+
+    def _is_window_alive(self) -> bool:
+        """判断窗口是否仍然可用（避免销毁后继续调度）。"""
+        exists = getattr(self, "winfo_exists", None)
+        if callable(exists):
+            try:
+                return bool(exists())
+            except Exception:
+                return False
+        return True
 
     def _do_processing_error(self, error: Exception):
         """在主线程中处理错误"""
@@ -447,6 +494,96 @@ class MainWindow(ctk.CTk):
         # 保留是为了兼容性，现在使用 LogViewer 组件
         if hasattr(self, "log_viewer"):
             self.log_viewer.clear_log()
+
+    def _setup_theme_switcher(self):
+        """设置主题切换UI"""
+        # 主题切换框架（放在窗口顶部）
+        theme_frame = ctk.CTkFrame(self, fg_color=get_color("bg_secondary", mode="auto"))
+        theme_frame.pack(fill="x", side="top", padx=SPACING["md"], pady=(SPACING["md"], 0))
+
+        # 标题标签
+        title_label = ctk.CTkLabel(
+            theme_frame,
+            text="小说大纲生成器",
+            font=ctk.CTkFont(size=20, weight="bold"),
+            text_color=get_color("fg_primary", mode="auto"),
+        )
+        title_label.pack(side="left", padx=SPACING["md"])
+
+        # 主题切换按钮组
+        theme_button_frame = ctk.CTkFrame(theme_frame, fg_color="transparent")
+        theme_button_frame.pack(side="right", padx=SPACING["md"])
+
+        # 亮色主题按钮
+        light_button = ctk.CTkButton(
+            theme_button_frame,
+            text="☀️",
+            width=40,
+            command=lambda: self._switch_theme("light"),
+            fg_color=get_color("bg_primary", mode="auto"),
+            hover_color=get_color("bg_tertiary", mode="auto"),
+            text_color=get_color("fg_primary", mode="auto"),
+        )
+        light_button.pack(side="left", padx=SPACING["xs"])
+
+        # 暗色主题按钮
+        dark_button = ctk.CTkButton(
+            theme_button_frame,
+            text="🌙",
+            width=40,
+            command=lambda: self._switch_theme("dark"),
+            fg_color=get_color("bg_primary", mode="auto"),
+            hover_color=get_color("bg_tertiary", mode="auto"),
+            text_color=get_color("fg_primary", mode="auto"),
+        )
+        dark_button.pack(side="left", padx=SPACING["xs"])
+
+        # 系统主题按钮
+        system_button = ctk.CTkButton(
+            theme_button_frame,
+            text="💻",
+            width=40,
+            command=lambda: self._switch_theme("system"),
+            fg_color=get_color("bg_primary", mode="auto"),
+            hover_color=get_color("bg_tertiary", mode="auto"),
+            text_color=get_color("fg_primary", mode="auto"),
+        )
+        system_button.pack(side="left", padx=SPACING["xs"])
+
+        # 保存主题按钮引用（用于更新高亮状态）
+        self.theme_buttons = {
+            "light": light_button,
+            "dark": dark_button,
+            "system": system_button,
+        }
+
+        # 更新按钮高亮状态
+        self._update_theme_button_states()
+
+    def _switch_theme(self, theme: str):
+        """
+        切换主题
+
+        Args:
+            theme: 主题名称 ("light", "dark", "system")
+        """
+        self.theme_manager.set_theme(theme)
+        self.theme_manager.apply_theme()
+        self._update_theme_button_states()
+        logger.info(f"主题已切换到: {theme}")
+
+    def _update_theme_button_states(self):
+        """更新主题切换按钮的视觉状态（高亮当前主题）"""
+        current_theme = self.theme_manager.get_current_theme()
+        accent_color = get_color("accent", mode="auto")
+
+        for theme_name, button in self.theme_buttons.items():
+            if theme_name == current_theme:
+                # 当前主题：使用强调色
+                button.configure(fg_color=accent_color)
+            else:
+                # 其他主题：使用次要背景色
+                button.configure(fg_color=get_color("bg_primary", mode="auto"))
 
 
 def main():
