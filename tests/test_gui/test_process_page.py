@@ -192,3 +192,81 @@ class TestUpdateProgressMergeParameters:
         # level_progress = 1 - 1/(1+5) = 0.833, batch_progress = 0/1 = 0, reduction_progress = 0
         # expected = 0.833 * 0.4 + 0 * 0.4 + 0 * 0.2 = 0.333
         assert abs(page._progress_bar.set.call_args_list[-1][0][0] - 0.333) < 0.01
+
+
+class TestPhaseTransitionIntegration:
+    """测试完整的阶段切换流程"""
+
+    def test_full_processing_to_merge_transition(self):
+        """测试从生成阶段完整切换到合并阶段"""
+        # 使用 object.__new__ 跳过 __init__ 避免实际 UI 初始化
+        page = object.__new__(ProcessPage)
+        page._progress_bar = MagicMock()
+        page._progress_text_label = MagicMock()
+        page._stat_labels = {
+            "completed": MagicMock(),
+            "failed": MagicMock(),
+            "partial": MagicMock(),
+        }
+        page._phase_label = MagicMock()
+        page._eta_label = MagicMock()
+        page._last_phase = ""
+        page._initial_outline_count = 0
+        page._is_merge_phase = False
+
+        # 模拟生成阶段进度
+        page.update_progress(
+            completed=50, total=100, failed=0, partial=0, phase="processing", eta_seconds=120
+        )
+
+        assert page._last_phase == "processing"
+        assert page._is_merge_phase is False
+
+        # 生成完成，切换到合并
+        page.update_progress(
+            completed=100,
+            total=100,
+            failed=0,
+            partial=0,
+            phase="merging",
+            eta_seconds=0,
+            merge_level=1,
+            merge_batch_current=0,
+            merge_batch_total=1,
+            merge_outlines_count=100,
+        )
+
+        # 验证切换
+        assert page._is_merge_phase is True
+        assert page._initial_outline_count == 100
+        # 进度条应被重置为 0（至少调用过一次）
+        page._progress_bar.set.assert_any_call(0)  # 进度条重置
+
+    def test_merge_edge_cases(self):
+        """测试合并阶段边界情况"""
+        # 使用 object.__new__ 跳过 __init__ 避免实际 UI 初始化
+        page = object.__new__(ProcessPage)
+        page._initial_outline_count = 50
+        page._is_merge_phase = True
+        page._last_phase = "merging"
+
+        # 测试批次总数为 0 的情况
+        progress = page._calculate_merge_progress(
+            merge_level=1, merge_batch_current=0, merge_batch_total=0, merge_outlines_count=25
+        )
+        # 应该只基于层级计算，不应崩溃
+        assert 0 <= progress <= 1
+
+        # 测试大纲数量为 0 的情况
+        progress = page._calculate_merge_progress(
+            merge_level=2, merge_batch_current=1, merge_batch_total=2, merge_outlines_count=0
+        )
+        # 缩减进度应为 1.0（全部缩减）
+        assert 0 <= progress <= 1
+
+        # 测试大纲数量为负数的情况（边界保护）
+        progress = page._calculate_merge_progress(
+            merge_level=2, merge_batch_current=1, merge_batch_total=2, merge_outlines_count=-10
+        )
+        # 应该被限制为 0，不应崩溃
+        assert 0 <= progress <= 1

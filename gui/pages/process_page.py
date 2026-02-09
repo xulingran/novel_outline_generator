@@ -592,7 +592,9 @@ class ProcessPage(ctk.CTkFrame):
 
         # 大纲缩减进度
         if self._initial_outline_count > 0:
-            reduction_progress = 1.0 - (merge_outlines_count / self._initial_outline_count)
+            # 确保大纲数量非负
+            safe_outlines_count = max(0, merge_outlines_count)
+            reduction_progress = 1.0 - (safe_outlines_count / self._initial_outline_count)
             # 根据是否有缩减进度分配权重
             total = level_progress * 0.4 + batch_progress * 0.4 + reduction_progress * 0.2
         else:
