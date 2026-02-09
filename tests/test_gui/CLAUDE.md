@@ -7,6 +7,6 @@
 
 | ID | Time | T | Title | Read |
 |----|------|---|-------|------|
-| #146 | 9:59 AM | 🔄 | Main Window Replacement | ~167 |
-| #117 | 9:54 AM | 🟣 | Modern MainWindow Architecture Created | ~302 |
+| #156 | 10:00 AM | ✅ | Old Main Window Tests Archived | ~181 |
+| #155 | 9:59 AM | 🔵 | GUI Test Suite Implementation | ~257 |
 </claude-mem-context>

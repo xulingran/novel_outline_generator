@@ -7,6 +7,5 @@
 
 | ID | Time | T | Title | Read |
 |----|------|---|-------|------|
-| #146 | 9:59 AM | 🔄 | Main Window Replacement | ~167 |
-| #117 | 9:54 AM | 🟣 | Modern MainWindow Architecture Created | ~302 |
+| #108 | 9:52 AM | 🟣 | Configuration Page Implementation | ~395 |
 </claude-mem-context>
