@@ -8,4 +8,14 @@
 | ID | Time | T | Title | Read |
 |----|------|---|-------|------|
 | #24 | 10:03 PM | 🔵 | Test configuration - Dual autouse fixtures for environment setup | ~394 |
+
+### Feb 10, 2026
+
+| ID | Time | T | Title | Read |
+|----|------|---|-------|------|
+| #512 | 11:14 AM | 🔴 | Code review issues - Batch 2 fixes completed | ~603 |
+| #500 | 11:11 AM | 🔴 | Fixed ProgressData completed_count consistency issue | ~384 |
+| #497 | 11:09 AM | ✅ | Tests passed for processing state and outline model refactoring | ~171 |
+| #471 | 11:04 AM | 🔴 | Fixed test_to_dict to verify completed_count serialization | ~232 |
+| #469 | " | 🔴 | Updated test to use completed_indices instead of completed_count | ~211 |
 </claude-mem-context>

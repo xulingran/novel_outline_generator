@@ -3,12 +3,15 @@
 提供各种输入验证功能，确保安全性
 """
 
+import logging
 import os
 import re
 from pathlib import Path
 
 from config import SUPPORTED_API_PROVIDERS
 from exceptions import FileValidationError
+
+logger = logging.getLogger(__name__)
 
 
 def validate_file_path(
@@ -131,14 +134,21 @@ def validate_encoding_list(encodings: list) -> list:
     validated_encodings = []
     for encoding in encodings:
         if not isinstance(encoding, str):
+            logger.warning(f"跳过无效的编码类型: {encoding!r} (类型: {type(encoding).__name__})")
             continue
 
         encoding_lower = encoding.lower().replace("_", "-")
         if encoding_lower in valid_encodings or encoding.lower() in valid_encodings:
             validated_encodings.append(encoding)
+        else:
+            logger.warning(f"跳过不支持的编码: {encoding}")
 
     if not validated_encodings:
         raise FileValidationError("没有找到有效的编码")
+
+    # 如果有编码被跳过，记录信息
+    if len(validated_encodings) < len(encodings):
+        logger.info(f"编码列表已过滤: {len(encodings)} -> {len(validated_encodings)} 个有效编码")
 
     return validated_encodings
 

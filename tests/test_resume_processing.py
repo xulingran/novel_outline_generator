@@ -26,7 +26,6 @@ async def test_resume_processes_remaining_chunks():
     progress_data = ProgressData(
         txt_file="test.txt",
         total_chunks=3,
-        completed_count=1,
         completed_indices={1},
         outlines=[{"chunk_id": 1, "plot": ["done"]}],
         last_update=datetime.now(),

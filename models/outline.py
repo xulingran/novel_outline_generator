@@ -18,24 +18,42 @@ class TextChunk:
     end_position: int
     chapter_title: str | None = None
 
+    def __post_init__(self) -> None:
+        """验证字段有效性"""
+        if self.token_count < 0:
+            raise ValueError(f"token_count 必须为非负数，当前值: {self.token_count}")
+        if self.start_position < 0:
+            raise ValueError(f"start_position 必须为非负数，当前值: {self.start_position}")
+        if self.end_position < self.start_position:
+            raise ValueError(
+                f"end_position ({self.end_position}) 必须大于或等于 start_position ({self.start_position})"
+            )
+
     def __str__(self) -> str:
         return f"TextChunk(id={self.id}, tokens={self.token_count})"
 
 
 @dataclass
 class OutlineData:
-    """大纲数据模型"""
+    """大纲数据模型
+
+    注意：raw_response 字段是运行时字段，不会序列化到 JSON。
+    这是设计决策，因为 raw_response 可能包含大量数据，持久化会显著增加存储开销。
+    """
 
     chunk_id: int
     plot: list[str] = field(default_factory=list)
     characters: list[str] = field(default_factory=list)
     relationships: list[list[str]] = field(default_factory=list)
-    raw_response: str | None = None
+    raw_response: str | None = None  # 运行时字段，不持久化
     processing_time: float | None = None
     created_at: datetime = field(default_factory=datetime.now)
 
     def to_dict(self) -> dict[str, Any]:
         """转换为字典格式（用于JSON序列化）
+
+        注意：raw_response 字段被有意排除，不持久化到 JSON。
+        这是设计决策，因为 raw_response 可能包含大量数据。
 
         为保持向后兼容，同时输出 plot 和 events 字段
         """

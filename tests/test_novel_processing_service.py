@@ -53,7 +53,6 @@ def sample_progress_data():
     return ProgressData(
         txt_file="test.txt",
         total_chunks=3,
-        completed_count=1,
         completed_indices={1},
         outlines=[{"chunk_id": 1, "plot": ["done"]}],
         last_update=datetime.now(),
@@ -93,7 +92,6 @@ class TestProcessNovel:
         mock_service.progress_service.create_progress.return_value = ProgressData(
             txt_file="test.txt",
             total_chunks=1,
-            completed_count=0,
             completed_indices=set(),
             outlines=[],
             last_update=datetime.now(),
@@ -169,7 +167,6 @@ class TestProcessNovel:
         mock_service.progress_service.create_progress.return_value = ProgressData(
             txt_file="test.txt",
             total_chunks=1,
-            completed_count=0,
             completed_indices=set(),
             outlines=[],
             last_update=datetime.now(),
@@ -195,7 +192,6 @@ class TestProcessNovel:
         mock_service.progress_service.create_progress.return_value = ProgressData(
             txt_file="test.txt",
             total_chunks=1,
-            completed_count=0,
             completed_indices=set(),
             outlines=[],
             last_update=datetime.now(),
@@ -361,7 +357,6 @@ class TestProcessChunks:
         progress_data = ProgressData(
             txt_file="test.txt",
             total_chunks=3,
-            completed_count=0,
             completed_indices=set(),
             outlines=[],
             last_update=datetime.now(),
@@ -389,7 +384,6 @@ class TestProcessChunks:
         progress_data = ProgressData(
             txt_file="test.txt",
             total_chunks=3,
-            completed_count=0,
             completed_indices=set(),
             outlines=[],
             last_update=datetime.now(),
@@ -415,7 +409,6 @@ class TestProcessChunks:
         progress_data = ProgressData(
             txt_file="test.txt",
             total_chunks=3,
-            completed_count=0,
             completed_indices=set(),
             outlines=[],
             last_update=datetime.now(),
@@ -442,7 +435,6 @@ class TestProcessSingleChunk:
         progress_data = ProgressData(
             txt_file="test.txt",
             total_chunks=3,
-            completed_count=0,
             completed_indices=set(),
             outlines=[],
             last_update=datetime.now(),
@@ -488,7 +480,6 @@ class TestProcessSingleChunk:
         progress_data = ProgressData(
             txt_file="test.txt",
             total_chunks=3,
-            completed_count=0,
             completed_indices=set(),
             outlines=[],
             last_update=datetime.now(),
@@ -520,7 +511,6 @@ class TestProcessSingleChunk:
         progress_data = ProgressData(
             txt_file="test.txt",
             total_chunks=3,
-            completed_count=0,
             completed_indices=set(),
             outlines=[],
             last_update=datetime.now(),
@@ -559,7 +549,6 @@ class TestProcessSingleChunk:
         progress_data = ProgressData(
             txt_file="test.txt",
             total_chunks=3,
-            completed_count=0,
             completed_indices=set(),
             outlines=[],
             last_update=datetime.now(),
@@ -585,7 +574,6 @@ class TestProcessSingleChunk:
         progress_data = ProgressData(
             txt_file="test.txt",
             total_chunks=3,
-            completed_count=0,
             completed_indices=set(),
             outlines=[],
             last_update=datetime.now(),
@@ -899,7 +887,6 @@ class TestHandleProgressResume:
         mock_service.progress_service.load_progress.return_value = ProgressData(
             txt_file="test.txt",
             total_chunks=3,
-            completed_count=1,
             completed_indices={1},
             outlines=[],
             last_update=datetime.now(),

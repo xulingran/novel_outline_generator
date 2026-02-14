@@ -20,6 +20,20 @@ class AsyncWorker(threading.Thread):
     在独立线程中运行异步任务，通过队列或回调将结果和进度更新
     传递回 GUI 主线程。
 
+    **重要线程安全说明：**
+    所有回调函数（progress_callback、completion_callback、error_callback）
+    都会在此 AsyncWorker 工作线程中被调用，而非 GUI 主线程。
+    调用者必须确保回调函数内部使用线程安全方式与 GUI 交互，
+    例如在 CustomTkinter 中使用 `after()` 方法调度到主线程：
+
+        def on_progress(data):
+            root.after(0, lambda: update_ui(data))
+
+        worker = AsyncWorker(
+            coro=my_coro,
+            progress_callback=on_progress
+        )
+
     Args:
         coro: 要执行的异步协程
         progress_callback: 进度更新回调函数，接收 dict 参数

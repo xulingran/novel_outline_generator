@@ -138,87 +138,6 @@ class TextSplitter:
         if current_chunk:
             yield current_chunk
 
-    def _split_by_chapters(self, text: str) -> list[str]:
-        """
-        按章节分割文本
-
-        Args:
-            text: 文本内容
-
-        Returns:
-            List[str]: 章节块列表
-        """
-        # 多种章节匹配模式
-        patterns = [
-            r"(第[\d一二三四五六七八九十百千万零]+章[^\n]*)",  # 第X章
-            r"(第[\d一二三四五六七八九十百千万零]+节[^\n]*)",  # 第X节
-            r"(Chapter\s+\d+[^\n]*)",  # Chapter X
-            r"(第\d+卷[^\n]*)",  # 第X卷
-        ]
-
-        # 尝试每种模式
-        for pattern in patterns:
-            chunks = self._try_split_pattern(text, pattern)
-            if len(chunks) > 1:
-                logger.debug(f"使用模式 '{pattern}' 成功分割")
-                return chunks
-
-        # 如果没有找到章节，按段落分割
-        logger.debug("未找到章节标记，使用段落分割")
-        return self._split_by_paragraphs(text)
-
-    def _try_split_pattern(self, text: str, pattern: str) -> list[str]:
-        """尝试使用特定模式分割"""
-        parts = re.split(pattern, text, flags=re.IGNORECASE | re.MULTILINE)
-
-        if len(parts) <= 1:
-            return [text]
-
-        chunks = []
-
-        # 重新组合分割结果
-        for i in range(1, len(parts), 2):
-            title = parts[i].strip()
-            content = parts[i + 1] if i + 1 < len(parts) else ""
-
-            if title or content:
-                chunk = f"{title}\n{content}" if title else content
-                chunks.append(chunk.strip())
-
-        return chunks if chunks else [text]
-
-    def _split_by_paragraphs(self, text: str) -> list[str]:
-        """按段落分割文本"""
-        paragraphs = text.split("\n\n")
-        chunks = []
-        current_chunk = ""
-        for para in paragraphs:
-            para = para.strip()
-            if not para:
-                continue
-
-            # 如果当前块为空，直接添加
-            if not current_chunk:
-                current_chunk = para
-            else:
-                # 检查添加后是否会超限
-                test_chunk = current_chunk + "\n\n" + para
-                test_tokens = count_tokens(test_chunk)
-
-                if test_tokens > self.processing_config.target_tokens_per_chunk:
-                    # 保存当前块，开始新块
-                    chunks.append(current_chunk)
-                    current_chunk = para
-                else:
-                    # 添加到当前块
-                    current_chunk = test_chunk
-
-        # 添加最后一个块
-        if current_chunk:
-            chunks.append(current_chunk)
-
-        return chunks if chunks else [text]
-
     def _split_by_tokens(self, text: str) -> list[str]:
         """
         基于token数量精确分割文本
@@ -331,11 +250,40 @@ def split_text_stream(text_stream: Iterable[str]) -> Iterator[str]:
     yield from splitter.split_text_stream(text_stream)
 
 
+def _try_split_pattern(text: str, pattern: str) -> list[str]:
+    """尝试使用章节模式分割文本。"""
+    parts = re.split(pattern, text, flags=re.IGNORECASE | re.MULTILINE)
+    if len(parts) <= 1:
+        return [text]
+
+    chunks: list[str] = []
+    for i in range(1, len(parts), 2):
+        title = parts[i].strip()
+        content = parts[i + 1] if i + 1 < len(parts) else ""
+        if title or content:
+            chunk = f"{title}\n{content}" if title else content
+            chunks.append(chunk.strip())
+
+    return chunks if chunks else [text]
+
+
 # 保留旧函数以向后兼容
 def try_split_by_chapter(text: str) -> list[str]:
-    """按章节分割（向后兼容）"""
+    """按章节分割（向后兼容）。"""
+    chapter_patterns = [
+        r"(第[\d一二三四五六七八九十百千万零]+章[^\n]*)",
+        r"(第[\d一二三四五六七八九十百千万零]+节[^\n]*)",
+        r"(Chapter\s+\d+[^\n]*)",
+        r"(第\d+卷[^\n]*)",
+    ]
+
+    for pattern in chapter_patterns:
+        chunks = _try_split_pattern(text, pattern)
+        if len(chunks) > 1:
+            return chunks
+
     splitter = get_splitter()
-    return splitter._split_by_chapters(text)
+    return splitter._split_by_tokens(text)
 
 
 def split_by_tokens(text: str) -> list[str]:

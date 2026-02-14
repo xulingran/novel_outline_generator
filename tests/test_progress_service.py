@@ -26,7 +26,6 @@ def mock_progress_data():
     return ProgressData(
         txt_file="test.txt",
         total_chunks=10,
-        completed_count=5,
         completed_indices={0, 1, 2, 3, 4},
         outlines=[
             {"chunk_id": 0, "outline": "Chapter 1"},
@@ -114,7 +113,7 @@ class TestSaveProgress:
 
         # Save twice to create backup
         progress_service.save_progress(mock_progress_data)
-        mock_progress_data.completed_count = 6
+        mock_progress_data.completed_indices.add(5)
         progress_service.save_progress(mock_progress_data)
 
         # Check for backup (format: progress.YYYYMMDD_HHMMSS.bak)

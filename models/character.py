@@ -1,5 +1,8 @@
 """
 人物相关的数据模型
+
+TODO: 这些模型为未来功能准备，目前未在主代码库中使用。
+如果 2026 年第三季度前仍未使用，考虑移除或重新评估设计。
 """
 
 from dataclasses import dataclass, field
@@ -7,7 +10,10 @@ from dataclasses import dataclass, field
 
 @dataclass
 class Relationship:
-    """人物关系模型"""
+    """人物关系模型
+
+    TODO: 为未来人物关系管理功能准备，目前未使用。
+    """
 
     character_a: str
     character_b: str
@@ -37,7 +43,11 @@ class Relationship:
 
 @dataclass
 class Character:
-    """人物模型"""
+    """人物模型
+
+    TODO: 为未来人物管理功能准备，目前未使用。
+    如果 2026 年第三季度前仍未使用，考虑移除或重新评估设计。
+    """
 
     name: str
     aliases: list[str] = field(default_factory=list)

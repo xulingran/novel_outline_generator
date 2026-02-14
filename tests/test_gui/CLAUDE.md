@@ -9,4 +9,12 @@
 |----|------|---|-------|------|
 | #237 | 12:08 PM | 🔴 | Config Dialog Tests Fail Due to Missing _parent_canvas Attribute in Mock | ~273 |
 | #176 | 10:12 AM | ✅ | GUI Test Suite Updated | ~228 |
+
+### Feb 10, 2026
+
+| ID | Time | T | Title | Read |
+|----|------|---|-------|------|
+| #553 | 11:29 AM | 🔄 | Updated tests for new MergeProgressState class | ~391 |
+| #552 | " | ✅ | Updated tests for refactored ProcessPage merge state | ~315 |
+| #551 | 11:28 AM | ✅ | Test failures after refactoring merge progress state management | ~318 |
 </claude-mem-context>

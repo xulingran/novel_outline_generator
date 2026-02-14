@@ -25,7 +25,7 @@ from fastapi import FastAPI, File, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
-from config import init_config
+from config import get_processing_config, init_config
 from config import load_env_file as load_env_file_from_config
 from services.novel_processing_service import NovelProcessingService
 from services.task_queue import QueueTask, get_global_queue
@@ -95,6 +95,23 @@ else:
 
 
 logger = logging.getLogger(__name__)
+
+
+def format_token_usage_log(token_usage: dict[str, Any], prefix: str = "合并完成，") -> str:
+    """格式化 token 使用日志
+
+    Args:
+        token_usage: 包含 token 使用信息的字典
+        prefix: 日志前缀
+
+    Returns:
+        格式化后的日志字符串
+    """
+    prompt_tokens = token_usage.get("prompt_tokens", 0)
+    completion_tokens = token_usage.get("completion_tokens", 0)
+    total_tokens = token_usage.get("total_tokens", 0)
+    return f"{prefix}Token统计: 输入={prompt_tokens:,}, 输出={completion_tokens:,}, 总计={total_tokens:,}"
+
 
 ENV_PATH = Path(".env")
 UPLOAD_DIR = Path("outputs/uploads")
@@ -248,13 +265,7 @@ def _update_progress_from_info(
     if info.get("token_usage") and not target.token_logged:
         token_usage = info["token_usage"]
         target.result["token_usage"] = token_usage
-        prompt_tokens = token_usage.get("prompt_tokens", 0)
-        completion_tokens = token_usage.get("completion_tokens", 0)
-        total_tokens = token_usage.get("total_tokens", 0)
-        target.log(
-            "合并完成，Token统计: "
-            f"输入={prompt_tokens:,}, 输出={completion_tokens:,}, 总计={total_tokens:,}"
-        )
+        target.log(format_token_usage_log(token_usage, "合并完成，"))
         target.token_logged = True
 
 
@@ -385,13 +396,18 @@ async def upload_file(request: Request, file: UploadFile = UPLOAD_FILE_PARAM):
     if file.content_type not in ("text/plain", "text/markdown", "application/octet-stream"):
         raise HTTPException(status_code=400, detail="仅支持文本文件")
 
+    # 获取配置
+    processing_config = get_processing_config()
+
     # 验证文件名存在
     if not file.filename:
         raise HTTPException(status_code=400, detail="文件名不能为空")
 
     suffix = Path(file.filename).suffix.lower()
-    if suffix not in (".txt", ".md"):
-        raise HTTPException(status_code=400, detail="仅支持.txt 或 .md 文件")
+    if suffix not in processing_config.allowed_extensions:
+        raise HTTPException(
+            status_code=400, detail=f"仅支持 {', '.join(processing_config.allowed_extensions)} 文件"
+        )
 
     # 使用安全文件名，防止路径遍历攻击
     from validators import sanitize_filename
@@ -400,8 +416,11 @@ async def upload_file(request: Request, file: UploadFile = UPLOAD_FILE_PARAM):
     UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
     dest = UPLOAD_DIR / safe_filename
     content = await file.read()
-    if len(content) > 100 * 1024 * 1024:
-        raise HTTPException(status_code=400, detail="文件过大，限制100MB")
+    max_size_bytes = processing_config.max_upload_file_size_mb * 1024 * 1024
+    if len(content) > max_size_bytes:
+        raise HTTPException(
+            status_code=400, detail=f"文件过大，限制{processing_config.max_upload_file_size_mb}MB"
+        )
     dest.write_bytes(content)
     return {"file_path": str(dest)}
 
@@ -415,6 +434,9 @@ async def upload_multiple_files(request: Request, files: list[UploadFile] = UPLO
     client_host = request.client.host if request.client else "unknown"
     rate_limiter.check_rate_limit(client_host, 10, 60)
 
+    # 获取配置
+    processing_config = get_processing_config()
+
     from validators import sanitize_filename
 
     UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
@@ -426,14 +448,21 @@ async def upload_multiple_files(request: Request, files: list[UploadFile] = UPLO
             raise HTTPException(status_code=400, detail="文件名不能为空")
 
         suffix = Path(file.filename).suffix.lower()
-        if suffix not in (".txt", ".md"):
-            raise HTTPException(status_code=400, detail=f"仅支持.txt 或 .md 文件: {file.filename}")
+        if suffix not in processing_config.allowed_extensions:
+            raise HTTPException(
+                status_code=400,
+                detail=f"仅支持 {', '.join(processing_config.allowed_extensions)} 文件: {file.filename}",
+            )
 
         safe_filename = sanitize_filename(file.filename)
         dest = UPLOAD_DIR / safe_filename
         content = await file.read()
-        if len(content) > 100 * 1024 * 1024:
-            raise HTTPException(status_code=400, detail=f"文件过大，限制100MB: {file.filename}")
+        max_size_bytes = processing_config.max_upload_file_size_mb * 1024 * 1024
+        if len(content) > max_size_bytes:
+            raise HTTPException(
+                status_code=400,
+                detail=f"文件过大，限制{processing_config.max_upload_file_size_mb}MB: {file.filename}",
+            )
 
         dest.write_bytes(content)
         uploaded_files.append(str(dest))
@@ -464,13 +493,7 @@ async def _run_job(job: Job, req: ProcessRequest):
         if info.get("token_usage") and not job.token_logged:
             token_usage = info["token_usage"]
             job.result["token_usage"] = token_usage
-            prompt_tokens = token_usage.get("prompt_tokens", 0)
-            completion_tokens = token_usage.get("completion_tokens", 0)
-            total_tokens = token_usage.get("total_tokens", 0)
-            job.log(
-                "合并完成，Token统计: "
-                f"输入={prompt_tokens:,}, 输出={completion_tokens:,}, 总计={total_tokens:,}"
-            )
+            job.log(format_token_usage_log(token_usage, "合并完成，"))
             job.token_logged = True
 
     try:
@@ -483,13 +506,7 @@ async def _run_job(job: Job, req: ProcessRequest):
         # 输出token统计
         if "token_usage" in result and not job.token_logged:
             token_usage = result["token_usage"]
-            prompt_tokens = token_usage.get("prompt_tokens", 0)
-            completion_tokens = token_usage.get("completion_tokens", 0)
-            total_tokens = token_usage.get("total_tokens", 0)
-
-            job.log(
-                f"Token统计: 输入={prompt_tokens:,}, 输出={completion_tokens:,}, 总计={total_tokens:,}"
-            )
+            job.log(format_token_usage_log(token_usage))
             job.token_logged = True
 
         job.log("处理完成")
@@ -544,13 +561,7 @@ async def run_queue_task(task: QueueTask) -> None:
         # 输出token统计
         if "token_usage" in result and not task.token_logged:
             token_usage = result["token_usage"]
-            prompt_tokens = token_usage.get("prompt_tokens", 0)
-            completion_tokens = token_usage.get("completion_tokens", 0)
-            total_tokens = token_usage.get("total_tokens", 0)
-
-            task.log(
-                f"Token统计: 输入={prompt_tokens:,}, 输出={completion_tokens:,}, 总计={total_tokens:,}"
-            )
+            task.log(format_token_usage_log(token_usage))
             task.token_logged = True
 
         task.log("处理完成")

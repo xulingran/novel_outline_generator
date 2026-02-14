@@ -57,8 +57,8 @@ class FileService:
         """
         file_path = validate_file_path(
             file_path,
-            allowed_extensions=[".txt", ".md", ".text"],
-            max_size_mb=100,  # 限制100MB
+            allowed_extensions=self.processing_config.allowed_extensions,
+            max_size_mb=self.processing_config.max_upload_file_size_mb,
         )
 
         logger.debug(f"尝试读取文件: {file_path}")
@@ -85,8 +85,8 @@ class FileService:
         """探测文件编码（仅基于文件前缀样本）。"""
         file_path = validate_file_path(
             file_path,
-            allowed_extensions=[".txt", ".md", ".text"],
-            max_size_mb=100,
+            allowed_extensions=self.processing_config.allowed_extensions,
+            max_size_mb=self.processing_config.max_upload_file_size_mb,
         )
         try:
             return detect_text_encoding(file_path, self.processing_config.encodings)
@@ -99,8 +99,8 @@ class FileService:
         """按块迭代读取文本文件。"""
         file_path = validate_file_path(
             file_path,
-            allowed_extensions=[".txt", ".md", ".text"],
-            max_size_mb=100,
+            allowed_extensions=self.processing_config.allowed_extensions,
+            max_size_mb=self.processing_config.max_upload_file_size_mb,
         )
         encoding = self.detect_file_encoding(file_path)
         with open(file_path, encoding=encoding) as file_obj:

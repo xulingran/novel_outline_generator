@@ -6,6 +6,7 @@
 
 import asyncio
 import logging
+import weakref
 from pathlib import Path
 
 import customtkinter as ctk
@@ -242,10 +243,11 @@ class MainWindow(ctk.CTk):
         if process_page is None:
             return
 
-        completed = progress_data.get("completed_chunks", progress_data.get("completed", 0))
-        total = progress_data.get("total_chunks", progress_data.get("total", 0))
-        failed = progress_data.get("failed_chunks", progress_data.get("failed", 0))
-        partial = progress_data.get("partial_chunks", progress_data.get("partial", 0))
+        # 使用服务层统一的标准键名
+        completed = progress_data.get("completed_chunks", 0)
+        total = progress_data.get("total_chunks", 0)
+        failed = progress_data.get("failed_chunks", 0)
+        partial = progress_data.get("partial_chunks", 0)
         phase = progress_data.get("phase", "")
         eta_seconds = progress_data.get("eta_seconds", 0)
 
@@ -333,17 +335,28 @@ class GUILogHandler(logging.Handler):
     GUI 日志处理器
 
     将日志消息发送到 GUI 的处理页面。
+
+    使用弱引用持有 process_page，避免内存泄漏。
+    当页面被销毁时，弱引用会自动变为 None。
     """
 
     def __init__(self, process_page):
         super().__init__()
-        self._process_page = process_page
+        # 使用弱引用持有 process_page，避免内存泄漏
+        self._process_page_ref = weakref.ref(process_page)
 
     def emit(self, record):
         """发送日志记录"""
         try:
+            # 获取弱引用指向的对象，如果对象已被销毁则返回 None
+            process_page = self._process_page_ref()
+            if process_page is None:
+                # 页面已被销毁，移除此 handler
+                logging.getLogger().removeHandler(self)
+                return
+
             msg = self.format(record)
             # 在主线程中安全地更新 GUI
-            self._process_page.after(0, lambda: self._process_page.append_log(msg))
+            process_page.after(0, lambda: process_page.append_log(msg))
         except Exception:
             self.handleError(record)

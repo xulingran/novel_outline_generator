@@ -28,4 +28,18 @@
 | #54 | 8:19 AM | 🔵 | Theme Manager System Implementation | ~353 |
 | #50 | " | 🔵 | Configuration Dialog Implementation | ~318 |
 | #49 | " | 🔵 | GUI Architecture Analysis | ~327 |
+
+### Feb 10, 2026
+
+| ID | Time | T | Title | Read |
+|----|------|---|-------|------|
+| #529 | 11:19 AM | 🔄 | Unified progress data key names across GUI and service layers | ~368 |
+| #512 | 11:14 AM | 🔴 | Code review issues - Batch 2 fixes completed | ~603 |
+| #509 | 11:12 AM | 🔴 | Fixed GUILogHandler memory leak with weak reference pattern | ~385 |
+| #507 | " | 🔄 | Fixed GUILogHandler potential memory leak with weak reference | ~348 |
+| #503 | 11:11 AM | 🔄 | Extracted config collection method in ConfigDialog | ~305 |
+| #487 | 11:07 AM | 🔄 | Created _collect_config_lines helper method in config_dialog.py | ~212 |
+| #473 | 11:05 AM | ✅ | Code quality verification passed for refactored files | ~156 |
+| #462 | 11:03 AM | 🔴 | Thread safety documentation added to AsyncWorker class | ~263 |
+| #460 | 11:02 AM | 🔵 | Examining AsyncWorker for thread safety issues | ~232 |
 </claude-mem-context>

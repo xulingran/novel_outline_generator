@@ -101,7 +101,6 @@ class ProgressService:
         return ProgressData(
             txt_file=txt_file,
             total_chunks=total_chunks,
-            completed_count=0,
             completed_indices=set(),
             outlines=[],
             last_update=datetime.now(),
@@ -117,7 +116,7 @@ class ProgressService:
     ) -> None:
         """Mark a chunk as completed and optionally record time."""
         progress_data.completed_indices.add(chunk_id)
-        progress_data.completed_count += 1
+        # completed_count 现在是计算属性，从 completed_indices 自动计算
         progress_data.outlines.append(outline_data)
 
         if processing_time is not None:

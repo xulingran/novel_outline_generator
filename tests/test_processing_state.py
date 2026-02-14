@@ -13,14 +13,13 @@ class TestProgressData:
         progress = ProgressData(
             txt_file="test.txt",
             total_chunks=10,
-            completed_count=5,
             completed_indices={0, 1, 2, 3, 4},
             outlines=[],
             last_update=datetime.now(),
             chunks_hash="abc123",
         )
         assert progress.total_chunks == 10
-        assert progress.completed_count == 5
+        assert progress.completed_count == 5  # 从 completed_indices 计算
         assert len(progress.completed_indices) == 5
 
     def test_completion_rate(self):
@@ -28,8 +27,7 @@ class TestProgressData:
         progress = ProgressData(
             txt_file="test.txt",
             total_chunks=10,
-            completed_count=5,
-            completed_indices=set(),
+            completed_indices={0, 1, 2, 3, 4},
             outlines=[],
             last_update=datetime.now(),
             chunks_hash="abc123",
@@ -44,7 +42,6 @@ class TestProgressData:
         progress = ProgressData(
             txt_file="test.txt",
             total_chunks=10,
-            completed_count=0,
             completed_indices=set(),
             outlines=[],
             last_update=datetime.now(),
@@ -61,7 +58,6 @@ class TestProgressData:
         progress = ProgressData(
             txt_file="test.txt",
             total_chunks=10,
-            completed_count=0,
             completed_indices=set(),
             outlines=[],
             last_update=datetime.now(),
@@ -78,7 +74,6 @@ class TestProgressData:
         progress = ProgressData(
             txt_file="test.txt",
             total_chunks=10,
-            completed_count=5,
             completed_indices={0, 1},
             outlines=[{"id": 1}],
             last_update=now,
@@ -88,6 +83,7 @@ class TestProgressData:
         data = progress.to_dict()
         assert data["txt_file"] == "test.txt"
         assert data["total_chunks"] == 10
+        assert data["completed_count"] == 2  # 从 completed_indices 计算
         assert data["completed_indices"] == [0, 1]
         assert data["processing_times"] == [1.0, 2.0]
 
@@ -114,7 +110,6 @@ class TestProgressData:
         progress_data = ProgressData(
             txt_file="test.txt",
             total_chunks=5,
-            completed_count=3,
             completed_indices={0, 1, 2},
             outlines=[{"chunk_id": i, "plot": ["event1"]} for i in range(3)],
             last_update=datetime.now(),

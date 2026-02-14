@@ -354,7 +354,6 @@ class TestProcessFailingChunkAsPartial:
         progress_data = ProgressData(
             txt_file="test.txt",
             total_chunks=10,
-            completed_count=0,
             completed_indices=set(),
             outlines=[],
             last_update=datetime.now(),
@@ -412,7 +411,6 @@ class TestProcessFailingChunkAsPartial:
         progress_data = ProgressData(
             txt_file="test.txt",
             total_chunks=10,
-            completed_count=0,
             completed_indices=set(),
             outlines=[],
             last_update=datetime.now(),
@@ -447,7 +445,6 @@ class TestProcessFailingChunkAsPartial:
         progress_data = ProgressData(
             txt_file="test.txt",
             total_chunks=10,
-            completed_count=0,
             completed_indices=set(),
             outlines=[],
             last_update=datetime.now(),
@@ -486,7 +483,6 @@ class TestProcessFailingChunkAsPartial:
         progress_data = ProgressData(
             txt_file="test.txt",
             total_chunks=10,
-            completed_count=0,
             completed_indices=set(),
             outlines=[],
             last_update=datetime.now(),
@@ -524,7 +520,6 @@ class TestProcessFailingChunkAsPartial:
         progress_data = ProgressData(
             txt_file="test.txt",
             total_chunks=10,
-            completed_count=0,
             completed_indices=set(),
             outlines=[],
             last_update=datetime.now(),
@@ -567,7 +562,6 @@ class TestProcessFailingChunkAsPartial:
             progress_data = ProgressData(
                 txt_file="test.txt",
                 total_chunks=10,
-                completed_count=2,
                 completed_indices={1, 2},
                 outlines=[],
                 last_update=datetime.now(),

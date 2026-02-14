@@ -273,11 +273,12 @@ class ConfigDialog(ctk.CTkToplevel):
             entry.configure(show="*")
             button.configure(text="显示")
 
-    def _on_save(self):
-        """保存配置"""
-        from tkinter import messagebox
+    def _collect_config_lines(self) -> list[str]:
+        """收集当前配置到行列表
 
-        # 收集配置
+        Returns:
+            配置行列表，每行格式为 "KEY=VALUE"
+        """
         config_lines = []
 
         # API 配置
@@ -303,6 +304,15 @@ class ConfigDialog(ctk.CTkToplevel):
         if self.proxy_enabled_var.get():
             config_lines.append(f"HTTP_PROXY={self.proxy_url_var.get()}")
             config_lines.append(f"HTTPS_PROXY={self.proxy_url_var.get()}")
+
+        return config_lines
+
+    def _on_save(self):
+        """保存配置"""
+        from tkinter import messagebox
+
+        # 收集配置
+        config_lines = self._collect_config_lines()
 
         # 写入 .env 文件
         env_file = Path(".env")
@@ -340,31 +350,7 @@ class ConfigDialog(ctk.CTkToplevel):
         if filepath:
             try:
                 # 收集配置
-                config_lines = []
-
-                # API 配置
-                config_lines.append(f"API_PROVIDER={self.provider_var.get()}")
-                config_lines.append(f"OPENAI_API_KEY={self.openai_key_var.get()}")
-                config_lines.append(f"OPENAI_API_BASE={self.openai_base_var.get()}")
-                config_lines.append(f"OPENAI_MODEL={self.openai_model_var.get()}")
-                config_lines.append(f"GEMINI_API_KEY={self.gemini_key_var.get()}")
-                config_lines.append(f"GEMINI_MODEL={self.gemini_model_var.get()}")
-                config_lines.append(f"ZHIPU_API_KEY={self.zhipu_key_var.get()}")
-                config_lines.append(f"ZHIPU_API_BASE={self.zhipu_base_var.get()}")
-                config_lines.append(f"ZHIPU_MODEL={self.zhipu_model_var.get()}")
-                config_lines.append(f"AIHUBMIX_API_KEY={self.aihubmix_key_var.get()}")
-                config_lines.append(f"AIHUBMIX_API_BASE={self.aihubmix_base_var.get()}")
-                config_lines.append(f"AIHUBMIX_MODEL={self.aihubmix_model_var.get()}")
-
-                # 处理配置
-                config_lines.append(f"TARGET_TOKENS_PER_CHUNK={self.chunk_size_var.get()}")
-                config_lines.append(f"PARALLEL_LIMIT={self.parallel_limit_var.get()}")
-                config_lines.append(f"MAX_RETRY={self.max_retry_var.get()}")
-
-                # 代理配置
-                if self.proxy_enabled_var.get():
-                    config_lines.append(f"HTTP_PROXY={self.proxy_url_var.get()}")
-                    config_lines.append(f"HTTPS_PROXY={self.proxy_url_var.get()}")
+                config_lines = self._collect_config_lines()
 
                 # 写入文件
                 Path(filepath).write_text("\n".join(config_lines) + "\n", encoding="utf-8")

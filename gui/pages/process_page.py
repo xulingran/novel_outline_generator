@@ -4,7 +4,9 @@
 核心功能页面，三栏布局：文件区、进度区、日志区。
 """
 
+import dataclasses
 import logging
+import re
 from collections.abc import Callable
 from pathlib import Path
 
@@ -13,6 +15,60 @@ import customtkinter as ctk
 from gui.theme_manager import SPACING, get_color
 
 logger = logging.getLogger(__name__)
+
+
+@dataclasses.dataclass
+class MergeProgressState:
+    """合并进度状态管理
+
+    封装合并阶段的状态变量，避免状态不一致。
+    """
+
+    last_phase: str = ""
+    initial_outline_count: int = 0
+    is_merge_phase: bool = False
+
+    def reset(self) -> None:
+        """重置状态到初始值"""
+        self.last_phase = ""
+        self.initial_outline_count = 0
+        self.is_merge_phase = False
+
+    def on_phase_transition(
+        self, new_phase: str, current_outline_count: int, fallback_completed: int = 0
+    ) -> bool:
+        """处理阶段切换
+
+        Args:
+            new_phase: 新阶段名称
+            current_outline_count: 当前大纲数量
+            fallback_completed: 后备完成数（当首次进入合并阶段时使用）
+
+        Returns:
+            bool: 是否发生了从 processing 到 merging 的切换
+        """
+        is_transition = self.last_phase == "processing" and new_phase == "merging"
+        self.last_phase = new_phase
+
+        if is_transition:
+            self.is_merge_phase = True
+            # 优先使用 fallback_completed（即生成阶段已完成的大纲数）
+            if fallback_completed > 0:
+                self.initial_outline_count = fallback_completed
+            elif current_outline_count > 0:
+                self.initial_outline_count = current_outline_count
+
+        # 如果首次进入合并阶段且 initial_outline_count 未设置，使用后备值
+        if (
+            new_phase == "merging"
+            and self.initial_outline_count == 0
+            and (fallback_completed > 0 or current_outline_count > 0)
+        ):
+            self.initial_outline_count = (
+                fallback_completed if fallback_completed > 0 else current_outline_count
+            )
+
+        return is_transition
 
 
 class ProcessPage(ctk.CTkFrame):
@@ -34,10 +90,8 @@ class ProcessPage(ctk.CTkFrame):
         self._on_cancel_callback: Callable | None = None
         self._all_logs: list[str] = []
 
-        # 合并进度状态管理
-        self._last_phase: str = ""
-        self._initial_outline_count: int = 0
-        self._is_merge_phase: bool = False
+        # 合并进度状态管理 - 使用封装的状态类
+        self._merge_state = MergeProgressState()
 
         self._setup_ui()
 
@@ -78,6 +132,26 @@ class ProcessPage(ctk.CTkFrame):
     def refresh_layout(self):
         """固定布局，无需动态重排。"""
         return
+
+    def _safe_update_progress_bar(self, value: float) -> None:
+        """安全更新进度条（避免重复 hasattr 检查）"""
+        if hasattr(self, "_progress_bar"):
+            self._progress_bar.set(value)
+
+    def _safe_update_progress_text(self, text: str) -> None:
+        """安全更新进度文本（避免重复 hasattr 检查）"""
+        if hasattr(self, "_progress_text_label"):
+            self._progress_text_label.configure(text=text)
+
+    def _safe_update_phase_label(self, text: str) -> None:
+        """安全更新阶段标签"""
+        if hasattr(self, "_phase_label"):
+            self._phase_label.configure(text=text)
+
+    def _safe_update_eta_label(self, text: str) -> None:
+        """安全更新 ETA 标签"""
+        if hasattr(self, "_eta_label"):
+            self._eta_label.configure(text=text)
 
     def _setup_file_section(self, parent):
         """设置文件选择区"""
@@ -411,10 +485,36 @@ class ProcessPage(ctk.CTkFrame):
         self._log_text.delete("1.0", "end")
 
         for message in self._all_logs:
-            if selected_level != "ALL" and f" - {selected_level} - " not in message:
-                continue
+            if selected_level != "ALL":
+                message_level = self._extract_log_level(message)
+                if message_level != selected_level:
+                    continue
             self._log_text.insert("end", message + "\n")
         self._log_text.see("end")
+
+    def _extract_log_level(self, message: str) -> str | None:
+        """从日志头部提取日志级别，避免正文关键字误判。"""
+        levels = {"DEBUG", "INFO", "WARNING", "ERROR"}
+        prefix = message.strip()[:120].upper()
+
+        # 直接前缀格式，如: "INFO: ...", "[ERROR] ...", "(WARNING) ..."
+        direct_patterns = [
+            r"^\[(DEBUG|INFO|WARNING|ERROR)\]",
+            r"^\((DEBUG|INFO|WARNING|ERROR)\)",
+            r"^(DEBUG|INFO|WARNING|ERROR)\s*[:\-]",
+        ]
+        for pattern in direct_patterns:
+            match = re.match(pattern, prefix)
+            if match:
+                return match.group(1)
+
+        # 常见 logging 格式，如: "time - name - LEVEL - message"
+        for part in prefix.split(" - ")[:4]:
+            normalized = part.strip(" []()")
+            if normalized in levels:
+                return normalized
+
+        return None
 
     def update_progress(
         self,
@@ -432,38 +532,24 @@ class ProcessPage(ctk.CTkFrame):
     ):
         """更新进度（支持生成和合并阶段）"""
 
-        # 进入合并阶段（从任何阶段或空阶段）
-        phase_changed = phase != self._last_phase
-        if phase == "merging" and not self._is_merge_phase:
-            self._is_merge_phase = True
-            # 如果从生成阶段切换，保存初始大纲数量
-            if self._last_phase == "processing":
-                self._initial_outline_count = completed
-                # 重置进度条
-                if hasattr(self, "_progress_bar"):
-                    self._progress_bar.set(0)
-                if hasattr(self, "_progress_text_label"):
-                    self._progress_text_label.configure(text="0%")
-            # 从其他阶段直接进入合并阶段（使用当前大纲数量作为初始值）
-            elif phase_changed:
-                # 如果没有初始大纲数量，使用当前大纲数量作为初始值
-                if self._initial_outline_count == 0 and merge_outlines_count > 0:
-                    self._initial_outline_count = merge_outlines_count
-                # 重置进度条
-                if hasattr(self, "_progress_bar"):
-                    self._progress_bar.set(0)
-                if hasattr(self, "_progress_text_label"):
-                    self._progress_text_label.configure(text="0%")
+        # 使用状态管理类处理阶段切换（传入 completed 作为后备值）
+        is_transition = self._merge_state.on_phase_transition(phase, merge_outlines_count, completed)
+
+        # 如果进入合并阶段，重置进度条并设置状态
+        if is_transition or (phase == "merging" and not self._merge_state.is_merge_phase):
+            self._merge_state.is_merge_phase = True
+            # 首次进入合并阶段且 initial_outline_count 未设置，优先使用 completed
+            if self._merge_state.initial_outline_count == 0 and completed > 0:
+                self._merge_state.initial_outline_count = completed
+            self._safe_update_progress_bar(0)
+            self._safe_update_progress_text("0%")
 
         # 离开合并阶段
-        elif phase != "merging" and self._is_merge_phase:
-            self._is_merge_phase = False
-
-        # 更新最后阶段
-        self._last_phase = phase
+        if phase != "merging" and self._merge_state.is_merge_phase:
+            self._merge_state.is_merge_phase = False
 
         # 根据阶段更新进度
-        if phase == "merging" and self._is_merge_phase:
+        if phase == "merging" and self._merge_state.is_merge_phase:
             # 合并阶段：使用合并进度计算
             progress = self._calculate_merge_progress(
                 merge_level=merge_level,
@@ -473,28 +559,22 @@ class ProcessPage(ctk.CTkFrame):
             )
 
             # 更新进度条
-            if hasattr(self, "_progress_bar"):
-                self._progress_bar.set(progress)
-            if hasattr(self, "_progress_text_label"):
-                self._progress_text_label.configure(text=f"{int(progress * 100)}%")
+            self._safe_update_progress_bar(progress)
+            self._safe_update_progress_text(f"{int(progress * 100)}%")
 
             # 更新阶段文本（显示合并详情）
-            if hasattr(self, "_phase_label"):
-                self._phase_label.configure(
-                    text=f"当前阶段: 正在合并大纲 (层级 {merge_level}, 批次 {merge_batch_current}/{merge_batch_total})"
-                )
+            self._safe_update_phase_label(
+                f"当前阶段: 正在合并大纲 (层级 {merge_level}, 批次 {merge_batch_current}/{merge_batch_total})"
+            )
 
             # 合并阶段不显示 ETA
-            if hasattr(self, "_eta_label"):
-                self._eta_label.configure(text="合并中...")
+            self._safe_update_eta_label("合并中...")
 
         elif phase == "processing":
             # 生成阶段：使用原有逻辑
             progress = completed / total if total > 0 else 0
-            if hasattr(self, "_progress_bar"):
-                self._progress_bar.set(progress)
-            if hasattr(self, "_progress_text_label"):
-                self._progress_text_label.configure(text=f"{int(progress * 100)}%")
+            self._safe_update_progress_bar(progress)
+            self._safe_update_progress_text(f"{int(progress * 100)}%")
 
             # 更新统计
             if hasattr(self, "_stat_labels"):
@@ -503,11 +583,10 @@ class ProcessPage(ctk.CTkFrame):
                 self._stat_labels["partial"].configure(text=str(partial))
 
             # 更新阶段
-            if hasattr(self, "_phase_label"):
-                self._phase_label.configure(text=f"当前阶段: 正在生成大纲 ({completed}/{total})")
+            self._safe_update_phase_label(f"当前阶段: 正在生成大纲 ({completed}/{total})")
 
             # 更新 ETA
-            if eta_seconds > 0 and hasattr(self, "_eta_label"):
+            if eta_seconds > 0:
                 hours = eta_seconds // 3600
                 minutes = (eta_seconds % 3600) // 60
                 secs = eta_seconds % 60
@@ -520,16 +599,13 @@ class ProcessPage(ctk.CTkFrame):
                 if secs > 0 or not time_parts:
                     time_parts.append(f"{secs}秒")
 
-                self._eta_label.configure(text=f"预估剩余时间: {''.join(time_parts)}")
+                self._safe_update_eta_label(f"预估剩余时间: {''.join(time_parts)}")
 
         elif phase == "saving":
             # 保存阶段：显示完成状态
-            if hasattr(self, "_progress_bar"):
-                self._progress_bar.set(1.0)
-            if hasattr(self, "_progress_text_label"):
-                self._progress_text_label.configure(text="100%")
-            if hasattr(self, "_phase_label"):
-                self._phase_label.configure(text="当前阶段: 正在保存结果...")
+            self._safe_update_progress_bar(1.0)
+            self._safe_update_progress_text("100%")
+            self._safe_update_phase_label("当前阶段: 正在保存结果...")
         else:
             # 未知阶段，记录警告但保持静默（不影响现有流程）
             logger.debug(f"Unknown phase: {phase}")
@@ -546,10 +622,8 @@ class ProcessPage(ctk.CTkFrame):
 
     def reset(self):
         """重置页面状态"""
-        if hasattr(self, "_progress_bar"):
-            self._progress_bar.set(0)
-        if hasattr(self, "_progress_text_label"):
-            self._progress_text_label.configure(text="0%")
+        self._safe_update_progress_bar(0)
+        self._safe_update_progress_text("0%")
 
         for label in self._stat_labels.values():
             label.configure(text="0")
@@ -582,19 +656,23 @@ class ProcessPage(ctk.CTkFrame):
             0-1 之间的进度值
         """
         # 层级进度：越接近顶层（level=1），进度越高
-        level_progress = 1.0 - (merge_level / (merge_level + 5)) if merge_level > 0 else 0.8
+        level_progress: float = 1.0 - (merge_level / (merge_level + 5)) if merge_level > 0 else 0.8
 
         # 批次进度
+        batch_progress: float
         if merge_batch_total > 0:
             batch_progress = merge_batch_current / merge_batch_total
         else:
             batch_progress = 0.0
 
         # 大纲缩减进度
-        if self._initial_outline_count > 0:
+        total: float
+        if self._merge_state.initial_outline_count > 0:
             # 确保大纲数量非负
             safe_outlines_count = max(0, merge_outlines_count)
-            reduction_progress = 1.0 - (safe_outlines_count / self._initial_outline_count)
+            reduction_progress = 1.0 - (
+                safe_outlines_count / self._merge_state.initial_outline_count
+            )
             # 根据是否有缩减进度分配权重
             total = level_progress * 0.4 + batch_progress * 0.4 + reduction_progress * 0.2
         else:

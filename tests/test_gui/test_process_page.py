@@ -17,15 +17,13 @@ def test_merge_state_variables_initialized():
         # 初始化 ProcessPage
         page = ProcessPage(mock_master)
 
-        # 验证合并状态变量已初始化
-        assert hasattr(page, "_last_phase")
-        assert hasattr(page, "_initial_outline_count")
-        assert hasattr(page, "_is_merge_phase")
+        # 验证合并状态变量已初始化（封装在 MergeProgressState 中）
+        assert hasattr(page, "_merge_state")
 
         # 验证初始值
-        assert page._last_phase == ""
-        assert page._initial_outline_count == 0
-        assert page._is_merge_phase is False
+        assert page._merge_state.last_phase == ""
+        assert page._merge_state.initial_outline_count == 0
+        assert page._merge_state.is_merge_phase is False
 
 
 class TestMergeProgressCalculation:
@@ -35,7 +33,9 @@ class TestMergeProgressCalculation:
         """基础合并进度计算：层级 1，批次 1/1，大纲缩减 50%"""
         # 使用 object.__new__ 跳过 __init__ 避免实际 UI 初始化
         page = object.__new__(ProcessPage)
-        page._initial_outline_count = 100
+        from gui.pages.process_page import MergeProgressState
+
+        page._merge_state = MergeProgressState(initial_outline_count=100)
 
         # merge_level=1, batch_current=1, batch_total=1, outlines_count=50
         progress = page._calculate_merge_progress(
@@ -53,7 +53,9 @@ class TestMergeProgressCalculation:
         """初始大纲数量为 0 时，应使用默认值处理"""
         # 使用 object.__new__ 跳过 __init__ 避免实际 UI 初始化
         page = object.__new__(ProcessPage)
-        page._initial_outline_count = 0
+        from gui.pages.process_page import MergeProgressState
+
+        page._merge_state = MergeProgressState(initial_outline_count=0)
 
         progress = page._calculate_merge_progress(
             merge_level=2, merge_batch_current=1, merge_batch_total=3, merge_outlines_count=10
@@ -69,7 +71,9 @@ class TestMergeProgressCalculation:
         """进度应限制在 [0, 1] 范围内"""
         # 使用 object.__new__ 跳过 __init__ 避免实际 UI 初始化
         page = object.__new__(ProcessPage)
-        page._initial_outline_count = 10
+        from gui.pages.process_page import MergeProgressState
+
+        page._merge_state = MergeProgressState(initial_outline_count=10)
 
         # 边界情况：outlines_count > initial_count（不应发生）
         progress = page._calculate_merge_progress(
@@ -82,7 +86,9 @@ class TestMergeProgressCalculation:
         """层级为 0 时应返回 0.8"""
         # 使用 object.__new__ 跳过 __init__ 避免实际 UI 初始化
         page = object.__new__(ProcessPage)
-        page._initial_outline_count = 100
+        from gui.pages.process_page import MergeProgressState
+
+        page._merge_state = MergeProgressState(initial_outline_count=100)
 
         progress = page._calculate_merge_progress(
             merge_level=0, merge_batch_current=1, merge_batch_total=1, merge_outlines_count=50
@@ -99,7 +105,9 @@ class TestMergeProgressCalculation:
         """总批次数为 0 时，批次进度应为 0"""
         # 使用 object.__new__ 跳过 __init__ 避免实际 UI 初始化
         page = object.__new__(ProcessPage)
-        page._initial_outline_count = 100
+        from gui.pages.process_page import MergeProgressState
+
+        page._merge_state = MergeProgressState(initial_outline_count=100)
 
         progress = page._calculate_merge_progress(
             merge_level=1, merge_batch_current=0, merge_batch_total=0, merge_outlines_count=50
@@ -119,6 +127,9 @@ class TestUpdateProgressMergeParameters:
         """update_progress 应接受合并相关参数"""
         # 使用 object.__new__ 跳过 __init__ 避免实际 UI 初始化
         page = object.__new__(ProcessPage)
+        from gui.pages.process_page import MergeProgressState
+
+        page._merge_state = MergeProgressState()
         page._progress_bar = MagicMock()
         page._progress_text_label = MagicMock()
         page._stat_labels = {
@@ -128,9 +139,6 @@ class TestUpdateProgressMergeParameters:
         }
         page._phase_label = MagicMock()
         page._eta_label = MagicMock()
-        page._last_phase = ""
-        page._initial_outline_count = 100
-        page._is_merge_phase = False
 
         # 调用带合并参数的 update_progress
         page.update_progress(
@@ -147,14 +155,17 @@ class TestUpdateProgressMergeParameters:
         )
 
         # 验证阶段已更新为合并模式
-        assert page._is_merge_phase is True
-        assert page._last_phase == "merging"
-        assert page._initial_outline_count == 100  # 应保持不变（已在生成阶段设置）
+        assert page._merge_state.is_merge_phase is True
+        assert page._merge_state.last_phase == "merging"
+        assert page._merge_state.initial_outline_count == 50  # 首次进入合并时使用 completed
 
     def test_update_progress_resets_on_phase_switch_to_merge(self):
         """切换到合并阶段时，应保存初始大纲数量"""
         # 使用 object.__new__ 跳过 __init__ 避免实际 UI 初始化
         page = object.__new__(ProcessPage)
+        from gui.pages.process_page import MergeProgressState
+
+        page._merge_state = MergeProgressState(last_phase="processing", initial_outline_count=0)
         page._progress_bar = MagicMock()
         page._progress_text_label = MagicMock()
         page._stat_labels = {
@@ -164,9 +175,6 @@ class TestUpdateProgressMergeParameters:
         }
         page._phase_label = MagicMock()
         page._eta_label = MagicMock()
-        page._last_phase = "processing"
-        page._initial_outline_count = 0
-        page._is_merge_phase = False
 
         # 模拟从生成阶段切换到合并阶段
         page.update_progress(
@@ -183,8 +191,8 @@ class TestUpdateProgressMergeParameters:
         )
 
         # 应保存初始大纲数量
-        assert page._initial_outline_count == 100
-        assert page._is_merge_phase is True
+        assert page._merge_state.initial_outline_count == 100
+        assert page._merge_state.is_merge_phase is True
         # 进度条应被重置为 0（至少调用过一次）
         page._progress_bar.set.assert_any_call(0)
         # 最后的调用应该是合并进度计算的结果
@@ -201,6 +209,9 @@ class TestPhaseTransitionIntegration:
         """测试从生成阶段完整切换到合并阶段"""
         # 使用 object.__new__ 跳过 __init__ 避免实际 UI 初始化
         page = object.__new__(ProcessPage)
+        from gui.pages.process_page import MergeProgressState
+
+        page._merge_state = MergeProgressState()
         page._progress_bar = MagicMock()
         page._progress_text_label = MagicMock()
         page._stat_labels = {
@@ -210,17 +221,14 @@ class TestPhaseTransitionIntegration:
         }
         page._phase_label = MagicMock()
         page._eta_label = MagicMock()
-        page._last_phase = ""
-        page._initial_outline_count = 0
-        page._is_merge_phase = False
 
         # 模拟生成阶段进度
         page.update_progress(
             completed=50, total=100, failed=0, partial=0, phase="processing", eta_seconds=120
         )
 
-        assert page._last_phase == "processing"
-        assert page._is_merge_phase is False
+        assert page._merge_state.last_phase == "processing"
+        assert page._merge_state.is_merge_phase is False
 
         # 生成完成，切换到合并
         page.update_progress(
@@ -237,8 +245,8 @@ class TestPhaseTransitionIntegration:
         )
 
         # 验证切换
-        assert page._is_merge_phase is True
-        assert page._initial_outline_count == 100
+        assert page._merge_state.is_merge_phase is True
+        assert page._merge_state.initial_outline_count == 100
         # 进度条应被重置为 0（至少调用过一次）
         page._progress_bar.set.assert_any_call(0)  # 进度条重置
 
@@ -246,9 +254,11 @@ class TestPhaseTransitionIntegration:
         """测试合并阶段边界情况"""
         # 使用 object.__new__ 跳过 __init__ 避免实际 UI 初始化
         page = object.__new__(ProcessPage)
-        page._initial_outline_count = 50
-        page._is_merge_phase = True
-        page._last_phase = "merging"
+        from gui.pages.process_page import MergeProgressState
+
+        page._merge_state = MergeProgressState(
+            initial_outline_count=50, is_merge_phase=True, last_phase="merging"
+        )
 
         # 测试批次总数为 0 的情况
         progress = page._calculate_merge_progress(
@@ -270,3 +280,49 @@ class TestPhaseTransitionIntegration:
         )
         # 应该被限制为 0，不应崩溃
         assert 0 <= progress <= 1
+
+
+class TestLogFiltering:
+    """测试日志级别过滤逻辑"""
+
+    def test_filter_logs_does_not_match_body_keywords(self):
+        """正文中的 error 关键词不应被误判为 ERROR 级别"""
+        page = object.__new__(ProcessPage)
+        page._log_text = MagicMock()
+        page._log_level_var = MagicMock()
+        page._log_level_var.get.return_value = "ERROR"
+        page._all_logs = [
+            "2026-02-13 10:00:00 - app - INFO - request finished with error details",
+            "2026-02-13 10:00:01 - app - ERROR - processing failed",
+        ]
+
+        page._filter_logs()
+
+        inserted = [call.args[1] for call in page._log_text.insert.call_args_list]
+        assert "2026-02-13 10:00:01 - app - ERROR - processing failed\n" in inserted
+        assert "2026-02-13 10:00:00 - app - INFO - request finished with error details\n" not in inserted
+
+    def test_filter_logs_excludes_unrecognized_format_in_specific_level(self):
+        """筛选特定级别时应排除无法识别级别的日志"""
+        page = object.__new__(ProcessPage)
+        page._log_text = MagicMock()
+        page._log_level_var = MagicMock()
+        page._log_level_var.get.return_value = "ERROR"
+        page._all_logs = [
+            "plain log without level prefix",
+            "2026-02-13 10:00:01 - app - ERROR - processing failed",
+        ]
+
+        page._filter_logs()
+
+        inserted = [call.args[1] for call in page._log_text.insert.call_args_list]
+        assert "2026-02-13 10:00:01 - app - ERROR - processing failed\n" in inserted
+        assert "plain log without level prefix\n" not in inserted
+
+    def test_extract_log_level_supports_common_head_formats(self):
+        """支持常见日志头格式的级别提取"""
+        page = object.__new__(ProcessPage)
+
+        assert page._extract_log_level("[WARNING] disk almost full") == "WARNING"
+        assert page._extract_log_level("ERROR: failed to open file") == "ERROR"
+        assert page._extract_log_level("(INFO) startup complete") == "INFO"

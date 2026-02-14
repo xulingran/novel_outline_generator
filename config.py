@@ -5,6 +5,7 @@
 
 import logging
 import os
+import warnings
 from dataclasses import dataclass, field
 
 from exceptions import APIKeyError, ConfigurationError
@@ -59,6 +60,61 @@ class APIConfig:
     )
     _validated: bool = field(default=False, init=False)
 
+    # API 密钥验证配置（字段名、提供商名称、环境变量名、提示）
+    _PROVIDER_KEY_CONFIG: dict[str, dict[str, str]] = field(
+        default_factory=lambda: {
+            "openai": {
+                "field": "openai_key",
+                "name": "OpenAI API",
+                "env_var": "OPENAI_API_KEY",
+                "hint": "提示：OpenAI API Key 通常以 'sk-' 开头",
+            },
+            "gemini": {
+                "field": "gemini_key",
+                "name": "Gemini API",
+                "env_var": "GEMINI_API_KEY",
+                "hint": "",
+            },
+            "zhipu": {
+                "field": "zhipu_key",
+                "name": "智谱API",  # 恢复原有格式，与测试期望一致
+                "env_var": "ZHIPU_API_KEY",
+                "hint": "",
+            },
+            "aihubmix": {
+                "field": "aihubmix_api_key",
+                "name": "AiHubMix API",
+                "env_var": "AIHUBMIX_API_KEY",
+                "hint": "",
+            },
+        },
+        init=False,
+        repr=False,
+    )
+
+    def _validate_api_key(self, key_value: str | None, config: dict[str, str]) -> None:
+        """验证单个 API 密钥
+
+        Args:
+            key_value: API 密钥值
+            config: 提供商配置字典
+        """
+        if not key_value or "your_" in key_value.lower() or "here" in key_value.lower():
+            provider_name = config["name"]
+            env_var = config["env_var"]
+            hint = config.get("hint", "")
+            # 保持与原有测试兼容的错误消息格式
+            if provider_name == "OpenAI API":
+                raise ConfigurationError(
+                    f"使用{provider_name}时必须设置{env_var}环境变量。\n"
+                    f"当前值看起来像是占位符，请在 .env 文件中填入真实的 API Key。\n{hint}"
+                )
+            else:
+                raise ConfigurationError(
+                    f"使用{provider_name}时必须设置{env_var}环境变量。\n"
+                    "当前值看起来像是占位符，请在 .env 文件中填入真实的 API Key"
+                )
+
     def validate(self) -> None:
         """验证配置（延迟到实际使用时）"""
         if self._validated:
@@ -66,53 +122,15 @@ class APIConfig:
 
         if self.provider not in SUPPORTED_API_PROVIDERS:
             raise ConfigurationError(
-                f"不支持的API提供商: {self.provider}. 支持的提供商: {', '.join(SUPPORTED_API_PROVIDERS)}"
+                f"不支持的API提供商: {self.provider}. "
+                f"支持的提供商: {', '.join(SUPPORTED_API_PROVIDERS)}"
             )
 
-        if self.provider == "openai":
-            if (
-                not self.openai_key
-                or "your_" in self.openai_key.lower()
-                or "here" in self.openai_key.lower()
-            ):
-                raise ConfigurationError(
-                    "使用OpenAI API时必须设置OPENAI_API_KEY环境变量。\n"
-                    "当前值看起来像是占位符，请在 .env 文件中填入真实的 API Key。\n"
-                    "提示：OpenAI API Key 通常以 'sk-' 开头"
-                )
-
-        if self.provider == "gemini":
-            if (
-                not self.gemini_key
-                or "your_" in self.gemini_key.lower()
-                or "here" in self.gemini_key.lower()
-            ):
-                raise ConfigurationError(
-                    "使用Gemini API时必须设置GEMINI_API_KEY环境变量。\n"
-                    "当前值看起来像是占位符，请在 .env 文件中填入真实的 API Key"
-                )
-
-        if self.provider == "zhipu":
-            if (
-                not self.zhipu_key
-                or "your_" in self.zhipu_key.lower()
-                or "here" in self.zhipu_key.lower()
-            ):
-                raise ConfigurationError(
-                    "使用智谱API时必须设置ZHIPU_API_KEY环境变量。\n"
-                    "当前值看起来像是占位符，请在 .env 文件中填入真实的 API Key"
-                )
-
-        if self.provider == "aihubmix":
-            if (
-                not self.aihubmix_api_key
-                or "your_" in self.aihubmix_api_key.lower()
-                or "here" in self.aihubmix_api_key.lower()
-            ):
-                raise ConfigurationError(
-                    "使用AiHubMix API时必须设置AIHUBMIX_API_KEY环境变量。\n"
-                    "当前值看起来像是占位符，请在 .env 文件中填入真实的 API Key"
-                )
+        # 使用配置驱动的方式验证 API 密钥
+        provider_config = self._PROVIDER_KEY_CONFIG.get(self.provider)
+        if provider_config:
+            key_value = getattr(self, provider_config["field"])
+            self._validate_api_key(key_value, provider_config)
 
         self._validated = True
 
@@ -172,6 +190,12 @@ class ProcessingConfig:
     default_txt_file: str = field(default="novel.txt")
     output_dir: str = field(default="outputs")
     progress_file: str = field(init=False)
+    # 支持的文本文件扩展名
+    allowed_extensions: list[str] = field(default_factory=lambda: [".txt", ".md", ".text"])
+    # 上传文件大小限制（MB）
+    max_upload_file_size_mb: int = field(
+        default_factory=lambda: int(os.getenv("MAX_UPLOAD_FILE_SIZE_MB", "100"))
+    )
 
     # 编码配置
     encodings: list[str] = field(
@@ -266,33 +290,55 @@ def get_processing_config() -> ProcessingConfig:
 
 
 # 为了向前兼容，保留一些常量
+# 以下函数已弃用，建议直接使用 get_processing_config()
 def get_txt_file() -> str:
-    """获取默认文本文件路径"""
+    """获取默认文本文件路径（已弃用）"""
+    warnings.warn(
+        "get_txt_file() 已弃用，请使用 get_processing_config().default_txt_file",
+        DeprecationWarning,
+        stacklevel=2,
+    )
     return get_processing_config().default_txt_file
 
 
 def get_output_dir() -> str:
-    """获取输出目录"""
+    """获取输出目录（已弃用）"""
+    warnings.warn(
+        "get_output_dir() 已弃用，请使用 get_processing_config().output_dir",
+        DeprecationWarning,
+        stacklevel=2,
+    )
     return get_processing_config().output_dir
 
 
 def get_progress_file() -> str:
-    """获取进度文件路径"""
+    """获取进度文件路径（已弃用）"""
+    warnings.warn(
+        "get_progress_file() 已弃用，请使用 get_processing_config().progress_file",
+        DeprecationWarning,
+        stacklevel=2,
+    )
     return get_processing_config().progress_file
 
 
 def get_encodings() -> list[str]:
-    """获取支持的编码列表"""
+    """获取支持的编码列表（已弃用）"""
+    warnings.warn(
+        "get_encodings() 已弃用，请使用 get_processing_config().encodings",
+        DeprecationWarning,
+        stacklevel=2,
+    )
     return get_processing_config().encodings
 
 
 # 向后兼容的常量（已弃用，建议使用配置函数）
 # 注意：API_KEY等需要在首次访问时验证的常量，会延迟到实际使用时才验证
 # 如果需要在导入时避免验证，请直接使用配置函数
-TXT_FILE = get_txt_file()
-OUTPUT_DIR = get_output_dir()
-PROGRESS_FILE = get_progress_file()
-ENCODINGS = get_encodings()
+_proc_cfg = get_processing_config()
+TXT_FILE = _proc_cfg.default_txt_file
+OUTPUT_DIR = _proc_cfg.output_dir
+PROGRESS_FILE = _proc_cfg.progress_file
+ENCODINGS = _proc_cfg.encodings
 
 # API相关配置 - 延迟验证，避免在导入时抛出异常
 # 只有在实际使用时才会调用api_key属性（会触发验证）
@@ -315,13 +361,18 @@ except Exception as e:
 
 # API_KEY延迟访问函数（向后兼容）
 def _get_api_key():
-    """获取API密钥（延迟验证）"""
+    """获取API密钥（延迟验证，已弃用）"""
+    warnings.warn(
+        "API_KEY 常量已弃用，请使用 get_api_config().api_key",
+        DeprecationWarning,
+        stacklevel=2,
+    )
     return get_api_config().api_key
 
 
 # 为了向后兼容，创建一个对象模拟API_KEY属性
 class _APIKeyWrapper:
-    """API密钥包装器，延迟验证"""
+    """API密钥包装器，延迟验证（已弃用）"""
 
     def __str__(self):
         return _get_api_key()

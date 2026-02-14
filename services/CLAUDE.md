@@ -15,4 +15,16 @@
 | ID | Time | T | Title | Read |
 |----|------|---|-------|------|
 | #212 | 11:58 AM | 🔵 | NovelProcessingService Implements Core Business Logic for Novel Processing | ~360 |
+
+### Feb 10, 2026
+
+| ID | Time | T | Title | Read |
+|----|------|---|-------|------|
+| #529 | 11:19 AM | 🔄 | Unified progress data key names across GUI and service layers | ~368 |
+| #528 | 11:17 AM | 🔴 | Code review issues - Batch 3 partially completed | ~437 |
+| #512 | 11:14 AM | 🔴 | Code review issues - Batch 2 fixes completed | ~603 |
+| #504 | 11:11 AM | 🟣 | Added centralized file extension and size configuration | ~378 |
+| #491 | 11:08 AM | 🔄 | Replaced hardcoded file extensions and size limits in file_service.py | ~211 |
+| #473 | 11:05 AM | ✅ | Code quality verification passed for refactored files | ~156 |
+| #468 | 11:04 AM | 🔴 | Removed completed_count parameter from ProgressData instantiation | ~219 |
 </claude-mem-context>
