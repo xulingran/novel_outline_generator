@@ -528,10 +528,11 @@ async def _run_job(job: Job, req: ProcessRequest):
                 cleaned = cleanup_uploads(protected_paths=active_uploads)
                 if cleaned:
                     job.log(f"已清理上传文件 {cleaned} 个")
-        except Exception as cleanup_err:  # noqa: BLE001
+        except Exception as cleanup_err:
             job.log(f"清理上传文件失败: {cleanup_err}")
 
-    except Exception as e:  # noqa: BLE001
+    except Exception as e:
+        logger.exception("Job %s failed with error: %s", job.id, e)
         job.status = "error"
         job.message = str(e)
         job.log(f"错误: {e}")
@@ -577,7 +578,8 @@ async def run_queue_task(task: QueueTask) -> None:
             task.status = "cancelled"
             task.message = "任务被取消"
             task.log("任务被取消")
-    except Exception as e:  # noqa: BLE001
+    except Exception as e:
+        logger.exception("Task %s failed with error: %s", task.id, e)
         task.status = "error"
         task.message = str(e)
         task.log(f"错误: {e}")

@@ -16,6 +16,11 @@ from gui.theme_manager import SPACING, get_color
 
 logger = logging.getLogger(__name__)
 
+BREAKPOINTS = {
+    "compact": 900,
+    "normal": 1200,
+}
+
 
 @dataclasses.dataclass
 class MergeProgressState:
@@ -75,9 +80,10 @@ class ProcessPage(ctk.CTkFrame):
     """
     处理页面
 
-    固定两行布局：
-    - 上行：左侧文件区 + 右侧进度区
-    - 下行：日志区
+    响应式布局：
+    - 宽度 >= 1200px：双列布局（文件区 + 进度区）
+    - 宽度 900-1200px：双列布局（调整比例）
+    - 宽度 < 900px：单列布局（堆叠）
     """
 
     def __init__(self, master, **kwargs):
@@ -89,49 +95,115 @@ class ProcessPage(ctk.CTkFrame):
         self._on_start_callback: Callable | None = None
         self._on_cancel_callback: Callable | None = None
         self._all_logs: list[str] = []
+        self._current_layout_mode: str = "normal"
 
-        # 合并进度状态管理 - 使用封装的状态类
         self._merge_state = MergeProgressState()
 
         self._setup_ui()
+        self.bind("<Configure>", self._on_resize)
+
+    def _on_resize(self, event):
+        """窗口大小变化时调整布局"""
+        if not hasattr(self, "_main_container"):
+            return
+        width = event.width
+        new_mode = self._get_layout_mode(width)
+        if new_mode != self._current_layout_mode:
+            self._current_layout_mode = new_mode
+            self._apply_layout_mode(new_mode)
+
+    def _get_layout_mode(self, width: int) -> str:
+        """根据宽度获取布局模式"""
+        if width < BREAKPOINTS["compact"]:
+            return "compact"
+        elif width < BREAKPOINTS["normal"]:
+            return "medium"
+        return "normal"
+
+    def _apply_layout_mode(self, mode: str):
+        """应用布局模式"""
+        if not hasattr(self, "_top_left") or not hasattr(self, "_top_right"):
+            return
+
+        match mode:
+            case "compact":
+                self._top_left.grid(
+                    row=0, column=0, columnspan=2, sticky="nsew", pady=(0, SPACING["md"])
+                )
+                self._top_right.grid(
+                    row=1, column=0, columnspan=2, sticky="nsew", pady=(0, SPACING["lg"])
+                )
+                self._bottom_log.grid(row=2, column=0, columnspan=2, sticky="nsew")
+                self._action_row.grid(row=3, column=0, columnspan=2, sticky="ew")
+                self._main_container.grid_columnconfigure(0, weight=1, minsize=0)
+                self._main_container.grid_columnconfigure(1, weight=0, minsize=0)
+                self._main_container.grid_rowconfigure(0, weight=0)
+                self._main_container.grid_rowconfigure(1, weight=2)
+                self._main_container.grid_rowconfigure(2, weight=3)
+                self._main_container.grid_rowconfigure(3, weight=0)
+            case "medium":
+                self._top_left.grid(
+                    row=0, column=0, sticky="nsew", padx=(0, SPACING["md"]), pady=(0, SPACING["lg"])
+                )
+                self._top_right.grid(row=0, column=1, sticky="nsew", pady=(0, SPACING["lg"]))
+                self._bottom_log.grid(row=1, column=0, columnspan=2, sticky="nsew")
+                self._action_row.grid(row=2, column=0, columnspan=2, sticky="ew")
+                self._main_container.grid_columnconfigure(0, weight=40, minsize=280)
+                self._main_container.grid_columnconfigure(1, weight=60, minsize=400)
+                self._main_container.grid_rowconfigure(0, weight=4)
+                self._main_container.grid_rowconfigure(1, weight=3)
+                self._main_container.grid_rowconfigure(2, weight=0)
+                self._main_container.grid_rowconfigure(3, weight=0)
+            case _:
+                self._top_left.grid(
+                    row=0, column=0, sticky="nsew", padx=(0, SPACING["lg"]), pady=(0, SPACING["lg"])
+                )
+                self._top_right.grid(row=0, column=1, sticky="nsew", pady=(0, SPACING["lg"]))
+                self._bottom_log.grid(row=1, column=0, columnspan=2, sticky="nsew")
+                self._action_row.grid(row=2, column=0, columnspan=2, sticky="ew")
+                self._main_container.grid_columnconfigure(0, weight=32, minsize=320)
+                self._main_container.grid_columnconfigure(1, weight=68, minsize=520)
+                self._main_container.grid_rowconfigure(0, weight=4)
+                self._main_container.grid_rowconfigure(1, weight=3)
+                self._main_container.grid_rowconfigure(2, weight=0)
+                self._main_container.grid_rowconfigure(3, weight=0)
 
     def _setup_ui(self):
         """设置 UI"""
-        # 主容器（带内边距）
-        main_container = ctk.CTkFrame(self, fg_color="transparent")
-        main_container.pack(fill="both", expand=True, padx=40, pady=40)
+        self._main_container = ctk.CTkFrame(self, fg_color="transparent")
+        self._main_container.pack(fill="both", expand=True, padx=40, pady=40)
 
-        main_container.grid_columnconfigure(0, weight=32, minsize=320)
-        main_container.grid_columnconfigure(1, weight=68, minsize=520)
-        main_container.grid_rowconfigure(0, weight=4)
-        main_container.grid_rowconfigure(1, weight=3)
-        main_container.grid_rowconfigure(2, weight=0)
+        self._main_container.grid_columnconfigure(0, weight=32, minsize=320)
+        self._main_container.grid_columnconfigure(1, weight=68, minsize=520)
+        self._main_container.grid_rowconfigure(0, weight=4)
+        self._main_container.grid_rowconfigure(1, weight=3)
+        self._main_container.grid_rowconfigure(2, weight=0)
 
-        # 上行：文件区 + 进度区
-        top_left = ctk.CTkFrame(main_container, fg_color="transparent")
-        top_left.grid(
+        self._top_left = ctk.CTkFrame(self._main_container, fg_color="transparent")
+        self._top_left.grid(
             row=0, column=0, sticky="nsew", padx=(0, SPACING["lg"]), pady=(0, SPACING["lg"])
         )
 
-        top_right = ctk.CTkFrame(main_container, fg_color="transparent")
-        top_right.grid(row=0, column=1, sticky="nsew", pady=(0, SPACING["lg"]))
+        self._top_right = ctk.CTkFrame(self._main_container, fg_color="transparent")
+        self._top_right.grid(row=0, column=1, sticky="nsew", pady=(0, SPACING["lg"]))
 
-        self._setup_file_section(top_left)
-        self._setup_progress_section(top_right)
+        self._setup_file_section(self._top_left)
+        self._setup_progress_section(self._top_right)
 
-        # 下行：日志区整行
-        bottom_log = ctk.CTkFrame(main_container, fg_color="transparent")
-        bottom_log.grid(row=1, column=0, columnspan=2, sticky="nsew", pady=(0, SPACING["lg"]))
-        self._setup_log_section(bottom_log)
+        self._bottom_log = ctk.CTkFrame(self._main_container, fg_color="transparent")
+        self._bottom_log.grid(row=1, column=0, columnspan=2, sticky="nsew", pady=(0, SPACING["lg"]))
+        self._setup_log_section(self._bottom_log)
 
-        # 底部操作栏
-        action_row = ctk.CTkFrame(main_container, fg_color="transparent")
-        action_row.grid(row=2, column=0, columnspan=2, sticky="ew")
-        self._setup_action_bar(action_row)
+        self._action_row = ctk.CTkFrame(self._main_container, fg_color="transparent")
+        self._action_row.grid(row=2, column=0, columnspan=2, sticky="ew")
+        self._setup_action_bar(self._action_row)
 
     def refresh_layout(self):
-        """固定布局，无需动态重排。"""
-        return
+        """刷新布局"""
+        self.update_idletasks()
+        width = self.winfo_width()
+        self._current_layout_mode = self._get_layout_mode(width)
+        self._apply_layout_mode(self._current_layout_mode)
 
     def _safe_update_progress_bar(self, value: float) -> None:
         """安全更新进度条（避免重复 hasattr 检查）"""
@@ -153,45 +225,69 @@ class ProcessPage(ctk.CTkFrame):
         if hasattr(self, "_eta_label"):
             self._eta_label.configure(text=text)
 
+    def _update_status_badge(self, status) -> None:
+        """更新状态徽章"""
+        if hasattr(self, "_status_badge"):
+            self._status_badge.set_status(status)
+
     def _setup_file_section(self, parent):
         """设置文件选择区"""
-        # 文件选择卡片
         from gui.components.card import Card
 
         file_card = Card(parent, title="文件选择", padding="md")
         file_card.pack(fill="x", pady=(0, SPACING["md"]))
 
-        # 拖放区域
-        drop_zone = ctk.CTkFrame(
+        file_select_zone = ctk.CTkFrame(
             file_card.content,
             fg_color=get_color("bg_tertiary", mode="auto"),
             border_color=get_color("border", mode="auto"),
             border_width=2,
             corner_radius=8,
-            height=120,
+            height=140,
         )
-        drop_zone.pack(fill="x", pady=(0, SPACING["sm"]))
-        drop_zone.pack_propagate(False)
+        file_select_zone.pack(fill="x", pady=(0, SPACING["sm"]))
+        file_select_zone.pack_propagate(False)
 
-        drop_label = ctk.CTkLabel(
-            drop_zone,
-            text="拖放文件到此处\n或",
+        try:
+            from gui.components.icon import Icon, IconSize
+
+            file_icon = Icon(
+                file_select_zone,
+                name="file-text",
+                size=IconSize.LG,
+                color=get_color("fg_secondary", mode="auto"),
+            )
+            file_icon.place(relx=0.5, rely=0.35, anchor="center")
+        except Exception:
+            pass
+
+        select_hint = ctk.CTkLabel(
+            file_select_zone,
+            text="选择要处理的文本文件",
             font=ctk.CTkFont(size=13),
             text_color=get_color("fg_secondary", mode="auto"),
         )
-        drop_label.place(relx=0.5, rely=0.4, anchor="center")
+        select_hint.place(relx=0.5, rely=0.55, anchor="center")
 
-        # 选择文件按钮
         from gui.components.button import Button, ButtonSize, ButtonVariant
 
         select_button = Button(
-            drop_zone,
+            file_select_zone,
             text="选择文件",
             variant=ButtonVariant.PRIMARY,
             size=ButtonSize.SM,
             command=self._on_select_file,
         )
-        select_button.place(relx=0.5, rely=0.7, anchor="center")
+        select_button.place(relx=0.5, rely=0.78, anchor="center")
+
+        self._selected_file_label = ctk.CTkLabel(
+            file_card.content,
+            text="",
+            font=ctk.CTkFont(size=12),
+            text_color=get_color("accent", mode="auto"),
+            wraplength=280,
+        )
+        self._selected_file_label.pack(fill="x", pady=(SPACING["xs"], 0))
 
         # 文件信息卡片
         info_card = Card(parent, title="文件信息", padding="md")
@@ -235,17 +331,23 @@ class ProcessPage(ctk.CTkFrame):
 
     def _setup_progress_section(self, parent):
         """设置进度区"""
-        # 进度可视化卡片
         from gui.components.card import Card
+        from gui.components.status_badge import ProcessingStatus, StatusBadge
 
         progress_card = Card(parent, title="处理进度", padding="lg")
         progress_card.pack(fill="both", expand=True, pady=(0, SPACING["md"]))
+
+        header_frame = ctk.CTkFrame(progress_card.content, fg_color="transparent")
+        header_frame.pack(fill="x", pady=(0, SPACING["sm"]))
+
+        self._status_badge = StatusBadge(header_frame, status=ProcessingStatus.IDLE, size="sm")
+        self._status_badge.pack(side="right")
 
         self._progress_bar = ctk.CTkProgressBar(
             progress_card.content,
             height=16,
         )
-        self._progress_bar.pack(fill="x", pady=(SPACING["md"], SPACING["sm"]))
+        self._progress_bar.pack(fill="x", pady=(SPACING["sm"], SPACING["sm"]))
         self._progress_bar.set(0)
 
         self._progress_text_label = ctk.CTkLabel(
@@ -405,7 +507,6 @@ class ProcessPage(ctk.CTkFrame):
         """设置当前文件"""
         self._current_file = filepath
 
-        # 更新显示
         from config import get_processing_config
         from tokenizer import count_tokens
 
@@ -413,7 +514,9 @@ class ProcessPage(ctk.CTkFrame):
             stat = filepath.stat()
             size_mb = stat.st_size / (1024 * 1024)
 
-            # 更新文件信息
+            if hasattr(self, "_selected_file_label"):
+                self._selected_file_label.configure(text=f"✓ {filepath.name}")
+
             self._file_info_labels["size"].configure(text=f"{size_mb:.2f} MB")
 
             content = filepath.read_text(encoding="utf-8")
@@ -429,7 +532,6 @@ class ProcessPage(ctk.CTkFrame):
             mtime = datetime.fromtimestamp(stat.st_mtime)
             self._file_info_labels["mtime"].configure(text=mtime.strftime("%Y-%m-%d %H:%M"))
 
-            # 启用开始按钮
             self._start_button.configure(state="normal")
 
             logger.info(f"Selected file: {filepath}")
@@ -439,19 +541,40 @@ class ProcessPage(ctk.CTkFrame):
 
     def _on_start(self):
         """开始处理"""
+        from gui.components.status_badge import ProcessingStatus
+
         if self._on_start_callback:
             self._on_start_callback()
 
-        # 更新 UI 状态
         self._start_button.configure(state="disabled")
         self._cancel_button.configure(state="normal")
+        self._update_status_badge(ProcessingStatus.PROCESSING)
 
     def _on_cancel(self):
         """取消处理"""
+        from gui.components.status_badge import ProcessingStatus
+
         if self._on_cancel_callback:
             self._on_cancel_callback()
+        self._update_status_badge(ProcessingStatus.CANCELLED)
 
-        # 更新 UI 状态
+    def set_final_status(self, success: bool, cancelled: bool = False):
+        """
+        设置最终状态
+
+        Args:
+            success: 是否成功完成
+            cancelled: 是否被取消
+        """
+        from gui.components.status_badge import ProcessingStatus
+
+        if cancelled:
+            self._update_status_badge(ProcessingStatus.CANCELLED)
+        elif success:
+            self._update_status_badge(ProcessingStatus.COMPLETED)
+        else:
+            self._update_status_badge(ProcessingStatus.FAILED)
+
         self._start_button.configure(state="normal")
         self._cancel_button.configure(state="disabled")
 
@@ -524,33 +647,30 @@ class ProcessPage(ctk.CTkFrame):
         partial: int = 0,
         phase: str = "",
         eta_seconds: int = 0,
-        # 新增合并相关参数
         merge_level: int = 0,
         merge_batch_current: int = 0,
         merge_batch_total: int = 0,
         merge_outlines_count: int = 0,
     ):
         """更新进度（支持生成和合并阶段）"""
+        from gui.components.status_badge import ProcessingStatus
 
-        # 使用状态管理类处理阶段切换（传入 completed 作为后备值）
-        is_transition = self._merge_state.on_phase_transition(phase, merge_outlines_count, completed)
+        is_transition = self._merge_state.on_phase_transition(
+            phase, merge_outlines_count, completed
+        )
 
-        # 如果进入合并阶段，重置进度条并设置状态
         if is_transition or (phase == "merging" and not self._merge_state.is_merge_phase):
             self._merge_state.is_merge_phase = True
-            # 首次进入合并阶段且 initial_outline_count 未设置，优先使用 completed
             if self._merge_state.initial_outline_count == 0 and completed > 0:
                 self._merge_state.initial_outline_count = completed
             self._safe_update_progress_bar(0)
             self._safe_update_progress_text("0%")
+            self._update_status_badge(ProcessingStatus.MERGING)
 
-        # 离开合并阶段
         if phase != "merging" and self._merge_state.is_merge_phase:
             self._merge_state.is_merge_phase = False
 
-        # 根据阶段更新进度
         if phase == "merging" and self._merge_state.is_merge_phase:
-            # 合并阶段：使用合并进度计算
             progress = self._calculate_merge_progress(
                 merge_level=merge_level,
                 merge_batch_current=merge_batch_current,
@@ -558,31 +678,27 @@ class ProcessPage(ctk.CTkFrame):
                 merge_outlines_count=merge_outlines_count,
             )
 
-            # 更新进度条
             self._safe_update_progress_bar(progress)
             self._safe_update_progress_text(f"{int(progress * 100)}%")
 
-            # 更新阶段文本（显示合并详情）
             self._safe_update_phase_label(
                 f"当前阶段: 正在合并大纲 (层级 {merge_level}, 批次 {merge_batch_current}/{merge_batch_total})"
             )
 
-            # 合并阶段不显示 ETA
             self._safe_update_eta_label("合并中...")
 
         elif phase == "processing":
-            # 生成阶段：使用原有逻辑
             progress = completed / total if total > 0 else 0
             self._safe_update_progress_bar(progress)
             self._safe_update_progress_text(f"{int(progress * 100)}%")
 
-            # 更新统计
+            self._update_status_badge(ProcessingStatus.PROCESSING)
+
             if hasattr(self, "_stat_labels"):
                 self._stat_labels["completed"].configure(text=str(completed))
                 self._stat_labels["failed"].configure(text=str(failed))
                 self._stat_labels["partial"].configure(text=str(partial))
 
-            # 更新阶段
             self._safe_update_phase_label(f"当前阶段: 正在生成大纲 ({completed}/{total})")
 
             # 更新 ETA

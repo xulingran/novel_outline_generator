@@ -28,8 +28,9 @@ class MainWindow(ctk.CTk):
     - 关于页面：应用信息
     """
 
-    WINDOW_MIN_SIZE = (1000, 700)
+    WINDOW_MIN_SIZE = (800, 600)
     WINDOW_INITIAL_SIZE = (1200, 800)
+    COMPACT_MODE_THRESHOLD = 900
 
     def __init__(self):
         super().__init__()
@@ -51,6 +52,8 @@ class MainWindow(ctk.CTk):
 
         self._setup_ui()
         self._setup_logging()
+        self._compact_mode = False
+        self.bind("<Configure>", self._on_resize)
 
         logger.info("Main window initialized")
 
@@ -176,6 +179,25 @@ class MainWindow(ctk.CTk):
         """主题变化回调"""
         logger.info(f"Theme changed to: {theme}")
 
+    def _on_resize(self, event):
+        """窗口大小变化回调"""
+        if event.widget != self:
+            return
+        width = event.width
+        should_be_compact = width < self.COMPACT_MODE_THRESHOLD
+
+        if should_be_compact != self._compact_mode:
+            self._compact_mode = should_be_compact
+            self._apply_compact_mode(should_be_compact)
+
+    def _apply_compact_mode(self, compact: bool):
+        """应用紧凑模式"""
+        if hasattr(self._sidebar, "toggle_collapse"):
+            if compact and not self._sidebar._collapsed:
+                self._sidebar.toggle_collapse()
+            elif not compact and self._sidebar._collapsed:
+                self._sidebar.toggle_collapse()
+
     def _setup_logging(self):
         """设置日志捕获"""
         # 创建日志处理器，将日志发送到处理页面
@@ -282,6 +304,8 @@ class MainWindow(ctk.CTk):
         """收尾并恢复按钮状态"""
         from tkinter import messagebox
 
+        from gui.utils import format_error_dialog
+
         process_page = self.get_process_page()
         if process_page is None:
             return
@@ -291,22 +315,25 @@ class MainWindow(ctk.CTk):
         cancelled = self._cancel_requested or isinstance(error, asyncio.CancelledError)
         self._cancel_requested = False
 
-        if getattr(process_page, "_current_file", None) is not None:
-            process_page._start_button.configure(state="normal")
-        process_page._cancel_button.configure(state="disabled")
-
         if cancelled:
             process_page.append_log("处理已取消")
+            process_page.set_final_status(success=False, cancelled=True)
+            cancelled_error = asyncio.CancelledError("处理任务已被用户取消")
+            title, detail = format_error_dialog(cancelled_error)
+            messagebox.showinfo(title, detail)
             return
 
         if error is not None:
             logger.error(f"处理失败: {error}")
             process_page.append_log(f"处理失败: {error}")
-            messagebox.showerror("错误", f"处理失败: {error}")
+            process_page.set_final_status(success=False, cancelled=False)
+            title, detail = format_error_dialog(error)
+            messagebox.showerror(title, detail)
             return
 
         output_dir = result.get("output_dir", "") if result else ""
         process_page.append_log("处理完成")
+        process_page.set_final_status(success=True, cancelled=False)
         if output_dir:
             messagebox.showinfo("完成", f"大纲生成完成\n输出目录: {output_dir}")
         else:
@@ -314,15 +341,23 @@ class MainWindow(ctk.CTk):
 
     def _on_cancel_processing(self):
         """取消处理回调"""
+        from tkinter import messagebox
+
         process_page = self.get_process_page()
         if process_page is None:
+            return
+
+        if not messagebox.askyesno(
+            "确认取消",
+            "确定要取消当前处理任务吗？\n\n已完成的进度将被保存，可稍后继续处理。",
+        ):
             return
 
         self._cancel_requested = True
         if self._cancel_event is not None:
             self._cancel_event.set()
         process_page.append_log("正在取消处理任务...")
-        process_page._cancel_button.configure(state="disabled")
+        process_page._cancel_button.configure(state="disabled", text="取消中...")
 
     def run(self):
         """启动应用"""

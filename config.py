@@ -289,6 +289,24 @@ def get_processing_config() -> ProcessingConfig:
     return _processing_config
 
 
+def reset_api_config() -> None:
+    """重置API配置单例（主要用于测试）"""
+    global _api_config
+    _api_config = None
+
+
+def reset_processing_config() -> None:
+    """重置处理配置单例（主要用于测试）"""
+    global _processing_config
+    _processing_config = None
+
+
+def reset_all_configs() -> None:
+    """重置所有配置单例（主要用于测试）"""
+    reset_api_config()
+    reset_processing_config()
+
+
 # 为了向前兼容，保留一些常量
 # 以下函数已弃用，建议直接使用 get_processing_config()
 def get_txt_file() -> str:

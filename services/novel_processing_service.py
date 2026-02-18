@@ -459,11 +459,10 @@ class NovelProcessingService:
                 # 保存最终进度并清理（仅在成功完成时）
                 self.progress_service.finalize_progress(progress_data)
             else:
-                # 保留进度文件，便于恢复
                 try:
                     self.progress_service.save_progress(progress_data)
-                except Exception as e:  # noqa: BLE001
-                    logger.error("Failed to persist progress after interruption: %s", e)
+                except Exception as e:
+                    logger.exception("Failed to persist progress after interruption: %s", e)
 
         # 按chunk_id排序
         successful_outlines.sort(key=lambda x: x.get("chunk_id", 0))

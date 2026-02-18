@@ -2,28 +2,28 @@
 ProcessPage 组件测试
 """
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 from gui.pages.process_page import ProcessPage
 
 
 def test_merge_state_variables_initialized():
     """合并相关状态变量应在初始化时设置"""
-    # Mock _setup_ui 以避免实际的 UI 初始化
-    with patch.object(ProcessPage, "_setup_ui"):
-        # 创建一个 mock master
-        mock_master = MagicMock()
+    from gui.pages.process_page import MergeProgressState
 
-        # 初始化 ProcessPage
-        page = ProcessPage(mock_master)
+    page = object.__new__(ProcessPage)
+    page._current_file = None
+    page._on_start_callback = None
+    page._on_cancel_callback = None
+    page._all_logs = []
+    page._current_layout_mode = "normal"
+    page._merge_state = MergeProgressState()
 
-        # 验证合并状态变量已初始化（封装在 MergeProgressState 中）
-        assert hasattr(page, "_merge_state")
+    assert hasattr(page, "_merge_state")
 
-        # 验证初始值
-        assert page._merge_state.last_phase == ""
-        assert page._merge_state.initial_outline_count == 0
-        assert page._merge_state.is_merge_phase is False
+    assert page._merge_state.last_phase == ""
+    assert page._merge_state.initial_outline_count == 0
+    assert page._merge_state.is_merge_phase is False
 
 
 class TestMergeProgressCalculation:
@@ -300,7 +300,10 @@ class TestLogFiltering:
 
         inserted = [call.args[1] for call in page._log_text.insert.call_args_list]
         assert "2026-02-13 10:00:01 - app - ERROR - processing failed\n" in inserted
-        assert "2026-02-13 10:00:00 - app - INFO - request finished with error details\n" not in inserted
+        assert (
+            "2026-02-13 10:00:00 - app - INFO - request finished with error details\n"
+            not in inserted
+        )
 
     def test_filter_logs_excludes_unrecognized_format_in_specific_level(self):
         """筛选特定级别时应排除无法识别级别的日志"""
@@ -318,6 +321,24 @@ class TestLogFiltering:
         inserted = [call.args[1] for call in page._log_text.insert.call_args_list]
         assert "2026-02-13 10:00:01 - app - ERROR - processing failed\n" in inserted
         assert "plain log without level prefix\n" not in inserted
+
+
+class TestResponsiveLayout:
+    """测试响应式布局关键网格位置。"""
+
+    def test_compact_mode_places_action_row_below_log(self):
+        """compact 模式下操作栏应位于日志区下方，避免重叠。"""
+        page = object.__new__(ProcessPage)
+        page._top_left = MagicMock()
+        page._top_right = MagicMock()
+        page._bottom_log = MagicMock()
+        page._action_row = MagicMock()
+        page._main_container = MagicMock()
+
+        page._apply_layout_mode("compact")
+
+        assert page._bottom_log.grid.call_args.kwargs["row"] == 2
+        assert page._action_row.grid.call_args.kwargs["row"] == 3
 
     def test_extract_log_level_supports_common_head_formats(self):
         """支持常见日志头格式的级别提取"""

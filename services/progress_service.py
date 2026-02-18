@@ -46,8 +46,8 @@ class ProgressService:
                 progress_data.completed_count,
                 progress_data.total_chunks,
             )
-        except Exception as e:  # noqa: BLE001
-            logger.error("Failed to save progress: %s", e)
+        except Exception as e:
+            logger.exception("Failed to save progress: %s", e)
             raise
 
     def load_progress(self) -> ProgressData | None:

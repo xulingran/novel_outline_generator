@@ -6,6 +6,7 @@
 
 import logging
 import platform
+import re
 from pathlib import Path
 
 import customtkinter as ctk
@@ -23,12 +24,56 @@ PROVIDER_LABELS = {
 }
 
 
+class ValidationError(Exception):
+    """验证错误"""
+
+    def __init__(self, field: str, message: str):
+        self.field = field
+        self.message = message
+        super().__init__(message)
+
+
+class ConfigValidator:
+    """配置验证器"""
+
+    @staticmethod
+    def validate_api_key(value: str, field_name: str) -> None:
+        """验证 API 密钥"""
+        if not value or not value.strip():
+            raise ValidationError(field_name, "API 密钥不能为空")
+        if len(value.strip()) < 10:
+            raise ValidationError(field_name, "API 密钥格式不正确（长度不足）")
+
+    @staticmethod
+    def validate_url(value: str, field_name: str, required: bool = False) -> None:
+        """验证 URL 格式"""
+        if not value or not value.strip():
+            if required:
+                raise ValidationError(field_name, "URL 不能为空")
+            return
+        url_pattern = r"^https?://[^\s/$.?#].[^\s]*$"
+        if not re.match(url_pattern, value.strip()):
+            raise ValidationError(field_name, "请输入有效的 URL 地址")
+
+    @staticmethod
+    def validate_integer_range(value: str, field_name: str, min_val: int, max_val: int) -> None:
+        """验证整数范围"""
+        try:
+            int_val = int(value)
+            if int_val < min_val or int_val > max_val:
+                raise ValidationError(field_name, f"值应在 {min_val}-{max_val} 之间")
+        except ValueError:
+            raise ValidationError(field_name, "请输入有效的数字") from None
+
+
 class ConfigPage(ctk.CTkFrame):
     """
     配置页面
 
     单列卡片流，最大宽度 720px 居中。
     """
+
+    MAX_CONTENT_WIDTH = 720
 
     def __init__(self, master, **kwargs):
         if "fg_color" not in kwargs:
@@ -38,6 +83,7 @@ class ConfigPage(ctk.CTkFrame):
         self._config_data = {}
         self._load_current_config()
         self._setup_ui()
+        self.bind("<Configure>", self._on_resize)
 
     def _load_current_config(self):
         """加载当前配置"""
@@ -46,22 +92,24 @@ class ConfigPage(ctk.CTkFrame):
         self.api_config = get_api_config()
         self.proc_config = get_processing_config()
 
+    def _on_resize(self, event):
+        """窗口大小变化时调整布局"""
+        if not hasattr(self, "_center_frame"):
+            return
+        available_width = event.width - 80
+        content_width = min(available_width, self.MAX_CONTENT_WIDTH)
+        self._center_frame.configure(width=content_width)
+
     def _setup_ui(self):
         """设置 UI"""
-        # 主容器（居中）
-        main_container = ctk.CTkFrame(self, fg_color="transparent")
-        main_container.pack(fill="both", expand=True, padx=40, pady=40)
+        self._main_container = ctk.CTkFrame(self, fg_color="transparent")
+        self._main_container.pack(fill="both", expand=True, padx=40, pady=40)
 
-        # 居中容器
-        center_frame = ctk.CTkFrame(main_container, fg_color="transparent")
-        center_frame.pack(fill="both", expand=True)
+        self._center_frame = ctk.CTkFrame(self._main_container, fg_color="transparent")
+        self._center_frame.place(relx=0.5, rely=0, anchor="n")
 
-        # 限制最大宽度
-        center_frame.grid_propagate(False)
-
-        # 创建可滚动区域
         scrollable = ctk.CTkScrollableFrame(
-            center_frame,
+            self._center_frame,
             fg_color="transparent",
         )
         scrollable.pack(fill="both", expand=True)
@@ -445,18 +493,82 @@ class ConfigPage(ctk.CTkFrame):
         )
         reset_button.pack(side="left", padx=(SPACING["sm"], 0))
 
+    def _validate_config(self) -> list[ValidationError]:
+        """验证配置，返回错误列表"""
+        errors = []
+        provider = self._normalize_provider(self._provider_var.get())
+
+        match provider:
+            case "openai":
+                try:
+                    ConfigValidator.validate_api_key(self._openai_key_var.get(), "OpenAI API Key")
+                except ValidationError as e:
+                    errors.append(e)
+                try:
+                    ConfigValidator.validate_url(
+                        self._openai_base_var.get(), "OpenAI Base URL", required=True
+                    )
+                except ValidationError as e:
+                    errors.append(e)
+            case "gemini":
+                try:
+                    ConfigValidator.validate_api_key(self._gemini_key_var.get(), "Gemini API Key")
+                except ValidationError as e:
+                    errors.append(e)
+            case "zhipu":
+                try:
+                    ConfigValidator.validate_api_key(self._zhipu_key_var.get(), "智谱 API Key")
+                except ValidationError as e:
+                    errors.append(e)
+                try:
+                    ConfigValidator.validate_url(
+                        self._zhipu_base_var.get(), "智谱 Base URL", required=True
+                    )
+                except ValidationError as e:
+                    errors.append(e)
+            case "aihubmix":
+                try:
+                    ConfigValidator.validate_api_key(
+                        self._aihubmix_key_var.get(), "AiHubMix API Key"
+                    )
+                except ValidationError as e:
+                    errors.append(e)
+
+        try:
+            ConfigValidator.validate_integer_range(str(self._parallel_var.get()), "并发限制", 1, 20)
+        except ValidationError as e:
+            errors.append(e)
+
+        try:
+            ConfigValidator.validate_integer_range(
+                str(self._retry_var.get()), "最大重试次数", 0, 10
+            )
+        except ValidationError as e:
+            errors.append(e)
+
+        if self._proxy_enabled_var.get():
+            try:
+                ConfigValidator.validate_url(self._proxy_url_var.get(), "代理地址", required=True)
+            except ValidationError as e:
+                errors.append(e)
+
+        return errors
+
     def _on_save(self):
         """保存配置"""
         from tkinter import messagebox
 
-        # 收集配置
+        errors = self._validate_config()
+        if errors:
+            error_messages = "\n".join([f"• {e.field}: {e.message}" for e in errors])
+            messagebox.showerror("配置验证失败", f"请修正以下错误：\n\n{error_messages}")
+            return
+
         config_lines = []
 
-        # API 配置
         provider = self._normalize_provider(self._provider_var.get())
         config_lines.append(f"API_PROVIDER={provider}")
 
-        # 根据提供商保存对应配置
         match provider:
             case "openai":
                 config_lines.append(f"OPENAI_API_KEY={self._openai_key_var.get()}")
@@ -474,17 +586,14 @@ class ConfigPage(ctk.CTkFrame):
                 config_lines.append(f"AIHUBMIX_API_BASE={self._aihubmix_base_var.get()}")
                 config_lines.append(f"AIHUBMIX_MODEL={self._aihubmix_model_var.get()}")
 
-        # 处理配置
         config_lines.append(f"TARGET_TOKENS_PER_CHUNK={self._chunk_size_var.get()}")
         config_lines.append(f"PARALLEL_LIMIT={self._parallel_var.get()}")
         config_lines.append(f"MAX_RETRY={self._retry_var.get()}")
 
-        # 代理配置
         if self._proxy_enabled_var.get():
             config_lines.append(f"HTTP_PROXY={self._proxy_url_var.get()}")
             config_lines.append(f"HTTPS_PROXY={self._proxy_url_var.get()}")
 
-        # 写入 .env 文件
         env_file = Path(".env")
         try:
             if env_file.exists():
@@ -506,30 +615,31 @@ class ConfigPage(ctk.CTkFrame):
         """重置为默认配置"""
         from tkinter import messagebox
 
-        if messagebox.askyesno("确认", "确定要重置为默认配置吗？"):
-            # API 默认值
-            self._provider_var.set("openai")
-            self._update_api_fields()
+        message = (
+            "确定要重置为默认配置吗？\n\n当前设置将丢失，此操作不可撤销。\n（重置后需手动保存）"
+        )
+        if not messagebox.askyesno("确认重置", message):
+            return
 
-            # 安全设置字段（若当前提供商页面存在这些变量）
-            if hasattr(self, "_openai_key_var"):
-                self._openai_key_var.set("")
-            if hasattr(self, "_openai_base_var"):
-                self._openai_base_var.set("https://api.openai.com/v1")
-            if hasattr(self, "_openai_model_var"):
-                self._openai_model_var.set("gpt-4o-mini")
+        self._provider_var.set("openai")
+        self._update_api_fields()
 
-            # 处理参数默认值
-            self._chunk_size_var.set(6000)
-            self._parallel_var.set(5)
-            self._retry_var.set(5)
-            self._chunk_value_label.configure(text="6000")
+        if hasattr(self, "_openai_key_var"):
+            self._openai_key_var.set("")
+        if hasattr(self, "_openai_base_var"):
+            self._openai_base_var.set("https://api.openai.com/v1")
+        if hasattr(self, "_openai_model_var"):
+            self._openai_model_var.set("gpt-4o-mini")
 
-            # 代理默认值
-            self._proxy_enabled_var.set(False)
-            self._proxy_url_var.set("")
+        self._chunk_size_var.set(6000)
+        self._parallel_var.set(5)
+        self._retry_var.set(5)
+        self._chunk_value_label.configure(text="6000")
 
-            messagebox.showinfo("完成", "已恢复默认配置（未自动保存）")
+        self._proxy_enabled_var.set(False)
+        self._proxy_url_var.set("")
+
+        messagebox.showinfo("完成", "已恢复默认配置（未自动保存）")
 
     def _normalize_provider(self, provider: str | None) -> str:
         """将 provider 统一为受支持的小写值。"""

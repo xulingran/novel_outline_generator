@@ -104,9 +104,8 @@ class ProgressData:
     def calculate_chunks_hash(chunks: list[str], encoding: str = "utf-8") -> str:
         """计算文本块的哈希值（保持块顺序和编码）"""
         content = json.dumps(chunks, ensure_ascii=False, sort_keys=False)
-        # 将编码信息纳入哈希计算，确保不同编码不会产生相同哈希
         data = f"{encoding}:{content}"
-        return hashlib.md5(data.encode("utf-8")).hexdigest()
+        return hashlib.sha256(data.encode("utf-8")).hexdigest()
 
 
 @dataclass

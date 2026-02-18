@@ -158,9 +158,68 @@ class Button(ctk.CTkButton):
     def _adjust_color(
         self, hex_color: str | tuple[str, str], percent: int
     ) -> str | tuple[str, str]:
-        """调整颜色亮度（用于 hover 效果）"""
-        # 简化实现：返回原色
-        return hex_color
+        """
+        调整颜色亮度（用于 hover 效果）
+
+        Args:
+            hex_color: 十六进制颜色或元组 (light_color, dark_color)
+            percent: 调整百分比，正值变亮，负值变暗
+
+        Returns:
+            调整后的颜色
+        """
+        if isinstance(hex_color, tuple):
+            light_color = self._lighten(hex_color[0], percent)
+            dark_color = self._darken(hex_color[1], percent)
+            return (light_color, dark_color)
+        return self._lighten(hex_color, percent)
+
+    def _hex_to_rgb(self, hex_color: str) -> tuple[int, int, int]:
+        """将十六进制颜色转换为 RGB"""
+        hex_color = hex_color.lstrip("#")
+        return (
+            int(hex_color[0:2], 16),
+            int(hex_color[2:4], 16),
+            int(hex_color[4:6], 16),
+        )
+
+    def _rgb_to_hex(self, r: int, g: int, b: int) -> str:
+        """将 RGB 转换为十六进制颜色"""
+        return f"#{r:02x}{g:02x}{b:02x}"
+
+    def _lighten(self, hex_color: str, percent: int) -> str:
+        """
+        使颜色变亮
+
+        Args:
+            hex_color: 十六进制颜色
+            percent: 变亮百分比
+
+        Returns:
+            变亮后的十六进制颜色
+        """
+        r, g, b = self._hex_to_rgb(hex_color)
+        r = min(255, int(r + (255 - r) * percent / 100))
+        g = min(255, int(g + (255 - g) * percent / 100))
+        b = min(255, int(b + (255 - b) * percent / 100))
+        return self._rgb_to_hex(r, g, b)
+
+    def _darken(self, hex_color: str, percent: int) -> str:
+        """
+        使颜色变暗
+
+        Args:
+            hex_color: 十六进制颜色
+            percent: 变暗百分比
+
+        Returns:
+            变暗后的十六进制颜色
+        """
+        r, g, b = self._hex_to_rgb(hex_color)
+        r = max(0, int(r * (100 - percent) / 100))
+        g = max(0, int(g * (100 - percent) / 100))
+        b = max(0, int(b * (100 - percent) / 100))
+        return self._rgb_to_hex(r, g, b)
 
     def _add_icon(self):
         """添加图标到按钮"""
@@ -310,14 +369,9 @@ class IconButton(ctk.CTkButton):
 
     def _bind_tooltip(self):
         """绑定工具提示"""
+        try:
+            from gui.components.tooltip import Tooltip
 
-        # 简化实现：使用鼠标悬停事件
-        def on_enter(event):
-            # 可以在这里显示 tooltip
-            pass
-
-        def on_leave(event):
-            pass
-
-        self.bind("<Enter>", on_enter)
-        self.bind("<Leave>", on_leave)
+            self._tooltip_instance = Tooltip(self, self._tooltip)
+        except Exception as e:
+            logger.debug(f"Failed to create tooltip: {e}")
