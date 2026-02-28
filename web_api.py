@@ -402,12 +402,18 @@ async def upload_multiple_files(request: Request, files: list[UploadFile] = UPLO
     return {"file_paths": uploaded_files}
 
 
-async def _run_job(job: Job, req: ProcessRequest):
+async def _run_job(
+    job: Job, req: ProcessRequest, started_event: asyncio.Event | None = None
+) -> None:
     job.status = "running"
     job.file_path = req.file_path
     job.progress = 0.0
     job.result = {}
     job.log(f"开始处理文件: {req.file_path}")
+
+    # 通知任务已启动
+    if started_event:
+        started_event.set()
 
     def handle_progress(info: dict[str, Any]) -> None:
         _update_progress_from_info(info, job)
@@ -549,7 +555,17 @@ async def start_process(request: Request, req: ProcessRequest):
     job = Job(id=job_id, file_path=req.file_path)
     JOBS[job_id] = job
 
-    asyncio.create_task(_run_job(job, req))
+    # 创建启动确认事件
+    started_event = asyncio.Event()
+    asyncio.create_task(_run_job(job, req, started_event))
+
+    # 等待任务启动（带超时保护）
+    try:
+        await asyncio.wait_for(started_event.wait(), timeout=5.0)
+    except asyncio.TimeoutError:
+        # 超时不影响返回，但记录警告
+        logger.warning(f"Job {job_id} 启动确认超时")
+
     return {"job_id": job_id}
 
 

@@ -751,6 +751,14 @@ class NovelProcessingService:
         is_text_mode: bool = False,
     ) -> str:
         """递归合并大纲"""
+        # 限制递归深度，防止栈溢出
+        max_recursion_depth = 20
+        if level > max_recursion_depth:
+            raise ProcessingError(
+                f"合并大纲递归深度超过限制 ({max_recursion_depth})，"
+                "可能是输入文件过大或内容过于复杂"
+            )
+
         if not outlines:
             return ""
 

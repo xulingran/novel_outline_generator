@@ -17,7 +17,7 @@ from services.novel_processing_service import NovelProcessingService
 @pytest.fixture
 def mock_service():
     """创建一个完全mock的NovelProcessingService"""
-    with patch("services.llm_service.create_llm_service") as mock_create:
+    with patch("services.novel_processing_service.create_llm_service") as mock_create:
         mock_create.return_value = MagicMock()
         service = NovelProcessingService(progress_callback=MagicMock(), cancel_event=MagicMock())
         # 设置所有必要的mock
@@ -419,6 +419,9 @@ class TestProcessSingleChunk:
         """测试重试后成功"""
         from exceptions import APIError
 
+        # 设置 max_retry 为 2，确保会触发重试逻辑
+        mock_service.processing_config.max_retry = 2
+
         mock_response = MagicMock()
         mock_response.content = '{"plot": ["test"]}'
         mock_response.token_usage = {
@@ -456,10 +459,10 @@ class TestProcessSingleChunk:
         result = await mock_service._process_single_chunk(chunk, sem, progress_data)
 
         assert result["chunk_id"] == 1
-        # 现在触发部分完成逻辑：1次初始失败 + 5次子块重试成功 = 6次调用
-        assert call_count == 6
-        # 验证返回结果包含plot数据（无论是完整还是部分完成）
-        assert "plot" in result or "is_partial" in result
+        # 第1次失败，第2次重试成功 = 2次调用
+        assert call_count == 2
+        # 验证返回结果包含plot数据
+        assert "plot" in result
 
     @pytest.mark.asyncio
     async def test_process_single_chunk_max_retry_failure(self, mock_service):
