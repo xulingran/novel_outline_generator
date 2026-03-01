@@ -55,7 +55,7 @@ def validate_file_path(
                 raise FileValidationError("检测到不安全的路径遍历：超出允许目录")
         except Exception as e:
             if not isinstance(e, FileValidationError):
-                raise FileValidationError(f"路径解析失败: {e}")
+                raise FileValidationError(f"路径解析失败: {e}") from e
             raise
 
     # 检查文件是否存在
@@ -113,7 +113,7 @@ def validate_output_dir(output_dir: str | Path, allowed_dir: str | Path | None =
                 raise FileValidationError("检测到不安全的路径遍历：超出允许目录")
         except Exception as e:
             if not isinstance(e, FileValidationError):
-                raise FileValidationError(f"路径解析失败: {e}")
+                raise FileValidationError(f"路径解析失败: {e}") from e
             raise
 
     # 创建目录（如果不存在）

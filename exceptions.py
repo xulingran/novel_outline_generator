@@ -56,7 +56,7 @@ class APIError(NovelOutlineError):
             parts.append(f"Code: {self.error_code}")
         if self.is_retryable:
             parts.append("Retryable")
-        
+
         base_msg = super().__str__()
         if parts:
             return f"{base_msg} [{', '.join(parts)}]"

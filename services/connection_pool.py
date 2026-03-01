@@ -41,11 +41,10 @@ class HTTPConnectionPool:
     def __new__(cls) -> "HTTPConnectionPool":
         if cls._instance is None:
             cls._instance = super().__new__(cls)
-            cls._instance._initialized = False
         return cls._instance
 
     def __init__(self) -> None:
-        if self._initialized:
+        if getattr(self, "_initialized", False):
             return
         self._main_client: httpx.AsyncClient | None = None
         self._proxy_clients: dict[str, httpx.AsyncClient] = {}

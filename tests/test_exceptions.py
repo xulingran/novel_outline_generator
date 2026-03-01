@@ -30,7 +30,7 @@ class TestNovelOutlineError:
     def test_novel_outline_error_with_message_and_details(self):
         """测试创建带有消息和详情的NovelOutlineError"""
         error = NovelOutlineError("测试错误消息", details="详细错误信息")
-        assert str(error) == "测试错误消息"
+        assert str(error) == "测试错误消息 (Details: 详细错误信息)"
         assert error.message == "测试错误消息"
         assert error.details == "详细错误信息"
 
@@ -224,7 +224,7 @@ class TestRateLimitError:
     def test_rate_limit_error_message(self):
         """测试RateLimitError的消息"""
         error = RateLimitError("速率限制")
-        assert str(error) == "速率限制"
+        assert str(error) == "速率限制 [Retryable]"
         assert error.message == "速率限制"
 
     def test_rate_limit_error_with_retry_after(self):

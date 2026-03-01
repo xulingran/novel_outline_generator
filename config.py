@@ -480,7 +480,8 @@ def create_env_file():
     env_file = ".env"
     if not os.path.exists(env_file):
         with open(env_file, "w", encoding="utf-8") as f:
-            f.write("""# 小说大纲生成工具环境变量配置
+            f.write(
+                """# 小说大纲生成工具环境变量配置
 # 复制此文件并填入你的API密钥
 
 # API提供商选择: openai, gemini, zhipu 或 aihubmix
@@ -524,7 +525,8 @@ PROXY_URL=http://127.0.0.1:7897
 # CORS_ORIGINS=http://localhost:8000,http://127.0.0.1:8000
 
 # 注意：提示词模板现已内置，使用 prompts.py 中的函数
-""")
+"""
+            )
         print(f"✓ 已创建环境变量模板文件: {env_file}")
         print("  请编辑该文件并填入你的API密钥")
 

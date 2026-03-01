@@ -8,8 +8,9 @@ import logging
 import time
 import uuid
 from collections import deque
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
-from typing import Any, Awaitable, Callable
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -74,7 +75,7 @@ class TaskQueue:
         """
         if run_queue_task_callback is not None and not callable(run_queue_task_callback):
             raise ValueError("run_queue_task_callback 必须是可调用的函数")
-            
+
         self.max_concurrent = max_concurrent
         self._queue: deque[QueueTask] = deque()
         self._running_tasks: dict[str, QueueTask] = {}
@@ -93,16 +94,15 @@ class TaskQueue:
         Returns:
             任务ID
         """
-        if self._run_queue_task_callback is None:
-            raise RuntimeError("必须先设置 run_queue_task 回调才能添加任务")
-            
         async with self._lock:
             task = QueueTask(id=str(uuid.uuid4()), file_path=file_path)
             self._queue.append(task)
             logger.info(f"任务 {task.id} 已添加到队列: {file_path}")
 
-            # 如果处理器未运行，启动它
-            if self._processor_task is None or self._processor_task.done():
+            # 如果处理器未运行且已设置回调，启动它
+            if self._run_queue_task_callback is not None and (
+                self._processor_task is None or self._processor_task.done()
+            ):
                 self._processor_task = asyncio.create_task(self._process_queue())
 
             return task.id

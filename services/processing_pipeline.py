@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from exceptions import ProcessingError
+from models.processing_state import ProcessingState
 
 if TYPE_CHECKING:
     from services.novel_processing_service import NovelProcessingService
@@ -37,7 +38,7 @@ class ProcessingPipeline:
             service: 小说处理服务实例
         """
         self.service = service
-        self.state = service.processing_state
+        self.state: ProcessingState = service.processing_state  # type: ignore[assignment]
         self.config = service.processing_config
 
     async def execute(
