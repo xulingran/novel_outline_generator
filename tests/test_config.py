@@ -13,7 +13,7 @@ from config import (
     SUPPORTED_API_PROVIDERS,
     APIConfig,
     ProcessingConfig,
-    _APIKeyWrapper,
+    _clear_config_cache,
     create_env_file,
     get_api_config,
     get_processing_config,
@@ -504,20 +504,23 @@ class TestSupportedAPIProviders:
         assert "aihubmix" in SUPPORTED_API_PROVIDERS
 
 
-class TestAPIKeyWrapper:
-    """测试_APIKeyWrapper类"""
+class TestLazyConfig:
+    """测试_LazyConfig类（延迟配置访问）"""
 
-    def test_api_key_wrapper_str(self):
-        """测试_APIKeyWrapper的__str__方法"""
-        with patch.dict(os.environ, {"API_PROVIDER": "openai", "OPENAI_API_KEY": "sk-test"}):
-            wrapper = _APIKeyWrapper()
-            assert str(wrapper) == "sk-test"
+    def setup_method(self):
+        """每个测试方法前清除缓存"""
+        _clear_config_cache()
 
-    def test_api_key_wrapper_repr(self):
-        """测试_APIKeyWrapper的__repr__方法"""
+    def test_lazy_config_api_key(self):
+        """测试_LazyConfig延迟加载API_KEY"""
         with patch.dict(os.environ, {"API_PROVIDER": "openai", "OPENAI_API_KEY": "sk-test"}):
-            wrapper = _APIKeyWrapper()
-            assert repr(wrapper) == "'sk-test'"
+            _clear_config_cache()
+            # 访问 API_KEY 时会触发延迟加载
+            key = str(API_KEY)
+            assert key == "sk-test"
+
+    # 注意：不测试 API_PROVIDER 的延迟加载，因为模块导入时就会被访问
+    # API_PROVIDER 的测试已在 TestBackwardCompatibility 中覆盖
 
 
 class TestCreateEnvFile:
@@ -578,9 +581,15 @@ class TestBackwardCompatibility:
         assert isinstance(API_PROVIDER, str)
         assert API_PROVIDER in SUPPORTED_API_PROVIDERS
 
-    def test_api_key_wrapper(self):
-        """测试API_KEY包装器"""
-        assert isinstance(API_KEY, _APIKeyWrapper)
+    def test_api_key_lazy_loading(self):
+        """测试API_KEY延迟加载"""
+        # API_KEY 现在通过 _LazyConfig 延迟加载
+        # 只要访问不抛出异常就说明延迟加载机制正常工作
+        _clear_config_cache()
+        with patch.dict(os.environ, {"API_PROVIDER": "openai", "OPENAI_API_KEY": "sk-test123"}):
+            _clear_config_cache()
+            key = str(API_KEY)
+            assert "sk-test" in key
 
     def test_get_txt_file(self):
         """测试get_txt_file函数"""

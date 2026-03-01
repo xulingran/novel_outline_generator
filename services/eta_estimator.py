@@ -118,7 +118,7 @@ class ETAEstimator:
         weights = [i + 1 for i in range(n)]  # 线性权重，最近的权重最高
         total_weight = sum(weights)
 
-        weighted_sum = sum(t * w for t, w in zip(times, weights, strict=True))
+        weighted_sum = sum(t * w for t, w in zip(times, weights))
         return weighted_sum / total_weight
 
     def _calculate_throughput(self) -> float | None:

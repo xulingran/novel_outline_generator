@@ -498,22 +498,9 @@ class TestProcessSingleChunk:
 
     @pytest.mark.asyncio
     async def test_process_single_chunk_cancelled(self, mock_service):
-        """测试处理中取消"""
-
-        mock_response = MagicMock()
-        mock_response.content = '{"plot": ["test"]}'
-        mock_response.token_usage = {
-            "prompt_tokens": 100,
-            "completion_tokens": 50,
-            "total_tokens": 150,
-        }
-
-        async def mock_call(*args, **kwargs):
-            mock_service.cancel_event.is_set.return_value = True
-            return mock_response
-
-        mock_service.llm_service.call = AsyncMock(side_effect=mock_call)
-        mock_service.progress_service.update_chunk_completed = MagicMock()
+        """测试处理前取消 - 在进入处理前检查取消"""
+        # 在进入函数前就设置取消标志
+        mock_service.cancel_event.is_set.return_value = True
 
         chunk = TextChunk(id=1, content="test", token_count=10, start_position=0, end_position=4)
         sem = asyncio.Semaphore(5)

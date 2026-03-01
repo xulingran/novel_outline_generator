@@ -4,7 +4,6 @@ LLM服务模块
 """
 
 import asyncio
-import atexit
 import inspect
 import logging
 import random
@@ -17,6 +16,7 @@ import httpx
 
 from config import get_api_config, get_processing_config
 from exceptions import APIError, APIKeyError, RateLimitError
+from services.connection_pool import HTTPConnectionPool
 
 logger = logging.getLogger(__name__)
 
@@ -95,11 +95,13 @@ class CircuitBreaker:
 class LLMService(ABC):
     """LLM服务基类"""
 
-    def __init__(self):
-        self.api_config = get_api_config()
-        self.processing_config = get_processing_config()
+    def __init__(self, api_config=None, processing_config=None, init_client=True):
+        self.api_config = api_config or get_api_config()
+        self.processing_config = processing_config or get_processing_config()
         self.circuit_breaker = CircuitBreaker()
-        self._init_client()
+        # 子类可能需要在设置自己的属性后再初始化客户端
+        if init_client:
+            self._init_client()
 
     @abstractmethod
     def _init_client(self) -> None:
@@ -172,56 +174,24 @@ class LLMService(ABC):
 class OpenAIService(LLMService):
     """OpenAI服务实现"""
 
-    _http_client: httpx.AsyncClient | None = None
-    _proxy_clients: dict[str, httpx.AsyncClient] = {}
-    _cleanup_registered: bool = False
+    def __init__(
+        self,
+        api_config: Any | None = None,
+        processing_config: Any | None = None,
+        connection_pool: HTTPConnectionPool | None = None,
+    ) -> None:
+        # 先设置连接池，再调用父类初始化（避免 _init_client 中访问未定义的 _pool）
+        self._pool = connection_pool or HTTPConnectionPool()
+        super().__init__(api_config, processing_config, init_client=True)
 
-    @classmethod
-    def get_http_client(cls, proxy_url: str | None = None) -> httpx.AsyncClient:
-        if proxy_url:
-            client = cls._proxy_clients.get(proxy_url)
-            if client is None:
-                proxy_kwargs = _httpx_proxy_kwargs(httpx.AsyncClient, proxy_url)
-                client = httpx.AsyncClient(
-                    **proxy_kwargs, limits=httpx.Limits(max_connections=100), timeout=60.0
-                )
-                cls._proxy_clients[proxy_url] = client
-            return client
-
-        if cls._http_client is None:
-            cls._http_client = httpx.AsyncClient(
-                limits=httpx.Limits(max_connections=100), timeout=60.0
-            )
-        return cls._http_client
-
-    @classmethod
-    async def close_http_clients(cls) -> None:
+    async def close_http_clients(self) -> None:
         """关闭所有HTTP客户端连接池"""
-
-        # 关闭代理客户端
-        for proxy_url, client in list(cls._proxy_clients.items()):
-            try:
-                await client.aclose()
-                logger.debug(f"已关闭代理客户端: {proxy_url}")
-            except Exception as e:
-                logger.warning(f"关闭代理客户端失败 ({proxy_url}): {e}")
-        cls._proxy_clients.clear()
-
-        # 关闭主客户端
-        if cls._http_client is not None:
-            try:
-                await cls._http_client.aclose()
-                logger.debug("已关闭主HTTP客户端")
-            except Exception as e:
-                logger.warning(f"关闭主HTTP客户端失败: {e}")
-            cls._http_client = None
+        await self._pool.close_all()
 
     def _init_client(self) -> None:
         """初始化OpenAI客户端"""
         # 注册清理函数（只注册一次）
-        if not OpenAIService._cleanup_registered:
-            atexit.register(self._cleanup_on_exit)
-            OpenAIService._cleanup_registered = True
+        self._pool.register_cleanup(self._cleanup_on_exit)
 
         try:
             from openai import AsyncOpenAI
@@ -229,7 +199,7 @@ class OpenAIService(LLMService):
             proxy_url = (
                 self.processing_config.proxy_url if self.processing_config.use_proxy else None
             )
-            http_client = self.get_http_client(proxy_url)
+            http_client = self._pool.get_client(proxy_url)
             if proxy_url:
                 logger.debug(f"OpenAI客户端配置代理: {proxy_url}")
 

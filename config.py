@@ -6,6 +6,7 @@
 import logging
 import os
 from dataclasses import dataclass, field
+from typing import Any
 
 from exceptions import APIKeyError, ConfigurationError
 
@@ -253,61 +254,129 @@ def get_encodings() -> list[str]:
     return get_processing_config().encodings
 
 
-# 向后兼容的常量（已弃用，建议使用配置函数）
-# 注意：API_KEY等需要在首次访问时验证的常量，会延迟到实际使用时才验证
-# 如果需要在导入时避免验证，请直接使用配置函数
-TXT_FILE = get_txt_file()
-OUTPUT_DIR = get_output_dir()
-PROGRESS_FILE = get_progress_file()
-ENCODINGS = get_encodings()
-
-# API相关配置 - 延迟验证，避免在导入时抛出异常
-# 只有在实际使用时才会调用api_key属性（会触发验证）
-try:
-    _api_cfg = get_api_config()
-    API_PROVIDER = _api_cfg.provider
-    # 不在这里验证api_key，避免导入时异常
-    # API_KEY 将通过 get_api_config().api_key 访问
-    API_BASE = _api_cfg.base_url
-    MODEL_NAME = _api_cfg.model_name
-    GEMINI_SAFETY_SETTINGS = _api_cfg.gemini_safety
-except Exception as e:
-    # 如果配置加载失败，使用默认值（向后兼容）
-    logger.warning(f"加载API配置失败，使用默认值: {e}")
-    API_PROVIDER = "openai"
-    API_BASE = None
-    MODEL_NAME = "gpt-4o-mini"
-    GEMINI_SAFETY_SETTINGS = "BLOCK_NONE"
+def _clear_config_cache() -> None:
+    """清除配置缓存（用于测试）"""
+    global _config_cache, _api_config, _processing_config
+    _config_cache.clear()
+    _api_config = None
+    _processing_config = None
 
 
-# API_KEY延迟访问函数（向后兼容）
-def _get_api_key():
-    """获取API密钥（延迟验证）"""
-    return get_api_config().api_key
+class _LazyAPIKey:
+    """延迟验证的 API Key 包装器
 
+    避免在导入时触发 API Key 验证，只在实际使用（转换为字符串）时才检查。
+    """
 
-# 为了向后兼容，创建一个对象模拟API_KEY属性
-class _APIKeyWrapper:
-    """API密钥包装器，延迟验证"""
+    def __str__(self) -> str:
+        return get_api_config().api_key
 
-    def __str__(self):
-        return _get_api_key()
-
-    def __repr__(self):
+    def __repr__(self) -> str:
         return repr(str(self))
 
 
-API_KEY = _APIKeyWrapper()
+# 模块级缓存变量（延迟初始化）
+_config_cache: dict[str, Any] = {}
 
-# 处理配置（这些不会在导入时验证）
-_processing_cfg = get_processing_config()
-MODEL_MAX_TOKENS = _processing_cfg.model_max_tokens
-TARGET_TOKENS_PER_CHUNK = _processing_cfg.target_tokens_per_chunk
-PARALLEL_LIMIT = _processing_cfg.parallel_limit
-MAX_RETRY = _processing_cfg.max_retry
-LOG_EVERY = _processing_cfg.log_every
-USE_PROXY = _processing_cfg.use_proxy
-PROXY_URL = _processing_cfg.proxy_url
+
+class _LazyConfig:
+    """延迟配置访问包装器 - 保持向后兼容
+
+    通过 __getattr__ 实现延迟加载，只有在实际访问时才计算配置值。
+    这样可以避免模块导入时的副作用，同时保持 `from config import XXX` 的用法。
+    """
+
+    def __getattr__(self, name: str) -> Any:
+        """延迟加载配置值"""
+        if name in _config_cache:
+            return _config_cache[name]
+
+        # 处理各种配置常量
+        value = self._resolve_config(name)
+        _config_cache[name] = value
+        return value
+
+    def _resolve_config(self, name: str) -> Any:
+        """根据名称解析配置值"""
+        match name:
+            # 路径配置
+            case "TXT_FILE":
+                return get_txt_file()
+            case "OUTPUT_DIR":
+                return get_output_dir()
+            case "PROGRESS_FILE":
+                return get_progress_file()
+            case "ENCODINGS":
+                return get_encodings()
+
+            # API 配置（延迟验证，避免导入时触发）
+            case "API_PROVIDER":
+                return get_api_config().provider
+            case "API_BASE":
+                return get_api_config().base_url
+            case "MODEL_NAME":
+                return get_api_config().model_name
+            case "GEMINI_SAFETY_SETTINGS":
+                return get_api_config().gemini_safety
+            case "API_KEY":
+                # 延迟验证，只在实际使用时检查
+                return _LazyAPIKey()
+
+            # 处理配置
+            case "MODEL_MAX_TOKENS":
+                return get_processing_config().model_max_tokens
+            case "TARGET_TOKENS_PER_CHUNK":
+                return get_processing_config().target_tokens_per_chunk
+            case "PARALLEL_LIMIT":
+                return get_processing_config().parallel_limit
+            case "MAX_RETRY":
+                return get_processing_config().max_retry
+            case "LOG_EVERY":
+                return get_processing_config().log_every
+            case "USE_PROXY":
+                return get_processing_config().use_proxy
+            case "PROXY_URL":
+                return get_processing_config().proxy_url
+
+            case _:
+                raise AttributeError(f"模块 'config' 没有属性 '{name}'")
+
+
+# 创建延迟配置实例
+_lazy_config = _LazyConfig()
+
+
+# 为了支持 `from config import XXX` 语法，我们在模块级别定义 __getattr__
+# Python 3.7+ 支持模块级别的 __getattr__
+def __getattr__(name: str) -> Any:
+    """模块级延迟属性访问"""
+    return getattr(_lazy_config, name)
+
+
+# 为了 IDE 和类型检查器能识别这些常量，我们声明它们的类型
+# 实际值通过 __getattr__ 延迟加载
+if False:  # noqa: F601
+    # 路径配置
+    TXT_FILE: str = ""
+    OUTPUT_DIR: str = ""
+    PROGRESS_FILE: str = ""
+    ENCODINGS: list[str] = []
+
+    # API 配置
+    API_PROVIDER: str = ""
+    API_BASE: str | None = None
+    MODEL_NAME: str = ""
+    GEMINI_SAFETY_SETTINGS: str = ""
+    API_KEY: str = ""
+
+    # 处理配置
+    MODEL_MAX_TOKENS: int = 0
+    TARGET_TOKENS_PER_CHUNK: int = 0
+    PARALLEL_LIMIT: int = 0
+    MAX_RETRY: int = 0
+    LOG_EVERY: int = 0
+    USE_PROXY: bool = False
+    PROXY_URL: str = ""
 
 
 def create_env_file():

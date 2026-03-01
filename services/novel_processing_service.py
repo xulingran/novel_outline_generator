@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Any, cast
 
 from config import get_processing_config
+from decorators import with_retry
 from exceptions import APIError, ProcessingError
 from models.outline import TextChunk
 from models.processing_state import ProcessingState, ProgressData
@@ -104,107 +105,23 @@ class NovelProcessingService:
         self.total_completion_tokens = 0
         self.total_tokens = 0
 
-        # 初始化处理状态，块数后续拆分时再更新
+        # 初始化处理状态
         self.processing_state = ProcessingState(file_path=file_path, total_chunks=0)
         self.processing_state.current_phase = "loading"
         self._emit_progress()
 
         try:
-            # 1. 读取和分割文本
-            text, encoding = await self._load_and_validate_file(file_path)
-            chunks = self._split_text_into_chunks(text)
-            self.processing_state.total_chunks = len(chunks)
-            if not chunks:
-                raise ProcessingError("未检测到可处理的内容")
-            self._emit_progress()
+            # 使用处理管道执行完整流程
+            from services.processing_pipeline import ProcessingPipeline
 
-            # 2. 处理或恢复进度
-            progress_data = await self._handle_progress_resume(file_path, chunks, resume, encoding)
+            pipeline = ProcessingPipeline(self)
+            result = await pipeline.execute(file_path, output_dir, resume)
 
-            # 3. 处理文本块
-            if progress_data is None:
-                outlines = await self._process_chunks(chunks)
-            else:
-                outlines = list(progress_data.outlines)
-                # 解析失败 chunk IDs（errors 存储为 [{"chunk_id": N, "error": "...", "timestamp": "..."}, ...]）
-                failed_ids = {
-                    error["chunk_id"]
-                    for error in progress_data.errors
-                    if isinstance(error, dict) and "chunk_id" in error
-                }
-                completed_ids = (
-                    progress_data.completed_indices | progress_data.partial_indices | failed_ids
-                )
-                remaining_chunks = [chunk for chunk in chunks if chunk.id not in completed_ids]
-                if remaining_chunks:
-                    logger.info(f"恢复进度: 剩余 {len(remaining_chunks)} 个块待处理")
-                    new_outlines = await self._process_chunks(
-                        remaining_chunks,
-                        progress_data=progress_data,
-                        total_chunks=len(chunks),
-                    )
-                    outlines.extend(new_outlines)
-                else:
-                    logger.info("恢复进度: 所有块已处理，直接进入合并")
-                    self.progress_service.finalize_progress(progress_data)
-
-            if outlines:
-                outlines.sort(
-                    key=lambda item: (item.get("chunk_id", 0) if isinstance(item, dict) else 0)
-                )
-
-            # 4. 合并大纲
-            self.processing_state.current_phase = "merging"
-            self._emit_progress()
-            final_outline = await self.merge_outlines_recursive(outlines)
-            self._emit_progress(
-                token_usage={
-                    "prompt_tokens": self.total_prompt_tokens,
-                    "completion_tokens": self.total_completion_tokens,
-                    "total_tokens": self.total_tokens,
-                }
-            )
-
-            # 5. 保存结果
-            if output_dir:
-                self.processing_config.output_dir = output_dir
-
-            await self._save_results(outlines, final_outline, file_path)
-            # 5.1 清理备份文件（成功完成后删除 outputs 下的 .bak）
-            try:
-                removed = self.file_service.remove_backups(
-                    self.processing_config.output_dir, "*.bak"
-                )
-                logger.debug(f"已清理备份文件: {removed} 个")
-            except Exception as cleanup_err:
-                logger.warning(f"清理备份文件失败: {cleanup_err}")
-
-            # 5.2 清理中间结果文件
-            try:
-                cleaned = self._cleanup_intermediate_outputs(
-                    Path(self.processing_config.output_dir)
-                )
-                if cleaned:
-                    logger.info(f"已清理中间结果文件: {', '.join(cleaned)}")
-            except Exception as cleanup_err:
-                logger.warning(f"清理中间结果文件失败: {cleanup_err}")
-
-            # 6. 完成处理
+            # 完成处理
             self.processing_state.complete()
             self._emit_progress()
 
-            return {
-                "success": True,
-                "final_outline": final_outline,
-                "chunk_count": len(chunks),
-                "processing_time": self.processing_state.elapsed_time,
-                "output_dir": self.processing_config.output_dir,
-                "token_usage": {
-                    "prompt_tokens": self.total_prompt_tokens,
-                    "completion_tokens": self.total_completion_tokens,
-                    "total_tokens": self.total_tokens,
-                },
-            }
+            return result
 
         except asyncio.CancelledError:
             logger.info("Novel processing cancelled")
@@ -409,6 +326,63 @@ class NovelProcessingService:
         logger.info(f"成功处理 {len(successful_outlines)}/{len(chunks)} 个块")
         return successful_outlines
 
+    @with_retry(
+        max_attempts=3,
+        backoff_base=2.0,
+        exceptions=(APIError, ProcessingError),
+    )
+    async def _try_process_chunk(
+        self,
+        chunk: TextChunk,
+        progress_data: Any,
+        processing_state: ProcessingState,
+    ) -> dict[str, Any]:
+        """尝试处理单个文本块（核心逻辑，支持重试）
+
+        此方法是 _process_single_chunk 的核心业务逻辑，使用 @with_retry 装饰器
+        处理重试逻辑。信号量和取消检查在外层处理。
+        """
+        chunk_id = chunk.id
+        start_time = datetime.now()
+
+        # 生成提示
+        prompt = chunk_prompt(chunk.content, chunk_id)
+
+        # 调用LLM
+        llm_response = await self.llm_service.call(prompt, chunk_id)
+        response = llm_response.content
+
+        # 累计token使用情况
+        self._accumulate_token_usage(llm_response.token_usage, f"块 {chunk_id}")
+
+        # 尝试解析JSON响应
+        outline_data = self._parse_llm_response(response, chunk_id)
+
+        # 确保outline_data包含chunk_id
+        if "chunk_id" not in outline_data:
+            outline_data["chunk_id"] = chunk_id
+
+        # 记录处理时间
+        processing_time = (datetime.now() - start_time).total_seconds()
+
+        # 保存原始响应
+        outline_data["raw_response"] = response
+        outline_data["processing_time"] = processing_time
+
+        # 更新进度
+        self.progress_service.update_chunk_completed(
+            progress_data, chunk_id, outline_data, processing_time
+        )
+        processing_state.update_progress(processed=1)
+
+        # 添加到 ETA 估算器
+        self.eta_estimator.add_completion(processing_time, progress_data.completed_count)
+
+        self._emit_progress(chunk_id=chunk_id)
+
+        logger.debug(f"块 {chunk_id} 处理完成，耗时: {processing_time:.2f}秒")
+        return outline_data
+
     async def _process_single_chunk(
         self, chunk: TextChunk, sem: asyncio.Semaphore, progress_data: Any
     ) -> dict[str, Any]:
@@ -426,93 +400,18 @@ class NovelProcessingService:
             chunk_id = chunk.id
             logger.debug(f"开始处理块 {chunk_id}")
 
-            # 重试机制：最多重试 MAX_RETRY 次
-            last_error: Exception | None = None
-            for attempt in range(1, self.processing_config.max_retry + 1):
-                try:
-                    # 检查是否被取消
-                    if self.cancel_event.is_set():
-                        logger.info("任务已被取消")
-                        raise asyncio.CancelledError()
+            try:
+                # 使用装饰器包装的方法处理（包含重试逻辑）
+                return await self._try_process_chunk(chunk, progress_data, processing_state)
+            except asyncio.CancelledError:
+                logger.info(f"块 {chunk_id} 处理被取消")
+                raise
+            except (APIError, ProcessingError) as e:
+                # 所有重试都失败后，尝试拆分为多个小块重新处理
+                logger.warning(f"块 {chunk_id} 经过重试后仍然失败: {type(e).__name__}: {e}")
+                logger.info(f"块 {chunk_id} 重试失败，尝试拆分为{SUB_CHUNK_COUNT}个小块重新处理")
 
-                    start_time = datetime.now()
-
-                    # 生成提示
-                    prompt = chunk_prompt(chunk.content, chunk_id)
-
-                    # 调用LLM
-                    llm_response = await self.llm_service.call(prompt, chunk_id)
-                    response = llm_response.content
-
-                    # 检查是否被取消（在LLM调用后）
-                    if self.cancel_event.is_set():
-                        logger.info("任务已被取消")
-                        raise asyncio.CancelledError()
-
-                    # 累计token使用情况
-                    self._accumulate_token_usage(llm_response.token_usage, f"块 {chunk_id}")
-
-                    # 尝试解析JSON响应
-                    outline_data = self._parse_llm_response(response, chunk_id)
-
-                    # 确保outline_data包含chunk_id
-                    if "chunk_id" not in outline_data:
-                        outline_data["chunk_id"] = chunk_id
-
-                    # 记录处理时间
-                    processing_time = (datetime.now() - start_time).total_seconds()
-
-                    # 保存原始响应
-                    outline_data["raw_response"] = response
-                    outline_data["processing_time"] = processing_time
-
-                    # 更新进度
-                    self.progress_service.update_chunk_completed(
-                        progress_data, chunk_id, outline_data, processing_time
-                    )
-                    processing_state.update_progress(processed=1)
-
-                    # 添加到 ETA 估算器
-                    self.eta_estimator.add_completion(
-                        processing_time, progress_data.completed_count
-                    )
-
-                    self._emit_progress(chunk_id=chunk_id)
-
-                    logger.debug(f"块 {chunk_id} 处理完成，耗时: {processing_time:.2f}秒")
-                    return outline_data
-
-                except asyncio.CancelledError:
-                    logger.info(f"块 {chunk_id} 处理被取消")
-                    raise
-                except (APIError, ProcessingError) as e:
-                    # API错误和处理错误应该重试
-                    last_error = e
-                    if attempt < self.processing_config.max_retry:
-                        logger.warning(
-                            f"块 {chunk_id} 第 {attempt}/{self.processing_config.max_retry} 次尝试失败: {type(e).__name__}: {e}，将重试"
-                        )
-                        await asyncio.sleep(RETRY_BACKOFF_BASE * attempt)  # 指数退避
-                    else:
-                        logger.error(
-                            f"块 {chunk_id} 经过 {self.processing_config.max_retry} 次重试后仍然失败: {type(e).__name__}: {e}"
-                        )
-                except Exception as e:
-                    # 其他未预期的异常也记录并重试
-                    last_error = e
-                    logger.error(
-                        f"块 {chunk_id} 遇到未预期的错误: {type(e).__name__}: {e}", exc_info=True
-                    )
-                    if attempt < self.processing_config.max_retry:
-                        logger.warning(
-                            f"块 {chunk_id} 将在 {RETRY_BACKOFF_BASE * attempt} 秒后重试"
-                        )
-                        await asyncio.sleep(RETRY_BACKOFF_BASE * attempt)
-                    else:
-                        logger.error(f"块 {chunk_id} 已达到最大重试次数，放弃处理")
-
-            # 所有重试都失败后，尝试拆分为多个小块重新处理
-            logger.info(f"块 {chunk_id} 重试失败，尝试拆分为{SUB_CHUNK_COUNT}个小块重新处理")
+            # 尝试拆分为小块处理
             try:
                 partial_outlines = await self._process_failing_chunk_as_partial(
                     chunk, sem, progress_data, processing_state
@@ -521,9 +420,6 @@ class NovelProcessingService:
                 if partial_outlines:
                     # 将部分完成的小块合并为一个大纲
                     merged_outline = self._merge_partial_outlines(partial_outlines, chunk_id)
-                    # 注意: _process_failing_chunk_as_partial 已经将小块添加到 partial_outlines
-                    # 这里只返回合并结果，不再添加到 progress_data.outlines
-                    # 避免重复添加（在进度恢复时会自动合并）
                     return merged_outline
                 else:
                     raise ProcessingError(f"块 {chunk_id} 拆分后所有小块都失败")
@@ -531,13 +427,10 @@ class NovelProcessingService:
                 logger.error(f"块 {chunk_id} 拆分重试也失败: {split_error}")
                 # 拆分失败，按原逻辑处理
                 processing_state.update_progress(processed=0, failed=1)
-                self.progress_service.add_progress_error(
-                    progress_data, chunk_id, str(last_error or split_error)
-                )
-                self._emit_progress(chunk_id=chunk_id, error=str(last_error or split_error))
-                raise ProcessingError(
-                    f"块 {chunk_id} 处理失败: {str(last_error or split_error)}"
-                ) from (last_error or split_error)
+                error_msg = str(split_error)
+                self.progress_service.add_progress_error(progress_data, chunk_id, error_msg)
+                self._emit_progress(chunk_id=chunk_id, error=error_msg)
+                raise ProcessingError(f"块 {chunk_id} 处理失败: {error_msg}") from split_error
 
     async def _process_failing_chunk_as_partial(
         self,

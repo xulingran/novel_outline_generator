@@ -9,7 +9,7 @@ import time
 import uuid
 from collections import deque
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Awaitable, Callable
 
 logger = logging.getLogger(__name__)
 
@@ -62,11 +62,19 @@ class QueueTask:
 class TaskQueue:
     """任务队列管理器"""
 
-    def __init__(self, max_concurrent: int = 1, run_queue_task_callback=None):
+    def __init__(
+        self,
+        max_concurrent: int = 1,
+        run_queue_task_callback: Callable[[QueueTask], Awaitable[None]] | None = None,
+    ):
         """
         Args:
             max_concurrent: 最大并发处理数（默认为1，按顺序处理）
+            run_queue_task_callback: 任务处理回调函数
         """
+        if run_queue_task_callback is not None and not callable(run_queue_task_callback):
+            raise ValueError("run_queue_task_callback 必须是可调用的函数")
+            
         self.max_concurrent = max_concurrent
         self._queue: deque[QueueTask] = deque()
         self._running_tasks: dict[str, QueueTask] = {}
@@ -85,6 +93,9 @@ class TaskQueue:
         Returns:
             任务ID
         """
+        if self._run_queue_task_callback is None:
+            raise RuntimeError("必须先设置 run_queue_task 回调才能添加任务")
+            
         async with self._lock:
             task = QueueTask(id=str(uuid.uuid4()), file_path=file_path)
             self._queue.append(task)
@@ -213,8 +224,10 @@ class TaskQueue:
                 "total": pending_count + running_count,
             }
 
-    def set_callback(self, callback) -> None:
+    def set_callback(self, callback: Callable[[QueueTask], Awaitable[None]]) -> None:
         """设置任务处理回调函数"""
+        if not callable(callback):
+            raise ValueError("callback 必须是可调用的函数")
         self._run_queue_task_callback = callback
 
     async def stop(self) -> None:

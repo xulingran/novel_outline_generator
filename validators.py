@@ -15,6 +15,7 @@ def validate_file_path(
     file_path: str | Path,
     allowed_extensions: list | None = None,
     max_size_mb: int | None = None,
+    allowed_dir: str | Path | None = None,
 ) -> Path:
     """验证文件路径的安全性
 
@@ -22,6 +23,7 @@ def validate_file_path(
         file_path: 文件路径
         allowed_extensions: 允许的文件扩展名列表，如['.txt', '.md']
         max_size_mb: 最大文件大小（MB）
+        allowed_dir: 允许的基础目录，如果提供，文件路径必须位于此目录内
 
     Returns:
         Path: 验证后的Path对象
@@ -35,13 +37,23 @@ def validate_file_path(
     if not file_path or not isinstance(file_path, str):
         raise FileValidationError("文件路径不能为空")
 
-    # 检查路径遍历攻击
-    normalized_path = os.path.normpath(file_path)
-    if ".." in normalized_path.split(os.sep):
-        raise FileValidationError("检测到不安全的路径遍历")
-
     # 转换为Path对象
     path_obj = Path(file_path)
+
+    # 检查路径遍历攻击
+    if ".." in path_obj.parts:
+        raise FileValidationError("检测到不安全的路径遍历")
+
+    if allowed_dir:
+        try:
+            resolved_path = path_obj.resolve()
+            resolved_allowed = Path(allowed_dir).resolve()
+            if not resolved_path.is_relative_to(resolved_allowed):
+                raise FileValidationError("检测到不安全的路径遍历：超出允许目录")
+        except Exception as e:
+            if not isinstance(e, FileValidationError):
+                raise FileValidationError(f"路径解析失败: {e}")
+            raise
 
     # 检查文件是否存在
     if not path_obj.exists():
@@ -68,24 +80,38 @@ def validate_file_path(
     return path_obj
 
 
-def validate_output_dir(output_dir: str) -> Path:
+def validate_output_dir(output_dir: str | Path, allowed_dir: str | Path | None = None) -> Path:
     """验证并创建输出目录
 
     Args:
         output_dir: 输出目录路径
+        allowed_dir: 允许的基础目录，如果提供，输出目录必须位于此目录内
 
     Returns:
         Path: 验证后的Path对象
     """
-    if not output_dir or not isinstance(output_dir, str):
+    if not output_dir or not isinstance(output_dir, (str, Path)):
         raise FileValidationError("输出目录路径不能为空")
 
-    # 检查路径遍历攻击
-    normalized_path = os.path.normpath(output_dir)
-    if ".." in normalized_path.split(os.sep):
-        raise FileValidationError("检测到不安全的路径遍历")
+    if isinstance(output_dir, Path):
+        output_dir = str(output_dir)
 
     path_obj = Path(output_dir)
+
+    # 检查路径遍历攻击
+    if ".." in path_obj.parts:
+        raise FileValidationError("检测到不安全的路径遍历")
+
+    if allowed_dir:
+        try:
+            resolved_path = path_obj.resolve()
+            resolved_allowed = Path(allowed_dir).resolve()
+            if not resolved_path.is_relative_to(resolved_allowed):
+                raise FileValidationError("检测到不安全的路径遍历：超出允许目录")
+        except Exception as e:
+            if not isinstance(e, FileValidationError):
+                raise FileValidationError(f"路径解析失败: {e}")
+            raise
 
     # 创建目录（如果不存在）
     try:

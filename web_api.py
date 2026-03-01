@@ -200,6 +200,30 @@ def _update_progress_from_info(
         target.token_logged = True
 
 
+def _log_token_usage(
+    target: Job | QueueTask,
+    token_usage: dict[str, Any] | None,
+    prefix: str = "Token统计: ",
+) -> None:
+    """记录 Token 使用统计
+
+    Args:
+        target: 目标对象（Job 或 QueueTask）
+        token_usage: Token 使用信息字典
+        prefix: 日志前缀
+    """
+    if not token_usage or target.token_logged:
+        return
+
+    target.result["token_usage"] = token_usage
+    prompt_tokens = token_usage.get("prompt_tokens", 0)
+    completion_tokens = token_usage.get("completion_tokens", 0)
+    total_tokens = token_usage.get("total_tokens", 0)
+
+    target.log(f"{prefix}输入={prompt_tokens:,}, 输出={completion_tokens:,}, 总计={total_tokens:,}")
+    target.token_logged = True
+
+
 async def _periodic_job_cleanup() -> None:
     """定期清理过期和过多的job任务"""
     while True:
@@ -417,28 +441,12 @@ async def _run_job(
 
     def handle_progress(info: dict[str, Any]) -> None:
         _update_progress_from_info(info, job)
-        if info.get("merge_batch_current") is not None:
-            job.result["merge_batch_current"] = info["merge_batch_current"]
-        if info.get("merge_batch_total") is not None:
-            job.result["merge_batch_total"] = info["merge_batch_total"]
-        if info.get("merge_outlines_count") is not None:
-            job.result["merge_outlines_count"] = info["merge_outlines_count"]
+        _log_token_usage(job, info.get("token_usage"), "合并完成，Token统计: ")
         if info.get("last_chunk_id") is not None:
             if info.get("last_error"):
                 job.log(f"块 {info['last_chunk_id']} 失败: {info['last_error']}")
             else:
                 job.log(f"块 {info['last_chunk_id']} 完成")
-        if info.get("token_usage") and not job.token_logged:
-            token_usage = info["token_usage"]
-            job.result["token_usage"] = token_usage
-            prompt_tokens = token_usage.get("prompt_tokens", 0)
-            completion_tokens = token_usage.get("completion_tokens", 0)
-            total_tokens = token_usage.get("total_tokens", 0)
-            job.log(
-                "合并完成，Token统计: "
-                f"输入={prompt_tokens:,}, 输出={completion_tokens:,}, 总计={total_tokens:,}"
-            )
-            job.token_logged = True
 
     try:
         service = NovelProcessingService(progress_callback=handle_progress)
@@ -448,16 +456,7 @@ async def _run_job(
         job.status = "success"
 
         # 输出token统计
-        if "token_usage" in result and not job.token_logged:
-            token_usage = result["token_usage"]
-            prompt_tokens = token_usage.get("prompt_tokens", 0)
-            completion_tokens = token_usage.get("completion_tokens", 0)
-            total_tokens = token_usage.get("total_tokens", 0)
-
-            job.log(
-                f"Token统计: 输入={prompt_tokens:,}, 输出={completion_tokens:,}, 总计={total_tokens:,}"
-            )
-            job.token_logged = True
+        _log_token_usage(job, result.get("token_usage"))
 
         job.log("处理完成")
         try:
@@ -509,16 +508,7 @@ async def run_queue_task(task: QueueTask) -> None:
         task.status = "success"
 
         # 输出token统计
-        if "token_usage" in result and not task.token_logged:
-            token_usage = result["token_usage"]
-            prompt_tokens = token_usage.get("prompt_tokens", 0)
-            completion_tokens = token_usage.get("completion_tokens", 0)
-            total_tokens = token_usage.get("total_tokens", 0)
-
-            task.log(
-                f"Token统计: 输入={prompt_tokens:,}, 输出={completion_tokens:,}, 总计={total_tokens:,}"
-            )
-            task.token_logged = True
+        _log_token_usage(task, result.get("token_usage"))
 
         task.log("处理完成")
 

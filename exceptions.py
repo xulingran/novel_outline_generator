@@ -12,6 +12,11 @@ class NovelOutlineError(Exception):
         self.details = details
         super().__init__(self.message)
 
+    def __str__(self) -> str:
+        if self.details:
+            return f"{self.message} (Details: {self.details})"
+        return self.message
+
 
 class APIKeyError(NovelOutlineError):
     """API密钥相关错误"""
@@ -45,6 +50,18 @@ class APIError(NovelOutlineError):
         self.is_retryable = is_retryable
         super().__init__(message)
 
+    def __str__(self) -> str:
+        parts = []
+        if self.error_code:
+            parts.append(f"Code: {self.error_code}")
+        if self.is_retryable:
+            parts.append("Retryable")
+        
+        base_msg = super().__str__()
+        if parts:
+            return f"{base_msg} [{', '.join(parts)}]"
+        return base_msg
+
 
 class RateLimitError(APIError):
     """API速率限制错误"""
@@ -52,6 +69,12 @@ class RateLimitError(APIError):
     def __init__(self, message: str, retry_after: int | None = None):
         self.retry_after = retry_after
         super().__init__(message, is_retryable=True)
+
+    def __str__(self) -> str:
+        base_msg = super().__str__()
+        if self.retry_after is not None:
+            return f"{base_msg} (Retry after: {self.retry_after}s)"
+        return base_msg
 
 
 class TokenLimitError(NovelOutlineError):
