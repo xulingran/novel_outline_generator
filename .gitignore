@@ -67,6 +67,10 @@ Thumbs.db
 # Temporary files
 *.tmp
 *.bak
+settings.json
 
 # AI session artifacts
 .sessions/
+
+# Git worktrees
+.worktrees/

@@ -104,6 +104,7 @@ novel_outline_generator/
 # Code quality (MUST execute in order)
 .venv/Scripts/python -m ruff check . --fix    # Lint
 .venv/Scripts/python -m black .               # Format
+.venv/Scripts/python -m black . --check       # Black format check
 .venv/Scripts/python -m mypy .                # Type check
 .venv/Scripts/python -m pytest tests/ -v       # Test
 

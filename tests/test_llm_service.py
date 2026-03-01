@@ -117,3 +117,28 @@ def test_openai_service_initialization_uses_http_client(monkeypatch):
     assert isinstance(service.client, DummyOpenAIClient)
     assert service.client.api_key == "sk-test"
     assert service.client.http_client is not None
+
+
+def test_default_providers_registered():
+    providers = llm_service.get_registered_llm_providers()
+    assert "openai" in providers
+    assert "gemini" in providers
+    assert "zhipu" in providers
+    assert "aihubmix" in providers
+
+
+def test_register_custom_provider(monkeypatch):
+    class CustomService(LLMService):
+        def _init_client(self) -> None:
+            self.client = object()
+
+        async def _call_api(self, prompt: str, **kwargs) -> LLMResponse:
+            return LLMResponse(content="custom")
+
+    llm_service.register_llm_provider("custom-provider")(CustomService)
+    monkeypatch.setenv("API_PROVIDER", "custom-provider")
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-test")
+    config._api_config = None
+
+    service = llm_service.create_llm_service()
+    assert isinstance(service, CustomService)

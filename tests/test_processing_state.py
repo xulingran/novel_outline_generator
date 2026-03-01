@@ -13,14 +13,13 @@ class TestProgressData:
         progress = ProgressData(
             txt_file="test.txt",
             total_chunks=10,
-            completed_count=5,
             completed_indices={0, 1, 2, 3, 4},
             outlines=[],
             last_update=datetime.now(),
             chunks_hash="abc123",
         )
         assert progress.total_chunks == 10
-        assert progress.completed_count == 5
+        assert progress.completed_count == 5  # 从 completed_indices 计算
         assert len(progress.completed_indices) == 5
 
     def test_completion_rate(self):
@@ -28,8 +27,7 @@ class TestProgressData:
         progress = ProgressData(
             txt_file="test.txt",
             total_chunks=10,
-            completed_count=5,
-            completed_indices=set(),
+            completed_indices={0, 1, 2, 3, 4},
             outlines=[],
             last_update=datetime.now(),
             chunks_hash="abc123",
@@ -44,7 +42,6 @@ class TestProgressData:
         progress = ProgressData(
             txt_file="test.txt",
             total_chunks=10,
-            completed_count=0,
             completed_indices=set(),
             outlines=[],
             last_update=datetime.now(),
@@ -61,7 +58,6 @@ class TestProgressData:
         progress = ProgressData(
             txt_file="test.txt",
             total_chunks=10,
-            completed_count=0,
             completed_indices=set(),
             outlines=[],
             last_update=datetime.now(),
@@ -78,7 +74,6 @@ class TestProgressData:
         progress = ProgressData(
             txt_file="test.txt",
             total_chunks=10,
-            completed_count=5,
             completed_indices={0, 1},
             outlines=[{"id": 1}],
             last_update=now,
@@ -88,6 +83,7 @@ class TestProgressData:
         data = progress.to_dict()
         assert data["txt_file"] == "test.txt"
         assert data["total_chunks"] == 10
+        assert data["completed_count"] == 2  # 从 completed_indices 计算
         assert data["completed_indices"] == [0, 1]
         assert data["processing_times"] == [1.0, 2.0]
 
@@ -114,7 +110,6 @@ class TestProgressData:
         progress_data = ProgressData(
             txt_file="test.txt",
             total_chunks=5,
-            completed_count=3,
             completed_indices={0, 1, 2},
             outlines=[{"chunk_id": i, "plot": ["event1"]} for i in range(3)],
             last_update=datetime.now(),
@@ -143,7 +138,7 @@ class TestProgressData:
         hash1 = ProgressData.calculate_chunks_hash(chunks)
         hash2 = ProgressData.calculate_chunks_hash(chunks)
         assert hash1 == hash2
-        assert len(hash1) == 32  # MD5 hex digest
+        assert len(hash1) == 64
 
     def test_calculate_chunks_hash_order_sensitive(self):
         """测试块哈希对顺序敏感"""
@@ -151,7 +146,25 @@ class TestProgressData:
         chunks2 = ["chunk3", "chunk2", "chunk1"]
         hash1 = ProgressData.calculate_chunks_hash(chunks1)
         hash2 = ProgressData.calculate_chunks_hash(chunks2)
-        assert hash1 != hash2  # 不同顺序应产生不同哈希
+        assert hash1 != hash2
+
+    def test_calculate_chunks_hash_encoding_sensitive(self):
+        """测试块哈希对编码敏感"""
+        chunks = ["chunk1", "chunk2"]
+        hash_utf8 = ProgressData.calculate_chunks_hash(chunks, "utf-8")
+        hash_gbk = ProgressData.calculate_chunks_hash(chunks, "gbk")
+        assert hash_utf8 != hash_gbk
+
+    def test_calculate_chunks_hash_empty_list(self):
+        """测试空列表哈希"""
+        hash_result = ProgressData.calculate_chunks_hash([])
+        assert len(hash_result) == 64
+
+    def test_calculate_chunks_hash_special_characters(self):
+        """测试特殊字符哈希"""
+        chunks = ["中文内容", "emoji 🎉", "special\n\tchars"]
+        hash_result = ProgressData.calculate_chunks_hash(chunks)
+        assert len(hash_result) == 64
 
 
 class TestProcessingState:
@@ -300,3 +313,136 @@ class TestProcessingState:
         state.merge_batch_total = 4
         assert state.merge_batch_current == 2
         assert state.merge_batch_total == 4
+
+    def test_validation_negative_total_chunks(self):
+        """测试验证负数总块数"""
+        import pytest
+
+        with pytest.raises(ValueError):
+            ProcessingState(file_path="test.txt", total_chunks=-1)
+
+    def test_validation_negative_processed_chunks(self):
+        """测试验证负数已处理块数"""
+        import pytest
+
+        with pytest.raises(ValueError):
+            ProcessingState(file_path="test.txt", total_chunks=10, processed_chunks=-1)
+
+    def test_validation_negative_failed_chunks(self):
+        """测试验证负数失败块数"""
+        import pytest
+
+        with pytest.raises(ValueError):
+            ProcessingState(file_path="test.txt", total_chunks=10, failed_chunks=-1)
+
+    def test_validation_negative_partial_chunks(self):
+        """测试验证负数部分完成块数"""
+        import pytest
+
+        with pytest.raises(ValueError):
+            ProcessingState(file_path="test.txt", total_chunks=10, partial_chunks=-1)
+
+    def test_validation_negative_merge_level(self):
+        """测试验证负数合并层级"""
+        import pytest
+
+        with pytest.raises(ValueError):
+            ProcessingState(file_path="test.txt", total_chunks=10, merge_level=-1)
+
+    def test_validation_negative_merge_batch_current(self):
+        """测试验证负数当前批次"""
+        import pytest
+
+        with pytest.raises(ValueError):
+            ProcessingState(file_path="test.txt", total_chunks=10, merge_batch_current=-1)
+
+    def test_validation_negative_merge_batch_total(self):
+        """测试验证负数总批次"""
+        import pytest
+
+        with pytest.raises(ValueError):
+            ProcessingState(file_path="test.txt", total_chunks=10, merge_batch_total=-1)
+
+    def test_validation_negative_merge_outlines_count(self):
+        """测试验证负数大纲数量"""
+        import pytest
+
+        with pytest.raises(ValueError):
+            ProcessingState(file_path="test.txt", total_chunks=10, merge_outlines_count=-1)
+
+
+class TestProgressDataEdgeCases:
+    """ProgressData 边界情况测试"""
+
+    def test_from_dict_missing_fields(self):
+        """测试从字典创建时缺少字段"""
+        data = {"txt_file": "test.txt"}
+        progress = ProgressData.from_dict(data)
+        assert progress.txt_file == "test.txt"
+        assert progress.total_chunks == 0
+        assert progress.completed_indices == set()
+
+    def test_from_dict_invalid_datetime(self):
+        """测试从字典创建时无效日期时间"""
+        data = {
+            "txt_file": "test.txt",
+            "total_chunks": 10,
+            "completed_indices": [],
+            "outlines": [],
+            "last_update": "invalid-datetime-format",
+            "chunks_hash": "abc",
+        }
+        progress = ProgressData.from_dict(data)
+        assert isinstance(progress.last_update, datetime)
+
+    def test_to_dict_sorted_completed_indices(self):
+        """测试转换字典时排序已完成索引"""
+        progress = ProgressData(
+            txt_file="test.txt",
+            total_chunks=10,
+            completed_indices={5, 2, 8, 1},
+            outlines=[],
+            last_update=datetime.now(),
+            chunks_hash="abc",
+        )
+        data = progress.to_dict()
+        assert data["completed_indices"] == [1, 2, 5, 8]
+
+    def test_to_dict_sorted_partial_indices(self):
+        """测试转换字典时排序部分完成索引"""
+        progress = ProgressData(
+            txt_file="test.txt",
+            total_chunks=10,
+            completed_indices=set(),
+            outlines=[],
+            last_update=datetime.now(),
+            chunks_hash="abc",
+            partial_indices={3, 1, 2},
+        )
+        data = progress.to_dict()
+        assert data["partial_indices"] == [1, 2, 3]
+
+    def test_completion_rate_zero_total(self):
+        """测试总块数为零时的完成率"""
+        progress = ProgressData(
+            txt_file="test.txt",
+            total_chunks=0,
+            completed_indices=set(),
+            outlines=[],
+            last_update=datetime.now(),
+            chunks_hash="abc",
+        )
+        assert progress.completion_rate == 0.0
+
+    def test_average_processing_time_empty(self):
+        """测试空处理时间列表的平均值"""
+        progress = ProgressData(
+            txt_file="test.txt",
+            total_chunks=10,
+            completed_indices=set(),
+            outlines=[],
+            last_update=datetime.now(),
+            chunks_hash="abc",
+            processing_times=[],
+        )
+        assert progress.average_processing_time == 0.0

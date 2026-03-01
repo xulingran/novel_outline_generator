@@ -4,9 +4,12 @@
 
 import hashlib
 import json
+import logging
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -15,7 +18,6 @@ class ProgressData:
 
     txt_file: str
     total_chunks: int
-    completed_count: int
     completed_indices: set[int]
     outlines: list[dict[str, Any]]
     last_update: datetime
@@ -25,6 +27,11 @@ class ProgressData:
     errors: list[dict[str, Any]] = field(default_factory=list)
     partial_indices: set[int] = field(default_factory=set)  # 部分完成的块索引
     partial_outlines: list[dict[str, Any]] = field(default_factory=list)  # 部分完成的大纲
+
+    @property
+    def completed_count(self) -> int:
+        """已完成块数（从 completed_indices 计算）"""
+        return len(self.completed_indices)
 
     @property
     def completion_rate(self) -> float:
@@ -51,7 +58,7 @@ class ProgressData:
         return {
             "txt_file": self.txt_file,
             "total_chunks": self.total_chunks,
-            "completed_count": self.completed_count,
+            "completed_count": self.completed_count,  # 从 completed_indices 计算
             "completed_indices": sorted(self.completed_indices),
             "outlines": self.outlines,
             "last_update": self.last_update.isoformat(),
@@ -65,14 +72,26 @@ class ProgressData:
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "ProgressData":
-        """从字典创建实例（用于JSON反序列化）"""
+        """从字典创建实例（用于JSON反序列化）
+
+        注意：completed_count 字段会被忽略，实际值从 completed_indices 计算得出，
+        以确保两者始终一致。
+        """
+        # 解析 last_update，添加异常处理
+        last_update_str = data.get("last_update", datetime.now().isoformat())
+        try:
+            last_update = datetime.fromisoformat(last_update_str)
+        except (ValueError, TypeError):
+            logger.warning(f"无效的 last_update 格式: {last_update_str}，使用当前时间")
+            last_update = datetime.now()
+
         return cls(
             txt_file=data.get("txt_file", ""),
             total_chunks=data.get("total_chunks", 0),
-            completed_count=data.get("completed_count", 0),
+            # completed_count 从 completed_indices 计算，忽略传入值
             completed_indices=set(data.get("completed_indices", [])),
             outlines=data.get("outlines", []),
-            last_update=datetime.fromisoformat(data.get("last_update", datetime.now().isoformat())),
+            last_update=last_update,
             chunks_hash=data.get("chunks_hash", ""),
             encoding=data.get("encoding", "utf-8"),  # 默认utf-8
             processing_times=data.get("processing_times", []),
@@ -85,9 +104,8 @@ class ProgressData:
     def calculate_chunks_hash(chunks: list[str], encoding: str = "utf-8") -> str:
         """计算文本块的哈希值（保持块顺序和编码）"""
         content = json.dumps(chunks, ensure_ascii=False, sort_keys=False)
-        # 将编码信息纳入哈希计算，确保不同编码不会产生相同哈希
         data = f"{encoding}:{content}"
-        return hashlib.md5(data.encode("utf-8")).hexdigest()
+        return hashlib.sha256(data.encode("utf-8")).hexdigest()
 
 
 @dataclass
@@ -109,6 +127,29 @@ class ProcessingState:
     merge_batch_current: int = 0  # 当前批次
     merge_batch_total: int = 0  # 总批次数
     merge_outlines_count: int = 0  # 当前层级的大纲数量
+
+    def __post_init__(self) -> None:
+        """验证字段有效性"""
+        if self.total_chunks < 0:
+            raise ValueError(f"total_chunks 必须为非负数，当前值: {self.total_chunks}")
+        if self.processed_chunks < 0:
+            raise ValueError(f"processed_chunks 必须为非负数，当前值: {self.processed_chunks}")
+        if self.failed_chunks < 0:
+            raise ValueError(f"failed_chunks 必须为非负数，当前值: {self.failed_chunks}")
+        if self.partial_chunks < 0:
+            raise ValueError(f"partial_chunks 必须为非负数，当前值: {self.partial_chunks}")
+        if self.merge_level < 0:
+            raise ValueError(f"merge_level 必须为非负数，当前值: {self.merge_level}")
+        if self.merge_batch_current < 0:
+            raise ValueError(
+                f"merge_batch_current 必须为非负数，当前值: {self.merge_batch_current}"
+            )
+        if self.merge_batch_total < 0:
+            raise ValueError(f"merge_batch_total 必须为非负数，当前值: {self.merge_batch_total}")
+        if self.merge_outlines_count < 0:
+            raise ValueError(
+                f"merge_outlines_count 必须为非负数，当前值: {self.merge_outlines_count}"
+            )
 
     @property
     def elapsed_time(self) -> float:

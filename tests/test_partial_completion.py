@@ -26,6 +26,7 @@ class TestSplitChunkIntoFive:
             service = NovelProcessingService(
                 progress_callback=MagicMock(), cancel_event=MagicMock()
             )
+            service.processing_config.sub_chunk_count = 5
             sub_chunks = service._split_chunk_into_sub_chunks(chunk)
 
             assert len(sub_chunks) == 5
@@ -58,6 +59,7 @@ class TestSplitChunkIntoFive:
             service = NovelProcessingService(
                 progress_callback=MagicMock(), cancel_event=MagicMock()
             )
+            service.processing_config.sub_chunk_count = 5
             sub_chunks = service._split_chunk_into_sub_chunks(chunk)
 
             assert len(sub_chunks) == 5
@@ -90,6 +92,7 @@ class TestSplitChunkIntoFive:
             service = NovelProcessingService(
                 progress_callback=MagicMock(), cancel_event=MagicMock()
             )
+            service.processing_config.sub_chunk_count = 5
             sub_chunks = service._split_chunk_into_sub_chunks(chunk)
 
             total_sub_tokens = sum(sc.token_count for sc in sub_chunks)
@@ -110,6 +113,7 @@ class TestSplitChunkIntoFive:
             service = NovelProcessingService(
                 progress_callback=MagicMock(), cancel_event=MagicMock()
             )
+            service.processing_config.sub_chunk_count = 5
             sub_chunks = service._split_chunk_into_sub_chunks(chunk)
 
             assert len(sub_chunks) == 5
@@ -321,6 +325,7 @@ class TestProcessFailingChunkAsPartial:
 
             # 模拟处理状态
             service.processing_state = ProcessingState(file_path="test.txt", total_chunks=10)
+            service.processing_config.sub_chunk_count = 5
             service.total_prompt_tokens = 0
             service.total_completion_tokens = 0
             service.total_tokens = 0
@@ -349,7 +354,6 @@ class TestProcessFailingChunkAsPartial:
         progress_data = ProgressData(
             txt_file="test.txt",
             total_chunks=10,
-            completed_count=0,
             completed_indices=set(),
             outlines=[],
             last_update=datetime.now(),
@@ -407,7 +411,6 @@ class TestProcessFailingChunkAsPartial:
         progress_data = ProgressData(
             txt_file="test.txt",
             total_chunks=10,
-            completed_count=0,
             completed_indices=set(),
             outlines=[],
             last_update=datetime.now(),
@@ -442,7 +445,6 @@ class TestProcessFailingChunkAsPartial:
         progress_data = ProgressData(
             txt_file="test.txt",
             total_chunks=10,
-            completed_count=0,
             completed_indices=set(),
             outlines=[],
             last_update=datetime.now(),
@@ -481,7 +483,6 @@ class TestProcessFailingChunkAsPartial:
         progress_data = ProgressData(
             txt_file="test.txt",
             total_chunks=10,
-            completed_count=0,
             completed_indices=set(),
             outlines=[],
             last_update=datetime.now(),
@@ -519,7 +520,6 @@ class TestProcessFailingChunkAsPartial:
         progress_data = ProgressData(
             txt_file="test.txt",
             total_chunks=10,
-            completed_count=0,
             completed_indices=set(),
             outlines=[],
             last_update=datetime.now(),
@@ -547,6 +547,7 @@ class TestProcessFailingChunkAsPartial:
             service = NovelProcessingService(
                 progress_callback=MagicMock(), cancel_event=MagicMock()
             )
+            service.processing_config.sub_chunk_count = 5
             service.processing_state = ProcessingState(file_path="test.txt", total_chunks=10)
             service.processing_state.processed_chunks = 2
             service.processing_state.partial_chunks = 1
@@ -561,7 +562,6 @@ class TestProcessFailingChunkAsPartial:
             progress_data = ProgressData(
                 txt_file="test.txt",
                 total_chunks=10,
-                completed_count=2,
                 completed_indices={1, 2},
                 outlines=[],
                 last_update=datetime.now(),

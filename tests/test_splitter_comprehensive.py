@@ -7,7 +7,14 @@ Tests text splitting by chapters, paragraphs, and tokens.
 import pytest
 
 from exceptions import ProcessingError
-from splitter import TextSplitter, get_splitter, split_by_tokens, split_text, try_split_by_chapter
+from splitter import (
+    TextSplitter,
+    get_splitter,
+    split_by_tokens,
+    split_text,
+    split_text_stream,
+    try_split_by_chapter,
+)
 
 
 class TestTextSplitterInitialization:
@@ -69,86 +76,6 @@ class TestSplitTextBasic:
         with pytest.raises(ProcessingError) as excinfo:
             splitter.split_text("   \n  \t  ")
         assert "文本内容为空" in str(excinfo.value)
-
-
-class TestSplitByChapters:
-    """Test chapter-based splitting (internal methods)."""
-
-    def test_split_by_chapter_pattern_chinese_numbers(self):
-        """Test splitting with Chinese chapter numbers."""
-        splitter = TextSplitter()
-        text = "第一章 开始\n这是第一章的内容\n\n第二章 结束\n这是第二章的内容"
-        # 直接测试 _split_by_chapters 方法
-        chunks = splitter._split_by_chapters(text)
-        assert len(chunks) >= 2
-        assert "第一章" in chunks[0] or "第一章" in chunks[1]
-        assert "第二章" in chunks[-1]
-
-    def test_split_by_chapter_pattern_arabic_numbers(self):
-        """Test splitting with Arabic chapter numbers."""
-        splitter = TextSplitter()
-        text = "第1章 开始\n这是第一章的内容\n\n第2章 结束\n这是第二章的内容"
-        # 直接测试 _split_by_chapters 方法
-        chunks = splitter._split_by_chapters(text)
-        assert len(chunks) >= 2
-
-    def test_split_by_chapter_pattern_chapter_keyword(self):
-        """Test splitting with 'Chapter' keyword."""
-        splitter = TextSplitter()
-        text = "Chapter 1\nStart\n\nChapter 2\nEnd"
-        # 直接测试 _split_by_chapters 方法
-        chunks = splitter._split_by_chapters(text)
-        assert len(chunks) >= 2
-
-    def test_split_by_chapter_pattern_section(self):
-        """Test splitting with section markers."""
-        splitter = TextSplitter()
-        text = "第一节 开始\n这是第一节\n\n第二节 结束\n这是第二节"
-        # 直接测试 _split_by_chapters 方法
-        chunks = splitter._split_by_chapters(text)
-        assert len(chunks) >= 2
-
-    def test_split_by_chapter_pattern_volume(self):
-        """Test splitting with volume markers."""
-        splitter = TextSplitter()
-        text = "第一卷 开始\n这是第一卷\n\n第二卷 结束\n这是第二卷"
-        # 直接测试 _split_by_chapters 方法
-        chunks = splitter._split_by_chapters(text)
-        assert len(chunks) >= 1
-
-    def test_try_split_pattern_no_match(self):
-        """Test that pattern returns original text when no match."""
-        splitter = TextSplitter()
-        text = "This is text without chapters"
-        result = splitter._try_split_pattern(text, r"(第\d+章)")
-        assert result == [text]
-
-
-class TestSplitByParagraphs:
-    """Test paragraph-based splitting."""
-
-    def test_split_by_paragraphs_basic(self):
-        """Test basic paragraph splitting."""
-        splitter = TextSplitter()
-        text = "First paragraph.\n\nSecond paragraph.\n\nThird paragraph."
-        chunks = splitter._split_by_paragraphs(text)
-        assert len(chunks) >= 1
-        assert any("First paragraph" in chunk for chunk in chunks)
-
-    def test_split_by_paragraphs_empty_paragraphs_skipped(self):
-        """Test that empty paragraphs are skipped."""
-        splitter = TextSplitter()
-        text = "First.\n\n\n\nSecond."  # Multiple empty lines
-        chunks = splitter._split_by_paragraphs(text)
-        # Empty paragraphs should be filtered out
-        assert all(chunk.strip() for chunk in chunks)
-
-    def test_split_by_paragraphs_single_paragraph(self):
-        """Test that single paragraph text is returned as single chunk."""
-        splitter = TextSplitter()
-        text = "This is a single paragraph."
-        chunks = splitter._split_by_paragraphs(text)
-        assert len(chunks) == 1
 
 
 class TestSplitByTokens:
@@ -281,6 +208,13 @@ class TestSplitTextConvenience:
         chunks = split_text(text)
         assert isinstance(chunks, list)
         assert len(chunks) > 0
+
+    def test_split_text_stream_function(self):
+        """Test streaming convenience function."""
+        chunks = list(split_text_stream(["A\n\nB\n\nC"]))
+        assert isinstance(chunks, list)
+        assert len(chunks) > 0
+        assert "A" in "".join(chunks)
 
 
 class TestGetSplitter:

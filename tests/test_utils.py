@@ -11,6 +11,7 @@ import pytest
 from utils import (
     atomic_write_json,
     atomic_write_text,
+    detect_text_encoding,
     format_file_size,
     get_file_info,
     safe_read_json,
@@ -106,6 +107,16 @@ class TestSafeReadText:
         """Read non-existent file raises exception"""
         with pytest.raises(FileNotFoundError):
             safe_read_text("/nonexistent/file.txt")
+
+
+class TestDetectTextEncoding:
+    """Test detect_text_encoding function."""
+
+    def test_detect_text_encoding_utf8(self, tmp_path):
+        test_file = tmp_path / "enc.txt"
+        test_file.write_text("你好，世界", encoding="utf-8")
+        encoding = detect_text_encoding(test_file, ["utf-8", "gbk"])
+        assert encoding == "utf-8"
 
 
 class TestFormatFileSize:

@@ -2,7 +2,10 @@
 Splitter module unit tests
 """
 
-from splitter import TextSplitter, get_splitter, split_text
+import pytest
+
+import splitter as splitter_module
+from splitter import TextSplitter, get_splitter, split_text, split_text_stream
 
 
 class TestTextSplitter:
@@ -57,3 +60,29 @@ class TestSplitText:
         chunks = split_text(text)
         assert isinstance(chunks, list)
         assert len(chunks) > 0
+
+    def test_split_text_stream_function(self):
+        """Test streaming convenience function"""
+        text_stream = ["First paragraph.\n\nSecond paragraph."]
+        chunks = list(split_text_stream(text_stream))
+        assert len(chunks) > 0
+        assert "First paragraph" in "".join(chunks)
+
+    def test_split_text_stream_supports_crlf_separator(self, monkeypatch: pytest.MonkeyPatch):
+        """CRLF 段落分隔应被正确识别，不应退化到 token 强制切分。"""
+        text_splitter = TextSplitter()
+        text_splitter.processing_config.target_tokens_per_chunk = 100
+
+        monkeypatch.setattr(
+            splitter_module,
+            "count_tokens",
+            lambda text: 120 if ("第一段" in text and "第二段" in text) else 50,
+        )
+
+        def _should_not_call_split_by_tokens(_text: str) -> list[str]:
+            raise AssertionError("CRLF 段落分隔失效，意外触发 _split_by_tokens")
+
+        monkeypatch.setattr(text_splitter, "_split_by_tokens", _should_not_call_split_by_tokens)
+
+        chunks = list(text_splitter.split_text_stream(["第一段\r\n\r\n第二段"]))
+        assert chunks == ["第一段", "第二段"]

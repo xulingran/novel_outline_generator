@@ -17,22 +17,24 @@ from services.novel_processing_service import NovelProcessingService
 @pytest.fixture
 def mock_service():
     """创建一个完全mock的NovelProcessingService"""
-    with patch("services.novel_processing_service.create_llm_service") as mock_create:
-        mock_create.return_value = MagicMock()
-        service = NovelProcessingService(progress_callback=MagicMock(), cancel_event=MagicMock())
-        # 设置所有必要的mock
-        service.llm_service = AsyncMock()
-        service.file_service = MagicMock()
-        service.progress_service = MagicMock()
-        service.eta_estimator = MagicMock()
-        service.processing_state = ProcessingState(file_path="test.txt", total_chunks=10)
-        service.total_prompt_tokens = 0
-        service.total_completion_tokens = 0
-        service.total_tokens = 0
-        service.force_complete = False
-        # 确保cancel_event.is_set()返回False
-        service.cancel_event.is_set.return_value = False
-        yield service
+    service = NovelProcessingService(
+        progress_callback=MagicMock(),
+        cancel_event=MagicMock(),
+        llm_service=AsyncMock(),
+    )
+    # 设置所有必要的mock
+    service.file_service = MagicMock()
+    service.file_service.get_file_size.return_value = 0
+    service.progress_service = MagicMock()
+    service.eta_estimator = MagicMock()
+    service.processing_state = ProcessingState(file_path="test.txt", total_chunks=10)
+    service.total_prompt_tokens = 0
+    service.total_completion_tokens = 0
+    service.total_tokens = 0
+    service.force_complete = False
+    # 确保cancel_event.is_set()返回False
+    service.cancel_event.is_set.return_value = False
+    yield service
 
 
 @pytest.fixture
@@ -51,7 +53,6 @@ def sample_progress_data():
     return ProgressData(
         txt_file="test.txt",
         total_chunks=3,
-        completed_count=1,
         completed_indices={1},
         outlines=[{"chunk_id": 1, "plot": ["done"]}],
         last_update=datetime.now(),
@@ -91,7 +92,6 @@ class TestProcessNovel:
         mock_service.progress_service.create_progress.return_value = ProgressData(
             txt_file="test.txt",
             total_chunks=1,
-            completed_count=0,
             completed_indices=set(),
             outlines=[],
             last_update=datetime.now(),
@@ -167,7 +167,6 @@ class TestProcessNovel:
         mock_service.progress_service.create_progress.return_value = ProgressData(
             txt_file="test.txt",
             total_chunks=1,
-            completed_count=0,
             completed_indices=set(),
             outlines=[],
             last_update=datetime.now(),
@@ -193,7 +192,6 @@ class TestProcessNovel:
         mock_service.progress_service.create_progress.return_value = ProgressData(
             txt_file="test.txt",
             total_chunks=1,
-            completed_count=0,
             completed_indices=set(),
             outlines=[],
             last_update=datetime.now(),
@@ -219,6 +217,19 @@ class TestProcessNovel:
         assert mock_service.total_tokens == 150
 
 
+class TestDependencyInjection:
+    """测试依赖注入"""
+
+    def test_init_with_injected_llm_service(self):
+        """传入 llm_service 时不应调用默认工厂。"""
+        injected_llm = MagicMock()
+        with patch("services.novel_processing_service.create_llm_service") as mock_create:
+            service = NovelProcessingService(llm_service=injected_llm)
+
+        assert service.llm_service is injected_llm
+        mock_create.assert_not_called()
+
+
 class TestLoadAndValidateFile:
     """测试文件加载和验证"""
 
@@ -241,6 +252,32 @@ class TestLoadAndValidateFile:
 
         with pytest.raises(ProcessingError, match="文件内容为空"):
             await mock_service._load_and_validate_file("test.txt")
+
+
+class TestPrepareChunks:
+    """测试块准备逻辑（普通/流式）"""
+
+    @pytest.mark.asyncio
+    async def test_prepare_chunks_streaming_path(self, mock_service):
+        """大文件应走流式切块路径"""
+        sample_chunk = TextChunk(
+            id=1,
+            content="stream chunk",
+            token_count=10,
+            start_position=0,
+            end_position=12,
+        )
+        mock_service.file_service.get_file_size.return_value = (
+            mock_service.processing_config.stream_split_threshold_mb * 1024 * 1024
+        )
+        mock_service._prepare_chunks_streaming = MagicMock(return_value=([sample_chunk], "utf-8"))
+
+        chunks, encoding = await mock_service._prepare_chunks("test.txt")
+
+        assert len(chunks) == 1
+        assert chunks[0].content == "stream chunk"
+        assert encoding == "utf-8"
+        mock_service._prepare_chunks_streaming.assert_called_once_with("test.txt")
 
     @pytest.mark.asyncio
     async def test_load_and_validate_file_not_found(self, mock_service):
@@ -320,7 +357,6 @@ class TestProcessChunks:
         progress_data = ProgressData(
             txt_file="test.txt",
             total_chunks=3,
-            completed_count=0,
             completed_indices=set(),
             outlines=[],
             last_update=datetime.now(),
@@ -348,7 +384,6 @@ class TestProcessChunks:
         progress_data = ProgressData(
             txt_file="test.txt",
             total_chunks=3,
-            completed_count=0,
             completed_indices=set(),
             outlines=[],
             last_update=datetime.now(),
@@ -374,7 +409,6 @@ class TestProcessChunks:
         progress_data = ProgressData(
             txt_file="test.txt",
             total_chunks=3,
-            completed_count=0,
             completed_indices=set(),
             outlines=[],
             last_update=datetime.now(),
@@ -401,7 +435,6 @@ class TestProcessSingleChunk:
         progress_data = ProgressData(
             txt_file="test.txt",
             total_chunks=3,
-            completed_count=0,
             completed_indices=set(),
             outlines=[],
             last_update=datetime.now(),
@@ -418,9 +451,6 @@ class TestProcessSingleChunk:
     async def test_process_single_chunk_retry_success(self, mock_service):
         """测试重试后成功"""
         from exceptions import APIError
-
-        # 设置 max_retry 为 2，确保会触发重试逻辑
-        mock_service.processing_config.max_retry = 2
 
         mock_response = MagicMock()
         mock_response.content = '{"plot": ["test"]}'
@@ -443,13 +473,13 @@ class TestProcessSingleChunk:
         mock_service.llm_service.call = AsyncMock(wraps=mock_call)
         mock_service.progress_service.update_chunk_completed = MagicMock()
         mock_service.eta_estimator.add_completion = MagicMock()
+        mock_service.processing_config.max_retry = 2
 
         chunk = TextChunk(id=1, content="test", token_count=10, start_position=0, end_position=4)
         sem = asyncio.Semaphore(5)
         progress_data = ProgressData(
             txt_file="test.txt",
             total_chunks=3,
-            completed_count=0,
             completed_indices=set(),
             outlines=[],
             last_update=datetime.now(),
@@ -459,10 +489,10 @@ class TestProcessSingleChunk:
         result = await mock_service._process_single_chunk(chunk, sem, progress_data)
 
         assert result["chunk_id"] == 1
-        # 第1次失败，第2次重试成功 = 2次调用
+        # 首次失败后重试成功，共调用2次
         assert call_count == 2
-        # 验证返回结果包含plot数据
-        assert "plot" in result
+        # 验证返回结果包含plot数据（无论是完整还是部分完成）
+        assert "plot" in result or "is_partial" in result
 
     @pytest.mark.asyncio
     async def test_process_single_chunk_max_retry_failure(self, mock_service):
@@ -481,7 +511,6 @@ class TestProcessSingleChunk:
         progress_data = ProgressData(
             txt_file="test.txt",
             total_chunks=3,
-            completed_count=0,
             completed_indices=set(),
             outlines=[],
             last_update=datetime.now(),
@@ -498,16 +527,28 @@ class TestProcessSingleChunk:
 
     @pytest.mark.asyncio
     async def test_process_single_chunk_cancelled(self, mock_service):
-        """测试处理前取消 - 在进入处理前检查取消"""
-        # 在进入函数前就设置取消标志
-        mock_service.cancel_event.is_set.return_value = True
+        """测试处理中取消"""
+
+        mock_response = MagicMock()
+        mock_response.content = '{"plot": ["test"]}'
+        mock_response.token_usage = {
+            "prompt_tokens": 100,
+            "completion_tokens": 50,
+            "total_tokens": 150,
+        }
+
+        async def mock_call(*args, **kwargs):
+            mock_service.cancel_event.is_set.return_value = True
+            return mock_response
+
+        mock_service.llm_service.call = AsyncMock(side_effect=mock_call)
+        mock_service.progress_service.update_chunk_completed = MagicMock()
 
         chunk = TextChunk(id=1, content="test", token_count=10, start_position=0, end_position=4)
         sem = asyncio.Semaphore(5)
         progress_data = ProgressData(
             txt_file="test.txt",
             total_chunks=3,
-            completed_count=0,
             completed_indices=set(),
             outlines=[],
             last_update=datetime.now(),
@@ -533,7 +574,6 @@ class TestProcessSingleChunk:
         progress_data = ProgressData(
             txt_file="test.txt",
             total_chunks=3,
-            completed_count=0,
             completed_indices=set(),
             outlines=[],
             last_update=datetime.now(),
@@ -545,6 +585,21 @@ class TestProcessSingleChunk:
         assert mock_service.total_prompt_tokens == 100
         assert mock_service.total_completion_tokens == 50
         assert mock_service.total_tokens == 150
+
+
+class TestSplitChunkIntoSubChunks:
+    """测试失败块拆分逻辑"""
+
+    def test_split_chunk_avoids_empty_sub_chunks(self, mock_service):
+        """当 sub_chunk_count 大于文本长度时，不应产生空子块。"""
+        mock_service.processing_config.sub_chunk_count = 10
+        chunk = TextChunk(id=1, content="abc", token_count=3, start_position=0, end_position=3)
+
+        sub_chunks = mock_service._split_chunk_into_sub_chunks(chunk)
+
+        assert len(sub_chunks) == 3
+        assert all(sub_chunk.content for sub_chunk in sub_chunks)
+        assert "".join(sub_chunk.content for sub_chunk in sub_chunks) == "abc"
 
 
 class TestParseLLMResponse:
@@ -832,7 +887,6 @@ class TestHandleProgressResume:
         mock_service.progress_service.load_progress.return_value = ProgressData(
             txt_file="test.txt",
             total_chunks=3,
-            completed_count=1,
             completed_indices={1},
             outlines=[],
             last_update=datetime.now(),

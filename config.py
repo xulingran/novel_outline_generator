@@ -5,6 +5,7 @@
 
 import logging
 import os
+import warnings
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -14,6 +15,23 @@ logger = logging.getLogger(__name__)
 
 # 支持的API提供商列表
 SUPPORTED_API_PROVIDERS = ["openai", "gemini", "zhipu", "aihubmix"]
+
+
+def load_env_file(path: str = ".env") -> dict[str, str]:
+    """读取 .env 文件键值（仅解析 KEY=VALUE 行）。"""
+    env_path = os.path.abspath(path)
+    if not os.path.exists(env_path):
+        return {}
+
+    data: dict[str, str] = {}
+    with open(env_path, encoding="utf-8") as file_obj:
+        for line in file_obj:
+            line = line.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            key, value = line.split("=", 1)
+            data[key.strip()] = value.strip()
+    return data
 
 
 @dataclass
@@ -43,6 +61,61 @@ class APIConfig:
     )
     _validated: bool = field(default=False, init=False)
 
+    # API 密钥验证配置（字段名、提供商名称、环境变量名、提示）
+    _PROVIDER_KEY_CONFIG: dict[str, dict[str, str]] = field(
+        default_factory=lambda: {
+            "openai": {
+                "field": "openai_key",
+                "name": "OpenAI API",
+                "env_var": "OPENAI_API_KEY",
+                "hint": "提示：OpenAI API Key 通常以 'sk-' 开头",
+            },
+            "gemini": {
+                "field": "gemini_key",
+                "name": "Gemini API",
+                "env_var": "GEMINI_API_KEY",
+                "hint": "",
+            },
+            "zhipu": {
+                "field": "zhipu_key",
+                "name": "智谱API",  # 恢复原有格式，与测试期望一致
+                "env_var": "ZHIPU_API_KEY",
+                "hint": "",
+            },
+            "aihubmix": {
+                "field": "aihubmix_api_key",
+                "name": "AiHubMix API",
+                "env_var": "AIHUBMIX_API_KEY",
+                "hint": "",
+            },
+        },
+        init=False,
+        repr=False,
+    )
+
+    def _validate_api_key(self, key_value: str | None, config: dict[str, str]) -> None:
+        """验证单个 API 密钥
+
+        Args:
+            key_value: API 密钥值
+            config: 提供商配置字典
+        """
+        if not key_value or "your_" in key_value.lower() or "here" in key_value.lower():
+            provider_name = config["name"]
+            env_var = config["env_var"]
+            hint = config.get("hint", "")
+            # 保持与原有测试兼容的错误消息格式
+            if provider_name == "OpenAI API":
+                raise ConfigurationError(
+                    f"使用{provider_name}时必须设置{env_var}环境变量。\n"
+                    f"当前值看起来像是占位符，请在 .env 文件中填入真实的 API Key。\n{hint}"
+                )
+            else:
+                raise ConfigurationError(
+                    f"使用{provider_name}时必须设置{env_var}环境变量。\n"
+                    "当前值看起来像是占位符，请在 .env 文件中填入真实的 API Key"
+                )
+
     def validate(self) -> None:
         """验证配置（延迟到实际使用时）"""
         if self._validated:
@@ -50,53 +123,15 @@ class APIConfig:
 
         if self.provider not in SUPPORTED_API_PROVIDERS:
             raise ConfigurationError(
-                f"不支持的API提供商: {self.provider}. 支持的提供商: {', '.join(SUPPORTED_API_PROVIDERS)}"
+                f"不支持的API提供商: {self.provider}. "
+                f"支持的提供商: {', '.join(SUPPORTED_API_PROVIDERS)}"
             )
 
-        if self.provider == "openai":
-            if (
-                not self.openai_key
-                or "your_" in self.openai_key.lower()
-                or "here" in self.openai_key.lower()
-            ):
-                raise ConfigurationError(
-                    "使用OpenAI API时必须设置OPENAI_API_KEY环境变量。\n"
-                    "当前值看起来像是占位符，请在 .env 文件中填入真实的 API Key。\n"
-                    "提示：OpenAI API Key 通常以 'sk-' 开头"
-                )
-
-        if self.provider == "gemini":
-            if (
-                not self.gemini_key
-                or "your_" in self.gemini_key.lower()
-                or "here" in self.gemini_key.lower()
-            ):
-                raise ConfigurationError(
-                    "使用Gemini API时必须设置GEMINI_API_KEY环境变量。\n"
-                    "当前值看起来像是占位符，请在 .env 文件中填入真实的 API Key"
-                )
-
-        if self.provider == "zhipu":
-            if (
-                not self.zhipu_key
-                or "your_" in self.zhipu_key.lower()
-                or "here" in self.zhipu_key.lower()
-            ):
-                raise ConfigurationError(
-                    "使用智谱API时必须设置ZHIPU_API_KEY环境变量。\n"
-                    "当前值看起来像是占位符，请在 .env 文件中填入真实的 API Key"
-                )
-
-        if self.provider == "aihubmix":
-            if (
-                not self.aihubmix_api_key
-                or "your_" in self.aihubmix_api_key.lower()
-                or "here" in self.aihubmix_api_key.lower()
-            ):
-                raise ConfigurationError(
-                    "使用AiHubMix API时必须设置AIHUBMIX_API_KEY环境变量。\n"
-                    "当前值看起来像是占位符，请在 .env 文件中填入真实的 API Key"
-                )
+        # 使用配置驱动的方式验证 API 密钥
+        provider_config = self._PROVIDER_KEY_CONFIG.get(self.provider)
+        if provider_config:
+            key_value = getattr(self, provider_config["field"])
+            self._validate_api_key(key_value, provider_config)
 
         self._validated = True
 
@@ -156,6 +191,12 @@ class ProcessingConfig:
     default_txt_file: str = field(default="novel.txt")
     output_dir: str = field(default="outputs")
     progress_file: str = field(init=False)
+    # 支持的文本文件扩展名
+    allowed_extensions: list[str] = field(default_factory=lambda: [".txt", ".md", ".text"])
+    # 上传文件大小限制（MB）
+    max_upload_file_size_mb: int = field(
+        default_factory=lambda: int(os.getenv("MAX_UPLOAD_FILE_SIZE_MB", "100"))
+    )
 
     # 编码配置
     encodings: list[str] = field(
@@ -183,6 +224,13 @@ class ProcessingConfig:
     parallel_limit: int = field(default_factory=lambda: int(os.getenv("PARALLEL_LIMIT", "5")))
     max_retry: int = field(default_factory=lambda: int(os.getenv("MAX_RETRY", "5")))
     log_every: int = field(default_factory=lambda: int(os.getenv("LOG_EVERY", "1")))
+    sub_chunk_count: int = field(default_factory=lambda: int(os.getenv("SUB_CHUNK_COUNT", "5")))
+    retry_backoff_base: int = field(
+        default_factory=lambda: int(os.getenv("RETRY_BACKOFF_BASE", "1"))
+    )
+    stream_split_threshold_mb: int = field(
+        default_factory=lambda: int(os.getenv("STREAM_SPLIT_THRESHOLD_MB", "20"))
+    )
 
     # 代理配置
     use_proxy: bool = field(
@@ -211,6 +259,15 @@ class ProcessingConfig:
         if self.max_retry < 0:
             raise ConfigurationError("MAX_RETRY不能小于0")
 
+        if self.sub_chunk_count <= 0:
+            raise ConfigurationError("SUB_CHUNK_COUNT必须大于0")
+
+        if self.retry_backoff_base < 0:
+            raise ConfigurationError("RETRY_BACKOFF_BASE不能小于0")
+
+        if self.stream_split_threshold_mb <= 0:
+            raise ConfigurationError("STREAM_SPLIT_THRESHOLD_MB必须大于0")
+
 
 # 创建全局配置实例
 _api_config = None
@@ -233,24 +290,63 @@ def get_processing_config() -> ProcessingConfig:
     return _processing_config
 
 
+def reset_api_config() -> None:
+    """重置API配置单例（主要用于测试）"""
+    global _api_config
+    _api_config = None
+
+
+def reset_processing_config() -> None:
+    """重置处理配置单例（主要用于测试）"""
+    global _processing_config
+    _processing_config = None
+
+
+def reset_all_configs() -> None:
+    """重置所有配置单例（主要用于测试）"""
+    reset_api_config()
+    reset_processing_config()
+
+
 # 为了向前兼容，保留一些常量
+# 以下函数已弃用，建议直接使用 get_processing_config()
 def get_txt_file() -> str:
-    """获取默认文本文件路径"""
+    """获取默认文本文件路径（已弃用）"""
+    warnings.warn(
+        "get_txt_file() 已弃用，请使用 get_processing_config().default_txt_file",
+        DeprecationWarning,
+        stacklevel=2,
+    )
     return get_processing_config().default_txt_file
 
 
 def get_output_dir() -> str:
-    """获取输出目录"""
+    """获取输出目录（已弃用）"""
+    warnings.warn(
+        "get_output_dir() 已弃用，请使用 get_processing_config().output_dir",
+        DeprecationWarning,
+        stacklevel=2,
+    )
     return get_processing_config().output_dir
 
 
 def get_progress_file() -> str:
-    """获取进度文件路径"""
+    """获取进度文件路径（已弃用）"""
+    warnings.warn(
+        "get_progress_file() 已弃用，请使用 get_processing_config().progress_file",
+        DeprecationWarning,
+        stacklevel=2,
+    )
     return get_processing_config().progress_file
 
 
 def get_encodings() -> list[str]:
-    """获取支持的编码列表"""
+    """获取支持的编码列表（已弃用）"""
+    warnings.warn(
+        "get_encodings() 已弃用，请使用 get_processing_config().encodings",
+        DeprecationWarning,
+        stacklevel=2,
+    )
     return get_processing_config().encodings
 
 
@@ -384,8 +480,7 @@ def create_env_file():
     env_file = ".env"
     if not os.path.exists(env_file):
         with open(env_file, "w", encoding="utf-8") as f:
-            f.write(
-                """# 小说大纲生成工具环境变量配置
+            f.write("""# 小说大纲生成工具环境变量配置
 # 复制此文件并填入你的API密钥
 
 # API提供商选择: openai, gemini, zhipu 或 aihubmix
@@ -429,8 +524,7 @@ PROXY_URL=http://127.0.0.1:7897
 # CORS_ORIGINS=http://localhost:8000,http://127.0.0.1:8000
 
 # 注意：提示词模板现已内置，使用 prompts.py 中的函数
-"""
-            )
+""")
         print(f"✓ 已创建环境变量模板文件: {env_file}")
         print("  请编辑该文件并填入你的API密钥")
 
@@ -495,16 +589,11 @@ def init_config(create_env_if_missing: bool = True):
     except ImportError:
         # 如果没有安装python-dotenv，尝试手动加载
         env_file = os.path.join(os.path.dirname(__file__), ".env")
-        if os.path.exists(env_file):
-            with open(env_file, encoding="utf-8") as f:
-                for line in f:
-                    line = line.strip()
-                    if line and not line.startswith("#") and "=" in line:
-                        key, value = line.split("=", 1)
-                        key = key.strip()
-                        # 只在环境变量不存在时才设置，保持环境变量优先
-                        if key not in os.environ:
-                            os.environ[key] = value.strip()
+        env_data = load_env_file(env_file)
+        for key, value in env_data.items():
+            # 只在环境变量不存在时才设置，保持环境变量优先
+            if key not in os.environ:
+                os.environ[key] = value
 
     # 检查并创建环境变量文件
     if (

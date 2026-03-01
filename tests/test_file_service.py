@@ -8,7 +8,7 @@ import json
 
 import pytest
 
-from exceptions import FileValidationError
+from exceptions import EncodingError, FileValidationError
 from services.file_service import FileService
 
 
@@ -96,10 +96,27 @@ class TestReadTextFile:
         # Write binary data that's not valid text
         test_file.write_bytes(b"\x80\x81\x82\x83")
 
-        with pytest.raises(UnicodeError) as excinfo:
+        with pytest.raises(EncodingError) as excinfo:
             file_service.read_text_file(test_file)
-        # UnicodeError is raised when utf-16 decoding fails without BOM
-        assert "UTF-16" in str(excinfo.value) or "无法使用任何编码读取文件" in str(excinfo.value)
+        assert "无法读取文件" in str(excinfo.value)
+
+
+class TestFileEncodingAndStreaming:
+    """Test encoding detection and streaming read."""
+
+    def test_detect_file_encoding(self, file_service, tmp_path):
+        test_file = tmp_path / "test.txt"
+        test_file.write_text("Hello 世界", encoding="utf-8")
+        encoding = file_service.detect_file_encoding(test_file)
+        assert encoding == "utf-8"
+
+    def test_iter_text_file(self, file_service, tmp_path):
+        test_file = tmp_path / "large.txt"
+        content = "abcdef" * 100
+        test_file.write_text(content, encoding="utf-8")
+        pieces = list(file_service.iter_text_file(test_file, chunk_size=32))
+        assert "".join(pieces) == content
+        assert len(pieces) > 1
 
 
 class TestWriteTextFile:
