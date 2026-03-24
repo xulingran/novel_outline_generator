@@ -334,6 +334,7 @@ class TestProcessFailingChunkAsPartial:
             service._progress_tracker.eta_estimator = service.eta_estimator
             service._progress_tracker.progress_callback = service.progress_callback
             service._outline_merger.cancel_event = service.cancel_event
+            service._chunk_processor.llm_service = service.llm_service
 
             return service
 

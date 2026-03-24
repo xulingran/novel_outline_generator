@@ -376,12 +376,14 @@ class TestProcessChunks:
     async def test_process_chunks_partial_failure(self, mock_service, sample_chunks):
         """测试部分块失败"""
 
-        async def mock_process_single(chunk, sem, progress_data):
+        async def mock_process_single(chunk, sem, processing_state, progress_data):
             if chunk.id == 2:
                 raise ProcessingError("Failed")
             return {"chunk_id": chunk.id, "plot": ["test"]}
 
-        mock_service._process_single_chunk = AsyncMock(side_effect=mock_process_single)
+        mock_service._chunk_processor.process_single_chunk = AsyncMock(
+            side_effect=mock_process_single
+        )
         mock_service.progress_service.add_progress_error = MagicMock()
         mock_service.progress_callback = MagicMock()
 
@@ -505,7 +507,7 @@ class TestProcessSingleChunk:
 
         original_call = mock_service.llm_service.call
         mock_service.llm_service.call = AsyncMock(side_effect=APIError("Always failed"))
-        mock_service._process_failing_chunk_as_partial = AsyncMock(
+        mock_service._chunk_processor.process_failing_chunk_as_partial = AsyncMock(
             return_value=[{"chunk_id": 1, "plot": ["partial"]}]
         )
         mock_service.progress_service.add_progress_error = MagicMock()
@@ -524,7 +526,7 @@ class TestProcessSingleChunk:
         await mock_service._process_single_chunk(chunk, sem, progress_data)
 
         # 应该触发部分完成处理
-        assert mock_service._process_failing_chunk_as_partial.call_count == 1
+        assert mock_service._chunk_processor.process_failing_chunk_as_partial.call_count == 1
 
         # 重置llm_service.call
         mock_service.llm_service.call = original_call
