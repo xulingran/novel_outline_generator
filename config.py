@@ -5,7 +5,6 @@
 
 import logging
 import os
-import warnings
 from dataclasses import dataclass, field
 
 from exceptions import APIKeyError, ConfigurationError
@@ -311,104 +310,6 @@ def reset_all_configs() -> None:
     reset_processing_config()
 
 
-# 为了向前兼容，保留一些常量
-# 以下函数已弃用，建议直接使用 get_processing_config()
-def get_txt_file() -> str:
-    """获取默认文本文件路径（已弃用）"""
-    warnings.warn(
-        "get_txt_file() 已弃用，请使用 get_processing_config().default_txt_file",
-        DeprecationWarning,
-        stacklevel=2,
-    )
-    return get_processing_config().default_txt_file
-
-
-def get_output_dir() -> str:
-    """获取输出目录（已弃用）"""
-    warnings.warn(
-        "get_output_dir() 已弃用，请使用 get_processing_config().output_dir",
-        DeprecationWarning,
-        stacklevel=2,
-    )
-    return get_processing_config().output_dir
-
-
-def get_progress_file() -> str:
-    """获取进度文件路径（已弃用）"""
-    warnings.warn(
-        "get_progress_file() 已弃用，请使用 get_processing_config().progress_file",
-        DeprecationWarning,
-        stacklevel=2,
-    )
-    return get_processing_config().progress_file
-
-
-def get_encodings() -> list[str]:
-    """获取支持的编码列表（已弃用）"""
-    warnings.warn(
-        "get_encodings() 已弃用，请使用 get_processing_config().encodings",
-        DeprecationWarning,
-        stacklevel=2,
-    )
-    return get_processing_config().encodings
-
-
-# 向后兼容的常量（已弃用，建议使用配置函数）
-# 保持原生类型，避免破坏旧调用方（如 isinstance/os.path.join 等）
-_processing_cfg = get_processing_config()
-TXT_FILE: str = _processing_cfg.default_txt_file
-OUTPUT_DIR: str = _processing_cfg.output_dir
-PROGRESS_FILE: str = _processing_cfg.progress_file
-ENCODINGS: list[str] = _processing_cfg.encodings
-
-try:
-    _api_cfg_for_constants = get_api_config()
-    API_PROVIDER: str = _api_cfg_for_constants.provider
-    API_BASE: str | None = _api_cfg_for_constants.base_url
-    MODEL_NAME: str = _api_cfg_for_constants.model_name
-    GEMINI_SAFETY_SETTINGS: str = _api_cfg_for_constants.gemini_safety
-except Exception as e:
-    logger.warning(f"加载API配置失败，使用默认值: {e}")
-    API_PROVIDER = "openai"
-    API_BASE = None
-    MODEL_NAME = "gpt-4o-mini"
-    GEMINI_SAFETY_SETTINGS = "BLOCK_NONE"
-
-
-# API_KEY延迟访问函数（向后兼容）
-def _get_api_key():
-    """获取API密钥（延迟验证，已弃用）"""
-    warnings.warn(
-        "API_KEY 常量已弃用，请使用 get_api_config().api_key",
-        DeprecationWarning,
-        stacklevel=2,
-    )
-    return get_api_config().api_key
-
-
-# 为了向后兼容，创建一个对象模拟API_KEY属性
-class _APIKeyWrapper:
-    """API密钥包装器，延迟验证（已弃用）"""
-
-    def __str__(self):
-        return _get_api_key()
-
-    def __repr__(self):
-        return repr(str(self))
-
-
-API_KEY = _APIKeyWrapper()
-
-# 处理配置（这些不会在导入时验证）
-MODEL_MAX_TOKENS = _processing_cfg.model_max_tokens
-TARGET_TOKENS_PER_CHUNK = _processing_cfg.target_tokens_per_chunk
-PARALLEL_LIMIT = _processing_cfg.parallel_limit
-MAX_RETRY = _processing_cfg.max_retry
-LOG_EVERY = _processing_cfg.log_every
-USE_PROXY = _processing_cfg.use_proxy
-PROXY_URL = _processing_cfg.proxy_url
-
-
 def create_env_file():
     """创建.env文件模板（如果不存在）"""
     env_file = ".env"
@@ -464,41 +365,10 @@ PROXY_URL=http://127.0.0.1:7897
 
 
 def _refresh_config_cache() -> None:
+    """重置配置单例缓存，使下次访问时重新加载环境变量"""
     global _api_config, _processing_config
-    global TXT_FILE, OUTPUT_DIR, PROGRESS_FILE, ENCODINGS
-    global API_PROVIDER, API_BASE, MODEL_NAME, GEMINI_SAFETY_SETTINGS
-    global MODEL_MAX_TOKENS, TARGET_TOKENS_PER_CHUNK, PARALLEL_LIMIT, MAX_RETRY, LOG_EVERY
-    global USE_PROXY, PROXY_URL
-
     _api_config = None
     _processing_config = None
-
-    processing_cfg = get_processing_config()
-    TXT_FILE = processing_cfg.default_txt_file
-    OUTPUT_DIR = processing_cfg.output_dir
-    PROGRESS_FILE = processing_cfg.progress_file
-    ENCODINGS = processing_cfg.encodings
-
-    try:
-        api_cfg = get_api_config()
-        API_PROVIDER = api_cfg.provider
-        API_BASE = api_cfg.base_url
-        MODEL_NAME = api_cfg.model_name
-        GEMINI_SAFETY_SETTINGS = api_cfg.gemini_safety
-    except Exception as e:
-        logger.warning(f"刷新API配置失败，使用默认值: {e}")
-        API_PROVIDER = "openai"
-        API_BASE = None
-        MODEL_NAME = "gpt-4o-mini"
-        GEMINI_SAFETY_SETTINGS = "BLOCK_NONE"
-
-    MODEL_MAX_TOKENS = processing_cfg.model_max_tokens
-    TARGET_TOKENS_PER_CHUNK = processing_cfg.target_tokens_per_chunk
-    PARALLEL_LIMIT = processing_cfg.parallel_limit
-    MAX_RETRY = processing_cfg.max_retry
-    LOG_EVERY = processing_cfg.log_every
-    USE_PROXY = processing_cfg.use_proxy
-    PROXY_URL = processing_cfg.proxy_url
 
 
 def init_config(create_env_if_missing: bool = True):

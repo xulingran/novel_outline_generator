@@ -19,10 +19,10 @@ def main():
     """启动 GUI 应用"""
     from config import init_config
     from gui.main_window import MainWindow
-    from utils import setup_logging
+    from utils import init_logging
 
     # 初始化日志
-    setup_logging()
+    init_logging()
 
     # 记录启动
     logger = logging.getLogger(__name__)
