@@ -329,6 +329,11 @@ class TestProcessFailingChunkAsPartial:
             service.total_prompt_tokens = 0
             service.total_completion_tokens = 0
             service.total_tokens = 0
+            # 同步内部组件引用
+            service._progress_tracker.progress_service = service.progress_service
+            service._progress_tracker.eta_estimator = service.eta_estimator
+            service._progress_tracker.progress_callback = service.progress_callback
+            service._outline_merger.cancel_event = service.cancel_event
 
             return service
 

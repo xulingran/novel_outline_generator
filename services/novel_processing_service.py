@@ -12,15 +12,17 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, cast
 
-from config import MAX_INPUT_TOKEN_RATIO, get_processing_config
+from config import get_processing_config
 from exceptions import APIError, ProcessingError
 from models.outline import TextChunk
 from models.processing_state import ProcessingState, ProgressData
-from prompts import chunk_prompt, merge_prompt, merge_text_prompt
+from prompts import chunk_prompt
 from services.eta_estimator import ETAEstimator
 from services.file_service import FileService
 from services.llm_service import LLMService, create_llm_service
+from services.outline_merger import OutlineMerger
 from services.progress_service import ProgressService
+from services.progress_tracker import ProgressTracker
 from splitter import split_text, split_text_stream
 from tokenizer import count_tokens
 
@@ -59,6 +61,18 @@ class NovelProcessingService:
             min_samples=3,
         )
         self.eta_estimator.set_parallel_limit(self.processing_config.parallel_limit)
+        # 内部组件
+        self._outline_merger = OutlineMerger(
+            llm_service=self.llm_service,
+            processing_config=self.processing_config,
+            cancel_event=self.cancel_event,
+        )
+        self._progress_tracker = ProgressTracker(
+            progress_callback=self.progress_callback,
+            eta_estimator=self.eta_estimator,
+            progress_service=self.progress_service,
+            processing_config=self.processing_config,
+        )
 
     def _check_cancelled(self) -> None:
         """检查任务是否被取消，如果取消则抛出 CancelledError
@@ -234,11 +248,11 @@ class NovelProcessingService:
         return outlines
 
     async def _merge_outlines(self, outlines: list[dict[str, Any]]) -> str:
-        """合并分块大纲并上报 token 统计。"""
-        if self.processing_state:
-            self.processing_state.current_phase = "merging"
+        """合并分块大纲并上报 token 统计"""
+        if self.processing_state is None:
+            raise ProcessingError("处理状态未初始化")
+        self.processing_state.current_phase = "merging"
         self._emit_progress()
-
         final_outline = await self.merge_outlines_recursive(outlines)
         self._emit_progress(
             token_usage={
@@ -337,64 +351,17 @@ class NovelProcessingService:
         resume: bool,
         encoding: str,
     ) -> ProgressData | None:
-        """Handle progress resume or initialization"""
-        if not resume:
-            return None
-
-        # 加载进度
-        progress_data = self.progress_service.load_progress()
-        if not progress_data:
-            return None
-
-        # 计算当前哈希（考虑编码）
-        chunks_hash = ProgressData.calculate_chunks_hash(
-            [c.content for c in chunks], encoding=encoding
+        """处理进度恢复（委托给 ProgressTracker）"""
+        progress_data = await self._progress_tracker.handle_progress_resume(
+            file_path=file_path,
+            chunks=chunks,
+            resume=resume,
+            encoding=encoding,
+            processing_state=self.processing_state,
         )
-
-        # 验证进度是否有效
-        if not self.progress_service.is_progress_valid(
-            progress_data, file_path, [c.content for c in chunks], chunks_hash
-        ):
-            logger.info("进度无效，将重新开始")
-            self.progress_service.clear_progress()
-            return None
-
-        # 合并部分完成的小块为完整大纲
-        # partial_outlines 存储的是小块级别的大纲，需要按 original_chunk_id 分组合并
-        if progress_data.partial_outlines:
-            partial_grouped: dict[int, list[dict[str, Any]]] = defaultdict(list)
-            existing_chunk_ids = {
-                outline.get("chunk_id")
-                for outline in progress_data.outlines
-                if isinstance(outline, dict)
-            }
-            for outline in progress_data.partial_outlines:
-                chunk_id = outline.get("original_chunk_id") or outline.get("chunk_id")
-                if chunk_id in progress_data.partial_indices:
-                    partial_grouped[chunk_id].append(outline)
-
-            # 合并每个块的小块大纲
-            for chunk_id, sub_outlines in partial_grouped.items():
-                if chunk_id in existing_chunk_ids:
-                    continue
-                merged = self._merge_partial_outlines(sub_outlines, chunk_id)
-                progress_data.outlines.append(merged)
-                existing_chunk_ids.add(chunk_id)
-                logger.debug(f"恢复时合并块 {chunk_id} 的 {len(sub_outlines)} 个小块大纲")
-
-        if self.processing_state:
-            self.processing_state.processed_chunks = progress_data.completed_count
-            self.processing_state.partial_chunks = len(progress_data.partial_indices)
-            self.processing_state.failed_chunks = len(progress_data.errors)
-            self.processing_state.total_chunks = progress_data.total_chunks
-
-        self.current_progress_data = progress_data
-        self._emit_progress()
-
-        logger.info(
-            f"恢复进度: 完全完成 {progress_data.completed_count}/{progress_data.total_chunks}, "
-            f"部分完成 {len(progress_data.partial_indices)} 个块"
-        )
+        if progress_data is not None:
+            self.current_progress_data = progress_data
+            self._emit_progress()
         return progress_data
 
     async def _process_chunks(
@@ -735,60 +702,11 @@ class NovelProcessingService:
     def _merge_partial_outlines(
         self, partial_outlines: list[dict[str, Any]], original_chunk_id: int
     ) -> dict[str, Any]:
-        """将部分完成的小块大纲合并为一个完整大纲"""
-        all_plot: list[str] = []
-        all_characters: set[str] = set()
-        all_relationships: set[tuple[str, str, str]] = set()
-
-        for outline in partial_outlines:
-            # 合并剧情（保持顺序）
-            plot = outline.get("plot", [])
-            if isinstance(plot, list):
-                all_plot.extend([p for p in plot if isinstance(p, str)])
-
-            # 合并人物
-            characters = outline.get("characters", [])
-            if isinstance(characters, list):
-                all_characters.update(c for c in characters if isinstance(c, str))
-
-            # 合并关系（保留完整的3元组：人物A、人物B、关系描述）
-            relationships = outline.get("relationships", [])
-            if isinstance(relationships, list):
-                for rel in relationships:
-                    if isinstance(rel, (list, tuple)) and len(rel) >= 3:
-                        all_relationships.add((str(rel[0]), str(rel[1]), str(rel[2])))
-
-        # 创建合并后的大纲
-        merged_outline: dict[str, Any] = {
-            "chunk_id": original_chunk_id,
-            "is_partial": True,
-            "sub_chunk_count": len(partial_outlines),
-            "plot": all_plot,
-            "characters": sorted(all_characters),
-            "relationships": [list(rel) for rel in sorted(all_relationships)],
-            "partial_outlines": partial_outlines,  # 保留原始小块大纲
-        }
-
-        # 如果有原始响应，合并它们
-        if all("raw_response" in outline for outline in partial_outlines):
-            merged_outline["raw_response"] = "\n\n".join(
-                [outline["raw_response"] for outline in partial_outlines]
-            )
-
-        # 处理时间取平均值
-        processing_times = [
-            outline.get("processing_time", 0)
-            for outline in partial_outlines
-            if "processing_time" in outline
-        ]
-        if processing_times:
-            merged_outline["processing_time"] = sum(processing_times) / len(processing_times)
-
-        return merged_outline
+        """将部分完成的小块大纲合并为一个完整大纲（委托给 OutlineMerger）"""
+        return OutlineMerger.merge_partial_outlines(partial_outlines, original_chunk_id)
 
     def _parse_llm_response(self, response: str, chunk_id: int | str) -> dict[str, Any]:
         """解析LLM响应"""
-        import json
         import re
 
         try:
@@ -831,105 +749,17 @@ class NovelProcessingService:
         level: int = 1,
         is_text_mode: bool = False,
     ) -> str:
-        """递归合并大纲"""
-        # 检查递归深度限制
-        if level > self._MAX_MERGE_LEVELS:
-            raise ProcessingError(
-                f"合并层级超过最大值 {self._MAX_MERGE_LEVELS}，可能存在数据异常或递归循环"
-            )
-
-        if not outlines:
-            return ""
-
-        # 检查是否被取消
-        self._check_cancelled()
-
-        # 检查处理状态
+        """递归合并大纲（委托给 OutlineMerger）"""
         if self.processing_state is None:
             raise ProcessingError("处理状态未初始化")
-
-        # 更新合并层级
-        self.processing_state.merge_level += 1
-        self.processing_state.merge_outlines_count = len(outlines)
-        self._emit_progress()
-
-        # 判断模式
-        if not is_text_mode and len(outlines) > 0:
-            if isinstance(outlines[0], str):
-                is_text_mode = True
-            elif isinstance(outlines[0], dict) and "merged_content" in outlines[0]:
-                outlines_dicts = cast(list[dict[str, Any]], outlines)
-                outlines = [item["merged_content"] for item in outlines_dicts]
-                is_text_mode = True
-
-        # 生成合并提示
-        if is_text_mode:
-            merge_prompt_text = merge_text_prompt(cast(list[str], outlines))
-        else:
-            outlines_json = json.dumps(outlines, ensure_ascii=False)
-            merge_prompt_text = merge_prompt(outlines_json)
-
-        # 检查token数量
-        input_tokens = count_tokens(merge_prompt_text)
-        max_input_tokens = int(self.processing_config.model_max_tokens * MAX_INPUT_TOKEN_RATIO)
-
-        if input_tokens <= max_input_tokens:
-            # 直接合并
-            logger.debug(f"层级 {level}: 合并 {len(outlines)} 个大纲块")
-            llm_response = await self.llm_service.call(merge_prompt_text)
-
-            # 检查是否被取消（在LLM调用后）
-            self._check_cancelled()
-
-            # 累计token使用情况
-            self._accumulate_token_usage(llm_response.token_usage, "合并")
-
-            # 减少合并层级
-            self.processing_state.merge_level -= 1
-            self._emit_progress()
-            return llm_response.content
-
-        # 需要拆分
-        logger.warning(f"层级 {level}: 输入过大，拆分为多个批次")
-        batch_size = max(1, int(max_input_tokens / (input_tokens / len(outlines)) * 0.8))
-
-        # 分批处理
-        batches = []
-        for i in range(0, len(outlines), batch_size):
-            batches.append(outlines[i : i + batch_size])
-
-        # 更新批次信息
-        self.processing_state.merge_batch_total = len(batches)
-        self.processing_state.merge_batch_current = 0
-        self._emit_progress()
-
-        # 递归处理每批
-        merged_batches = []
-        for idx, batch in enumerate(batches, 1):
-            # 检查是否被取消
-            self._check_cancelled()
-
-            # 更新当前批次
-            self.processing_state.merge_batch_current = idx
-            self._emit_progress()
-            logger.debug(f"处理批次 {idx}/{len(batches)}")
-            merged = await self.merge_outlines_recursive(batch, level + 1, is_text_mode)
-            merged_batches.append(merged)
-
-        # 如果只有一个批次，直接返回
-        if len(merged_batches) == 1:
-            # 减少合并层级
-            self.processing_state.merge_level -= 1
-            self._emit_progress()
-            return merged_batches[0]
-
-        # 合并批次结果
-        logger.debug(f"合并 {len(merged_batches)} 个批次的结果")
-        result = await self.merge_outlines_recursive(merged_batches, level + 1, is_text_mode=True)
-        # 减少合并层级
-        self.processing_state.merge_level -= 1
-        self._emit_progress()
-        return result
+        return await self._outline_merger.merge_outlines_recursive(
+            outlines=outlines,
+            processing_state=self.processing_state,
+            emit_progress_fn=self._emit_progress,
+            accumulate_tokens_fn=self._accumulate_token_usage,
+            level=level,
+            is_text_mode=is_text_mode,
+        )
 
     async def _save_results(
         self, outlines: list[dict[str, Any]], final_outline: str, original_file: str
@@ -1084,41 +914,12 @@ class NovelProcessingService:
         token_usage: dict[str, int] | None = None,
         partial_info: str | None = None,
     ) -> None:
-        """向外部回调当前进度，便于 Web UI 实时显示。
-        设计为尽量轻量、容错，不影响主流程。
-        """
-        if not self.progress_callback or not self.processing_state:
-            return
-
-        # 提取基本计数
-        total = self.processing_state.total_chunks or 0
-        completed = self.processing_state.processed_chunks
-        failed = self.processing_state.failed_chunks
-        partial = self.processing_state.partial_chunks
-
-        # 计算进度（包含部分完成的权重）
-        partial_weight = self._calculate_partial_weight(partial)
-        effective_completed = completed + partial_weight
-        progress = (effective_completed / total) if total > 0 else 0.0
-
-        # 计算ETA
-        eta_result = self.eta_estimator.estimate(
-            total_chunks=total,
-            completed_chunks=completed,
-            failed_chunks=failed,
-        )
-
-        # 构建并发送payload
-        payload = self._build_progress_payload(
-            progress=progress,
-            completed=completed,
-            failed=failed,
-            partial=partial,
-            total=total,
-            eta_result=eta_result,
+        """向外部回调当前进度（委托给 ProgressTracker）"""
+        self._progress_tracker.emit_progress(
+            processing_state=self.processing_state,
+            current_progress_data=self.current_progress_data,
             chunk_id=chunk_id,
             error=error,
             token_usage=token_usage,
             partial_info=partial_info,
         )
-        self._safe_emit_progress(payload)

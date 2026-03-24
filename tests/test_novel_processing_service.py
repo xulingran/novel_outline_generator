@@ -34,6 +34,10 @@ def mock_service():
     service.force_complete = False
     # 确保cancel_event.is_set()返回False
     service.cancel_event.is_set.return_value = False
+    # 同步内部组件引用（测试替换了服务属性后需同步）
+    service._progress_tracker.progress_service = service.progress_service
+    service._progress_tracker.eta_estimator = service.eta_estimator
+    service._outline_merger.cancel_event = service.cancel_event
     yield service
 
 

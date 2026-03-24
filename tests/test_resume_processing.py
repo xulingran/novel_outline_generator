@@ -37,6 +37,7 @@ async def test_resume_processes_remaining_chunks():
     service.progress_service.is_progress_valid.return_value = True
     service.progress_service.clear_progress = MagicMock()
     service.progress_service.finalize_progress = MagicMock()
+    service._progress_tracker.progress_service = service.progress_service
 
     service._load_and_validate_file = AsyncMock(return_value=("content", "utf-8"))
     service._split_text_into_chunks = MagicMock(return_value=chunks)
