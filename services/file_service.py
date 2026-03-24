@@ -81,13 +81,22 @@ class FileService:
             logger.error(f"读取文件失败: {file_path}, 错误: {e}")
             raise
 
-    def detect_file_encoding(self, file_path: str | Path) -> str:
-        """探测文件编码（仅基于文件前缀样本）。"""
-        file_path = validate_file_path(
-            file_path,
-            allowed_extensions=self.processing_config.allowed_extensions,
-            max_size_mb=self.processing_config.max_upload_file_size_mb,
-        )
+    def detect_file_encoding(self, file_path: str | Path, skip_validation: bool = False) -> str:
+        """探测文件编码（仅基于文件前缀样本）。
+
+        Args:
+            file_path: 文件路径
+            skip_validation: 是否跳过文件验证（用于内部调用时避免重复验证）
+
+        Returns:
+            str: 检测到的编码
+        """
+        if not skip_validation:
+            file_path = validate_file_path(
+                file_path,
+                allowed_extensions=self.processing_config.allowed_extensions,
+                max_size_mb=self.processing_config.max_upload_file_size_mb,
+            )
         try:
             return detect_text_encoding(file_path, self.processing_config.encodings)
         except UnicodeDecodeError as e:
@@ -102,7 +111,8 @@ class FileService:
             allowed_extensions=self.processing_config.allowed_extensions,
             max_size_mb=self.processing_config.max_upload_file_size_mb,
         )
-        encoding = self.detect_file_encoding(file_path)
+        # 跳过内部验证，因为已经在外部验证过
+        encoding = self.detect_file_encoding(file_path, skip_validation=True)
         with open(file_path, encoding=encoding) as file_obj:
             while True:
                 data = file_obj.read(chunk_size)

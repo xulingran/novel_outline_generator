@@ -38,20 +38,51 @@ class ProcessingError(NovelOutlineError):
 
 
 class APIError(NovelOutlineError):
-    """API调用错误"""
+    """API调用错误
 
-    def __init__(self, message: str, error_code: str | None = None, is_retryable: bool = False):
+    使用示例:
+        # 简单的API错误
+        raise APIError("请求超时")
+
+        # 带错误代码和重试标志的错误
+        raise APIError(
+            message="服务暂不可用",
+            error_code="SERVICE_UNAVAILABLE",
+            is_retryable=True
+        )
+
+        # 带详细信息的错误
+        raise APIError(
+            message="请求失败",
+            error_code="INVALID_REQUEST",
+            details="请求参数格式不正确"
+        )
+    """
+
+    def __init__(
+        self,
+        message: str,
+        error_code: str | None = None,
+        is_retryable: bool = False,
+        details: str | None = None,
+    ):
         self.error_code = error_code
         self.is_retryable = is_retryable
-        super().__init__(message)
+        super().__init__(message, details=details)
 
 
 class RateLimitError(APIError):
     """API速率限制错误"""
 
-    def __init__(self, message: str, retry_after: int | None = None):
+    def __init__(
+        self,
+        message: str,
+        retry_after: int | None = None,
+        error_code: str | None = None,
+        details: str | None = None,
+    ):
         self.retry_after = retry_after
-        super().__init__(message, is_retryable=True)
+        super().__init__(message, error_code=error_code, is_retryable=True, details=details)
 
 
 class TokenLimitError(NovelOutlineError):

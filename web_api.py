@@ -30,6 +30,7 @@ from config import load_env_file as load_env_file_from_config
 from services.novel_processing_service import NovelProcessingService
 from services.task_queue import QueueTask, get_global_queue
 from services.token_estimator import estimate_tokens
+from utils import init_logging
 
 if TYPE_CHECKING:
     from services.job_manager import JobManager
@@ -57,9 +58,16 @@ else:
 
             def cleanup_expired(self, now: float) -> int:
                 cutoff_time = now - self.max_age_hours * 3600
-                expired_ids = [
-                    job_id for job_id, job in self.jobs.items() if job.created_at < cutoff_time
-                ]
+                expired_ids = []
+                for job_id, job in self.jobs.items():
+                    # 安全地获取created_at，支持对象属性或字典访问
+                    created_at: float
+                    if isinstance(job, dict):
+                        created_at = job.get("created_at", 0.0)
+                    else:
+                        created_at = getattr(job, "created_at", 0.0)
+                    if created_at < cutoff_time:
+                        expired_ids.append(job_id)
                 for job_id in expired_ids:
                     del self.jobs[job_id]
                 return len(expired_ids)
@@ -72,13 +80,23 @@ else:
                 removed = 0
 
                 def _by_age(statuses: tuple[str, ...]) -> list[tuple[str, Any]]:
+                    def _get_status(job: Any) -> str:
+                        if isinstance(job, dict):
+                            return job.get("status", "")
+                        return getattr(job, "status", "")
+
+                    def _get_created_at(job: Any) -> float:
+                        if isinstance(job, dict):
+                            return job.get("created_at", 0.0)
+                        return getattr(job, "created_at", 0.0)
+
                     return sorted(
                         (
                             (job_id, job)
                             for job_id, job in self.jobs.items()
-                            if job.status in statuses
+                            if _get_status(job) in statuses
                         ),
-                        key=lambda item: item[1].created_at,
+                        key=lambda item: _get_created_at(item[1]),
                     )
 
                 for statuses in (("success", "error"), ("pending",), ("running",)):
@@ -95,6 +113,11 @@ else:
 
 
 logger = logging.getLogger(__name__)
+
+# 先加载 .env 再读取 CORS 配置，避免导入时拿到过期默认值。
+# 注意：lifespan 中也会调用一次 init_config，用于确保 ASGI worker 启动后
+# 读取到最新的环境变量（如容器注入的环境变量）。
+init_config(create_env_if_missing=False)
 
 
 def format_token_usage_log(token_usage: dict[str, Any], prefix: str = "合并完成，") -> str:
@@ -121,10 +144,26 @@ _UPLOAD_ROOT = UPLOAD_DIR.resolve()
 # CORS 允许的来源，可通过环境变量配置
 # 默认允许本地开发常用端口，生产环境应配置具体域名
 def _load_cors_origins() -> list[str]:
-    """Load CORS origins, translating file:// to null for browser Origin headers."""
-    raw = os.getenv(
-        "CORS_ORIGINS", "http://localhost:8000,http://127.0.0.1:8000,http://localhost:3000,null"
-    )
+    """Load CORS origins, translating file:// to null for browser Origin headers.
+
+    生产环境配置：
+    - 设置 PRODUCTION=true 启用严格模式
+    - 设置 CORS_ORIGINS 为具体的生产域名
+    """
+    is_production = os.getenv("PRODUCTION", "false").lower() == "true"
+
+    if is_production:
+        # 生产环境：只读取环境变量，不允许默认值
+        raw = os.getenv("CORS_ORIGINS", "")
+        if not raw:
+            logger.warning("生产环境未配置CORS_ORIGINS，将拒绝所有跨域请求")
+            return []
+    else:
+        # 开发环境：使用默认配置
+        raw = os.getenv(
+            "CORS_ORIGINS", "http://localhost:8000,http://127.0.0.1:8000,http://localhost:3000,null"
+        )
+
     origins: list[str] = []
     for origin in raw.split(","):
         origin = origin.strip()
@@ -132,7 +171,12 @@ def _load_cors_origins() -> list[str]:
             continue
         if origin == "file://":
             origin = "null"
+        # 生产环境安全检查：过滤掉危险的来源
+        if is_production and origin in ("null", "*"):
+            logger.warning(f"生产环境忽略不安全的CORS来源: {origin}")
+            continue
         origins.append(origin)
+
     # Preserve order but drop duplicates
     return list(dict.fromkeys(origins))
 
@@ -162,18 +206,37 @@ rate_limiter = RateLimiter()
 UPLOAD_FILE_PARAM = File(...)
 UPLOAD_FILES_PARAM = File(...)
 
+# 敏感信息关键词（用于掩码处理）
+_SENSITIVE_KEYWORDS: set[str] = {"KEY", "SECRET", "TOKEN", "PASSWORD", "CREDENTIAL", "AUTH"}
+
+
+def _mask_sensitive_value(key: str, value: str) -> str:
+    """对敏感值（如 API Key、密码等）进行掩码处理
+
+    Args:
+        key: 配置项的键名
+        value: 配置项的值
+
+    Returns:
+        掩码后的值（如果是敏感信息）或原值
+    """
+    key_upper = key.upper()
+    if not any(keyword in key_upper for keyword in _SENSITIVE_KEYWORDS):
+        return value
+
+    if not value:
+        return ""
+
+    # 对敏感值进行掩码：保留前4和后4位，中间用*替换
+    if len(value) <= 8:
+        return "********"
+
+    return value[:4] + "*" * (len(value) - 8) + value[-4:]
+
 
 def load_env_file() -> dict[str, str]:
+    """读取 .env 原始配置值（不掩码）。"""
     return load_env_file_from_config(str(ENV_PATH))
-
-
-def mask_value(key: str, value: str) -> str:
-    """对敏感值（如 API Key）进行掩码处理"""
-    if "KEY" in key.upper():
-        if not value:
-            return ""
-        return "*" * max(4, len(value) - 4) + value[-4:]
-    return value
 
 
 class ProcessRequest(BaseModel):
@@ -350,7 +413,10 @@ def cleanup_uploads(protected_paths: set[Path] | None = None) -> int:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Load configuration on startup (without creating .env file as side effect)
+    # 显式初始化日志系统
+    init_logging()
+    # 再次加载配置，确保 ASGI worker 启动后注入的环境变量（如容器 env）被拾取。
+    # 模块级已调用过一次（用于 CORS 计算），此处刷新单例缓存。
     init_config(create_env_if_missing=False)
     startup_cleanup_task()
 
@@ -385,7 +451,7 @@ app.add_middleware(
 def get_env() -> dict[str, Any]:
     data = load_env_file()
     # 只返回掩码后的数据，防止API密钥泄露
-    masked = {k: mask_value(k, v) for k, v in data.items()}
+    masked = {k: _mask_sensitive_value(k, v) for k, v in data.items()}
     return {"env": masked}
 
 
@@ -415,6 +481,15 @@ async def upload_file(request: Request, file: UploadFile = UPLOAD_FILE_PARAM):
     safe_filename = sanitize_filename(file.filename)
     UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
     dest = UPLOAD_DIR / safe_filename
+
+    # 验证最终路径仍在上传目录内（防止路径遍历攻击）
+    try:
+        dest_resolved = dest.resolve()
+        upload_root_resolved = _UPLOAD_ROOT.resolve()
+        dest_resolved.relative_to(upload_root_resolved)
+    except (ValueError, RuntimeError) as e:
+        raise HTTPException(status_code=400, detail=f"无效的文件路径: {safe_filename}") from e
+
     content = await file.read()
     max_size_bytes = processing_config.max_upload_file_size_mb * 1024 * 1024
     if len(content) > max_size_bytes:
@@ -601,7 +676,20 @@ async def start_process(request: Request, req: ProcessRequest):
     job = Job(id=job_id, file_path=req.file_path)
     job_manager.set(job_id, job)
 
-    asyncio.create_task(_run_job(job, req))
+    async def _run_job_wrapper(job: Job, req: ProcessRequest) -> None:
+        """_run_job 的包装器，捕获启动异常并记录"""
+        try:
+            await _run_job(job, req)
+        except asyncio.CancelledError:
+            # 取消错误需要向上传播
+            raise
+        except Exception as e:
+            logger.exception("Job %s 启动失败: %s", job.id, e)
+            job.status = "error"
+            job.message = f"启动失败: {str(e)}"
+            job.log(f"启动失败: {e}")
+
+    asyncio.create_task(_run_job_wrapper(job, req))
     return {"job_id": job_id}
 
 

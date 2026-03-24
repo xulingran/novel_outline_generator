@@ -1,4 +1,8 @@
 import asyncio
+import json
+import os
+import subprocess
+import sys
 import time
 from pathlib import Path
 from types import SimpleNamespace
@@ -33,10 +37,35 @@ def test_get_env():
     # 验证API密钥已被掩码处理
     if "OPENAI_API_KEY" in env_data:
         masked_key = env_data["OPENAI_API_KEY"]
-        # 掩码后的密钥应该以 * 开头
-        assert masked_key.startswith("*")
-        # 掩码后的密钥不应该以 sk- 开头（原始格式）
-        assert not masked_key.startswith("sk-")
+        # 新掩码格式：保留前4位 + 星号 + 后4位，中间应含有星号
+        assert "*" in masked_key
+
+
+def test_cors_origins_load_after_env_init(tmp_path):
+    """导入 web_api 时应先加载 .env，再计算 CORS_ORIGINS。"""
+    env_file = tmp_path / ".env"
+    env_file.write_text(
+        "PRODUCTION=true\nCORS_ORIGINS=https://prod.example.com\n",
+        encoding="utf-8",
+    )
+
+    project_root = Path(__file__).resolve().parents[1]
+    env = os.environ.copy()
+    env.pop("PRODUCTION", None)
+    env.pop("CORS_ORIGINS", None)
+    env["PYTHONPATH"] = str(project_root)
+
+    code = "import json, web_api; print(json.dumps(web_api.CORS_ORIGINS))"
+    completed = subprocess.run(
+        [sys.executable, "-c", code],
+        cwd=tmp_path,
+        env=env,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    origins = json.loads(completed.stdout.strip().splitlines()[-1])
+    assert origins == ["https://prod.example.com"]
 
 
 def test_upload_file_success():
@@ -341,8 +370,9 @@ def test_load_env_file_and_mask(tmp_path, monkeypatch):
     data = web_api.load_env_file()
     assert data["OPENAI_API_KEY"] == "sk-test-key"
     assert data["OTHER"] == "value"
-    assert web_api.mask_value("OPENAI_API_KEY", "sk-test-key").startswith("*")
-    assert web_api.mask_value("OTHER", "value") == "value"
+    # 新掩码格式：前4位 + 星号 + 后4位（_mask_sensitive_value 取代旧 mask_value）
+    assert "*" in web_api._mask_sensitive_value("OPENAI_API_KEY", "sk-test-key")
+    assert web_api._mask_sensitive_value("OTHER", "value") == "value"
 
 
 def test_rate_limiter_window_cleanup(monkeypatch):

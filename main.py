@@ -14,10 +14,11 @@ from exceptions import APIKeyError, ConfigurationError, NovelOutlineError
 from services.file_service import FileService
 from services.novel_processing_service import NovelProcessingService
 from services.progress_service import ProgressService
-from utils import setup_logging
+from utils import init_logging
 from validators import validate_file_path
 
-setup_logging()
+# 显式初始化日志系统
+init_logging()
 
 logger = logging.getLogger(__name__)
 

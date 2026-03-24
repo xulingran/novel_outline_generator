@@ -11,6 +11,7 @@ from exceptions import FileValidationError
 from validators import (
     sanitize_filename,
     validate_api_provider,
+    validate_encoding_list,
     validate_file_path,
     validate_non_negative_int,
     validate_output_dir,
@@ -79,6 +80,24 @@ class TestValidateApiProvider:
         with pytest.raises(FileValidationError):
             validate_api_provider("invalid_provider")
 
+    def test_non_string_provider(self):
+        """Non-string provider should raise exception"""
+        with pytest.raises(FileValidationError):
+            validate_api_provider(123)  # type: ignore[arg-type]
+
+
+class TestValidateEncodingList:
+    """Test validate_encoding_list function"""
+
+    def test_mixed_type_encodings(self):
+        """Mixed type list should keep valid encodings and skip invalid types"""
+        assert validate_encoding_list(["utf-8", 123]) == ["utf-8"]  # type: ignore[list-item]
+
+    def test_non_list_encodings(self):
+        """Non-list input should raise exception"""
+        with pytest.raises(FileValidationError):
+            validate_encoding_list("utf-8")  # type: ignore[arg-type]
+
 
 class TestValidatePositiveInt:
     """Test validate_positive_int function"""
@@ -98,6 +117,11 @@ class TestValidatePositiveInt:
         with pytest.raises(FileValidationError):
             validate_positive_int(-1, "test")
 
+    def test_non_int(self):
+        """Non-int should raise exception"""
+        with pytest.raises(FileValidationError):
+            validate_positive_int("1", "test")  # type: ignore[arg-type]
+
 
 class TestValidateNonNegativeInt:
     """Test validate_non_negative_int function"""
@@ -111,6 +135,11 @@ class TestValidateNonNegativeInt:
         """Negative should raise exception"""
         with pytest.raises(FileValidationError):
             validate_non_negative_int(-1, "test")
+
+    def test_non_int(self):
+        """Non-int should raise exception"""
+        with pytest.raises(FileValidationError):
+            validate_non_negative_int("0", "test")  # type: ignore[arg-type]
 
 
 class TestSanitizeFilename:

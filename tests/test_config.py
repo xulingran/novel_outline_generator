@@ -10,7 +10,11 @@ import pytest
 from config import (
     API_KEY,
     API_PROVIDER,
+    ENCODINGS,
+    OUTPUT_DIR,
+    PROGRESS_FILE,
     SUPPORTED_API_PROVIDERS,
+    TXT_FILE,
     APIConfig,
     ProcessingConfig,
     _APIKeyWrapper,
@@ -621,6 +625,14 @@ class TestBackwardCompatibility:
         """测试API_PROVIDER常量"""
         assert isinstance(API_PROVIDER, str)
         assert API_PROVIDER in SUPPORTED_API_PROVIDERS
+
+    def test_legacy_constants_keep_native_types(self):
+        """测试兼容常量保持原生类型，避免旧调用方崩溃"""
+        assert isinstance(TXT_FILE, str)
+        assert isinstance(OUTPUT_DIR, str)
+        assert isinstance(PROGRESS_FILE, str)
+        assert isinstance(ENCODINGS, list)
+        assert os.path.join(OUTPUT_DIR, "test.txt").endswith("test.txt")
 
     def test_api_key_wrapper(self):
         """测试API_KEY包装器"""

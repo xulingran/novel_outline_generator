@@ -6,12 +6,13 @@
 import asyncio
 import json
 import logging
+from collections import defaultdict
 from collections.abc import Callable
 from datetime import datetime
 from pathlib import Path
 from typing import Any, cast
 
-from config import get_processing_config
+from config import MAX_INPUT_TOKEN_RATIO, get_processing_config
 from exceptions import APIError, ProcessingError
 from models.outline import TextChunk
 from models.processing_state import ProcessingState, ProgressData
@@ -28,6 +29,8 @@ logger = logging.getLogger(__name__)
 
 class NovelProcessingService:
     """小说处理服务类"""
+
+    _MAX_MERGE_LEVELS: int = 10  # 最大递归深度限制
 
     def __init__(
         self,
@@ -56,6 +59,16 @@ class NovelProcessingService:
             min_samples=3,
         )
         self.eta_estimator.set_parallel_limit(self.processing_config.parallel_limit)
+
+    def _check_cancelled(self) -> None:
+        """检查任务是否被取消，如果取消则抛出 CancelledError
+
+        Raises:
+            asyncio.CancelledError: 任务已被取消
+        """
+        if self.cancel_event.is_set():
+            logger.info("任务已被取消")
+            raise asyncio.CancelledError()
 
     def _accumulate_token_usage(
         self, token_usage: dict[str, int] | None, context: str = ""
@@ -349,8 +362,6 @@ class NovelProcessingService:
         # 合并部分完成的小块为完整大纲
         # partial_outlines 存储的是小块级别的大纲，需要按 original_chunk_id 分组合并
         if progress_data.partial_outlines:
-            from collections import defaultdict
-
             partial_grouped: dict[int, list[dict[str, Any]]] = defaultdict(list)
             existing_chunk_ids = {
                 outline.get("chunk_id")
@@ -428,10 +439,10 @@ class NovelProcessingService:
 
             # 处理异常
             successful_outlines: list[dict[str, Any]] = []
-            cancelled_error: asyncio.CancelledError | None = None
+            has_cancelled = False
             for idx, result in enumerate(outlines, 1):
                 if isinstance(result, asyncio.CancelledError):
-                    cancelled_error = result
+                    has_cancelled = True
                     continue
                 if isinstance(result, Exception):
                     logger.error(f"块 {idx} 处理失败: {result}")
@@ -442,27 +453,32 @@ class NovelProcessingService:
                 else:
                     successful_outlines.append(cast(dict[str, Any], result))
 
-            # 检查是否强制完成（忽略未完成的块）
-            if cancelled_error is not None:
-                if self.force_complete:
-                    logger.info("强制完成模式：忽略未完成的块，继续合并已有结果")
-                else:
-                    raise cancelled_error
+            # 检查是否被取消（如果不是强制完成模式则重新抛出）
+            if has_cancelled and not self.force_complete:
+                raise asyncio.CancelledError()
+
+            if has_cancelled and self.force_complete:
+                logger.info("强制完成模式：忽略未完成的块，继续合并已有结果")
 
             completed_successfully = True
+
         except asyncio.CancelledError:
+            # 记录取消状态但不吞掉异常
+            logger.info("处理被取消")
             raise
         except Exception as e:
+            # 捕获所有其他异常，保留完整异常链
+            logger.exception("处理文本块时发生错误")
             raise ProcessingError(f"处理文本块失败: {str(e)}") from e
         finally:
-            if completed_successfully:
-                # 保存最终进度并清理（仅在成功完成时）
-                self.progress_service.finalize_progress(progress_data)
-            else:
-                try:
+            # 无论成功与否都尝试保存进度
+            try:
+                if completed_successfully:
+                    self.progress_service.finalize_progress(progress_data)
+                else:
                     self.progress_service.save_progress(progress_data)
-                except Exception as e:
-                    logger.exception("Failed to persist progress after interruption: %s", e)
+            except Exception as save_err:
+                logger.exception("保存进度失败: %s", save_err)
 
         # 按chunk_id排序
         successful_outlines.sort(key=lambda x: x.get("chunk_id", 0))
@@ -478,9 +494,7 @@ class NovelProcessingService:
             raise ProcessingError("处理状态未初始化")
 
         # 检查是否被取消
-        if self.cancel_event.is_set():
-            logger.info("任务已被取消")
-            raise asyncio.CancelledError()
+        self._check_cancelled()
 
         processing_state = self.processing_state
         async with sem:
@@ -492,9 +506,7 @@ class NovelProcessingService:
             for attempt in range(1, self.processing_config.max_retry + 1):
                 try:
                     # 检查是否被取消
-                    if self.cancel_event.is_set():
-                        logger.info("任务已被取消")
-                        raise asyncio.CancelledError()
+                    self._check_cancelled()
 
                     start_time = datetime.now()
 
@@ -506,9 +518,7 @@ class NovelProcessingService:
                     response = llm_response.content
 
                     # 检查是否被取消（在LLM调用后）
-                    if self.cancel_event.is_set():
-                        logger.info("任务已被取消")
-                        raise asyncio.CancelledError()
+                    self._check_cancelled()
 
                     # 累计token使用情况
                     self._accumulate_token_usage(llm_response.token_usage, f"块 {chunk_id}")
@@ -822,13 +832,17 @@ class NovelProcessingService:
         is_text_mode: bool = False,
     ) -> str:
         """递归合并大纲"""
+        # 检查递归深度限制
+        if level > self._MAX_MERGE_LEVELS:
+            raise ProcessingError(
+                f"合并层级超过最大值 {self._MAX_MERGE_LEVELS}，可能存在数据异常或递归循环"
+            )
+
         if not outlines:
             return ""
 
         # 检查是否被取消
-        if self.cancel_event.is_set():
-            logger.info("任务已被取消")
-            raise asyncio.CancelledError()
+        self._check_cancelled()
 
         # 检查处理状态
         if self.processing_state is None:
@@ -857,7 +871,7 @@ class NovelProcessingService:
 
         # 检查token数量
         input_tokens = count_tokens(merge_prompt_text)
-        max_input_tokens = int(self.processing_config.model_max_tokens * 0.8)
+        max_input_tokens = int(self.processing_config.model_max_tokens * MAX_INPUT_TOKEN_RATIO)
 
         if input_tokens <= max_input_tokens:
             # 直接合并
@@ -865,9 +879,7 @@ class NovelProcessingService:
             llm_response = await self.llm_service.call(merge_prompt_text)
 
             # 检查是否被取消（在LLM调用后）
-            if self.cancel_event.is_set():
-                logger.info("任务已被取消")
-                raise asyncio.CancelledError()
+            self._check_cancelled()
 
             # 累计token使用情况
             self._accumulate_token_usage(llm_response.token_usage, "合并")
@@ -895,9 +907,7 @@ class NovelProcessingService:
         merged_batches = []
         for idx, batch in enumerate(batches, 1):
             # 检查是否被取消
-            if self.cancel_event.is_set():
-                logger.info("任务已被取消")
-                raise asyncio.CancelledError()
+            self._check_cancelled()
 
             # 更新当前批次
             self.processing_state.merge_batch_current = idx
@@ -982,6 +992,91 @@ class NovelProcessingService:
 
         return self.processing_state.get_summary()
 
+    def _calculate_partial_weight(self, partial_count: int) -> float:
+        """计算部分完成块的权重贡献"""
+        if not self.current_progress_data or partial_count <= 0:
+            return 0.0
+
+        chunk_sub_counts: dict[int, int] = defaultdict(int)
+        chunk_total_sub_counts: dict[int, int] = {}
+
+        for outline in self.current_progress_data.partial_outlines:
+            original_chunk_id = outline.get("original_chunk_id") or outline.get("chunk_id")
+            if original_chunk_id in self.current_progress_data.partial_indices:
+                chunk_sub_counts[original_chunk_id] += 1
+                total_sub_chunks = outline.get("total_sub_chunks")
+                if isinstance(total_sub_chunks, int) and total_sub_chunks > 0:
+                    existing = chunk_total_sub_counts.get(original_chunk_id)
+                    if existing is None or total_sub_chunks > existing:
+                        chunk_total_sub_counts[original_chunk_id] = total_sub_chunks
+
+        partial_weight = 0.0
+        for chunk_id_for_weight, sub_count in chunk_sub_counts.items():
+            total_sub_chunks = chunk_total_sub_counts.get(
+                chunk_id_for_weight, self.processing_config.sub_chunk_count
+            )
+            partial_weight += sub_count / total_sub_chunks
+
+        return partial_weight
+
+    def _build_progress_payload(
+        self,
+        progress: float,
+        completed: int,
+        failed: int,
+        partial: int,
+        total: int,
+        eta_result: dict[str, Any],
+        chunk_id: int | None = None,
+        error: str | None = None,
+        token_usage: dict[str, int] | None = None,
+        partial_info: str | None = None,
+    ) -> dict[str, Any]:
+        """构建进度回调的数据载荷"""
+        payload: dict[str, Any] = {
+            "progress": progress,
+            "completed_chunks": completed,
+            "failed_chunks": failed,
+            "partial_chunks": partial,
+            "total_chunks": total,
+            "phase": self.processing_state.current_phase if self.processing_state else "",
+            "merge_level": self.processing_state.merge_level if self.processing_state else 0,
+            "merge_batch_current": (
+                self.processing_state.merge_batch_current if self.processing_state else 0
+            ),
+            "merge_batch_total": (
+                self.processing_state.merge_batch_total if self.processing_state else 0
+            ),
+            "merge_outlines_count": (
+                self.processing_state.merge_outlines_count if self.processing_state else 0
+            ),
+        }
+
+        # 添加可选字段
+        if eta_result.get("eta_seconds") is not None:
+            payload["eta_seconds"] = eta_result["eta_seconds"]
+            payload["eta_confidence"] = eta_result.get("confidence")
+            payload["eta_method"] = eta_result.get("method")
+        if chunk_id is not None:
+            payload["last_chunk_id"] = chunk_id
+        if error is not None:
+            payload["last_error"] = error
+        if token_usage is not None:
+            payload["token_usage"] = token_usage
+        if partial_info is not None:
+            payload["partial_info"] = partial_info
+
+        return payload
+
+    def _safe_emit_progress(self, payload: dict[str, Any]) -> None:
+        """安全地调用进度回调，避免中断主流程"""
+        if self.progress_callback is None:
+            return
+        try:
+            self.progress_callback(payload)
+        except Exception as e:
+            logger.debug(f"Progress callback failed: {e}")
+
     def _emit_progress(
         self,
         chunk_id: int | None = None,
@@ -995,74 +1090,35 @@ class NovelProcessingService:
         if not self.progress_callback or not self.processing_state:
             return
 
+        # 提取基本计数
         total = self.processing_state.total_chunks or 0
         completed = self.processing_state.processed_chunks
         failed = self.processing_state.failed_chunks
         partial = self.processing_state.partial_chunks
 
-        # 计算部分完成块的权重
-        partial_weight = 0.0
-        if self.current_progress_data and partial > 0:
-            # 按chunk_id分组统计成功的小块数量
-            from collections import defaultdict
-
-            chunk_sub_counts: dict[int, int] = defaultdict(int)
-            chunk_total_sub_counts: dict[int, int] = {}
-
-            for outline in self.current_progress_data.partial_outlines:
-                original_chunk_id = outline.get("original_chunk_id") or outline.get("chunk_id")
-                if original_chunk_id in self.current_progress_data.partial_indices:
-                    chunk_sub_counts[original_chunk_id] += 1
-                    total_sub_chunks = outline.get("total_sub_chunks")
-                    if isinstance(total_sub_chunks, int) and total_sub_chunks > 0:
-                        existing = chunk_total_sub_counts.get(original_chunk_id)
-                        if existing is None or total_sub_chunks > existing:
-                            chunk_total_sub_counts[original_chunk_id] = total_sub_chunks
-
-            # 计算总权重：按每个块实际拆分的小块总数计算
-            for chunk_id_for_weight, sub_count in chunk_sub_counts.items():
-                total_sub_chunks = chunk_total_sub_counts.get(
-                    chunk_id_for_weight, self.processing_config.sub_chunk_count
-                )
-                partial_weight += sub_count / total_sub_chunks
-
+        # 计算进度（包含部分完成的权重）
+        partial_weight = self._calculate_partial_weight(partial)
         effective_completed = completed + partial_weight
-        progress = (effective_completed / total) if total else 0.0
+        progress = (effective_completed / total) if total > 0 else 0.0
 
-        # 使用 ETA 估算器计算剩余时间
+        # 计算ETA
         eta_result = self.eta_estimator.estimate(
             total_chunks=total,
             completed_chunks=completed,
             failed_chunks=failed,
         )
 
-        payload: dict[str, Any] = {
-            "progress": progress,
-            "completed_chunks": completed,
-            "failed_chunks": failed,
-            "partial_chunks": partial,
-            "total_chunks": total,
-            "phase": self.processing_state.current_phase,
-            "merge_level": self.processing_state.merge_level,
-            "merge_batch_current": self.processing_state.merge_batch_current,
-            "merge_batch_total": self.processing_state.merge_batch_total,
-            "merge_outlines_count": self.processing_state.merge_outlines_count,
-        }
-        if eta_result["eta_seconds"] is not None:
-            payload["eta_seconds"] = eta_result["eta_seconds"]
-            payload["eta_confidence"] = eta_result["confidence"]
-            payload["eta_method"] = eta_result["method"]
-        if chunk_id is not None:
-            payload["last_chunk_id"] = chunk_id
-        if error is not None:
-            payload["last_error"] = error
-        if token_usage is not None:
-            payload["token_usage"] = token_usage
-        if partial_info is not None:
-            payload["partial_info"] = partial_info
-
-        try:
-            self.progress_callback(payload)
-        except Exception as e:
-            # 避免外部回调异常中断主流程
-            logger.debug(f"Progress callback failed: {e}")
+        # 构建并发送payload
+        payload = self._build_progress_payload(
+            progress=progress,
+            completed=completed,
+            failed=failed,
+            partial=partial,
+            total=total,
+            eta_result=eta_result,
+            chunk_id=chunk_id,
+            error=error,
+            token_usage=token_usage,
+            partial_info=partial_info,
+        )
+        self._safe_emit_progress(payload)

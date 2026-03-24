@@ -8,15 +8,43 @@ import os
 import re
 from pathlib import Path
 
-from config import SUPPORTED_API_PROVIDERS
+from config import MAX_INPUT_TOKEN_RATIO, RECOMMENDED_MAX_PARALLEL_LIMIT, SUPPORTED_API_PROVIDERS
 from exceptions import FileValidationError
 
 logger = logging.getLogger(__name__)
 
 
+def _validate_path_safety(file_path: str | Path) -> Path:
+    """规范化路径后检查 `..` 分段，返回解析后的绝对路径。
+
+    注意：此函数仅拦截规范化后仍包含 `..` 分段的路径（如相对路径中的 `../../etc`）。
+    若调用方需要将路径限制在特定目录内，应在此函数之上额外做基础目录锚定检查。
+
+    Args:
+        file_path: 文件路径
+
+    Returns:
+        Path: 解析后的绝对路径
+
+    Raises:
+        FileValidationError: 路径规范化后仍含有 `..` 分段
+    """
+    # 在解析前检查原始路径，防止路径遍历
+    path_str = str(file_path)
+    # 规范化路径分隔符后检查 ".." 模式
+    normalized_input = os.path.normpath(path_str)
+    if ".." in normalized_input.split(os.sep):
+        raise FileValidationError("检测到不安全的路径遍历")
+
+    # 解析为绝对路径
+    path_obj = Path(file_path).resolve()
+
+    return path_obj
+
+
 def validate_file_path(
     file_path: str | Path,
-    allowed_extensions: list | None = None,
+    allowed_extensions: list[str] | None = None,
     max_size_mb: int | None = None,
 ) -> Path:
     """验证文件路径的安全性
@@ -35,16 +63,11 @@ def validate_file_path(
     if isinstance(file_path, Path):
         file_path = str(file_path)
 
-    if not file_path or not isinstance(file_path, str):
+    if not file_path:
         raise FileValidationError("文件路径不能为空")
 
-    # 检查路径遍历攻击
-    normalized_path = os.path.normpath(file_path)
-    if ".." in normalized_path.split(os.sep):
-        raise FileValidationError("检测到不安全的路径遍历")
-
-    # 转换为Path对象
-    path_obj = Path(file_path)
+    # 使用安全的路径验证（绝对路径比较）
+    path_obj = _validate_path_safety(file_path)
 
     # 检查文件是否存在
     if not path_obj.exists():
@@ -80,15 +103,11 @@ def validate_output_dir(output_dir: str) -> Path:
     Returns:
         Path: 验证后的Path对象
     """
-    if not output_dir or not isinstance(output_dir, str):
+    if not output_dir:
         raise FileValidationError("输出目录路径不能为空")
 
-    # 检查路径遍历攻击
-    normalized_path = os.path.normpath(output_dir)
-    if ".." in normalized_path.split(os.sep):
-        raise FileValidationError("检测到不安全的路径遍历")
-
-    path_obj = Path(output_dir)
+    # 使用安全的路径验证（绝对路径比较）
+    path_obj = _validate_path_safety(output_dir)
 
     # 创建目录（如果不存在）
     try:
@@ -101,7 +120,7 @@ def validate_output_dir(output_dir: str) -> Path:
     return path_obj
 
 
-def validate_encoding_list(encodings: list) -> list:
+def validate_encoding_list(encodings: list[str]) -> list[str]:
     """验证编码列表
 
     Args:
@@ -131,7 +150,7 @@ def validate_encoding_list(encodings: list) -> list:
         "ascii",
     }
 
-    validated_encodings = []
+    validated_encodings: list[str] = []
     for encoding in encodings:
         if not isinstance(encoding, str):
             logger.warning(f"跳过无效的编码类型: {encoding!r} (类型: {type(encoding).__name__})")
@@ -252,8 +271,8 @@ def validate_chunk_size(chunk_size: int, max_tokens: int) -> int:
     if chunk_size >= max_tokens:
         raise FileValidationError(f"块大小({chunk_size})必须小于模型最大token数({max_tokens})")
 
-    # 建议块大小不超过最大token数的80%
-    if chunk_size > max_tokens * 0.8:
+    # 建议块大小不超过最大token数的 MAX_INPUT_TOKEN_RATIO
+    if chunk_size > max_tokens * MAX_INPUT_TOKEN_RATIO:
         import warnings
 
         warnings.warn(
@@ -277,7 +296,7 @@ def validate_parallel_limit(limit: int) -> int:
     limit = validate_positive_int(limit, "PARALLEL_LIMIT")
 
     # 建议合理的并发限制
-    if limit > 20:
+    if limit > RECOMMENDED_MAX_PARALLEL_LIMIT:
         import warnings
 
         warnings.warn(

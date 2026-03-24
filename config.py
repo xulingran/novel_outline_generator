@@ -15,6 +15,10 @@ logger = logging.getLogger(__name__)
 # 支持的API提供商列表
 SUPPORTED_API_PROVIDERS = ["openai", "gemini", "zhipu", "aihubmix"]
 
+# 项目常量
+MAX_INPUT_TOKEN_RATIO = 0.8  # 输入token占模型最大token的比例上限
+RECOMMENDED_MAX_PARALLEL_LIMIT = 20  # 建议的最大并发数
+
 
 def load_env_file(path: str = ".env") -> dict[str, str]:
     """读取 .env 文件键值（仅解析 KEY=VALUE 行）。"""
@@ -350,26 +354,20 @@ def get_encodings() -> list[str]:
 
 
 # 向后兼容的常量（已弃用，建议使用配置函数）
-# 注意：API_KEY等需要在首次访问时验证的常量，会延迟到实际使用时才验证
-# 如果需要在导入时避免验证，请直接使用配置函数
-_proc_cfg = get_processing_config()
-TXT_FILE = _proc_cfg.default_txt_file
-OUTPUT_DIR = _proc_cfg.output_dir
-PROGRESS_FILE = _proc_cfg.progress_file
-ENCODINGS = _proc_cfg.encodings
+# 保持原生类型，避免破坏旧调用方（如 isinstance/os.path.join 等）
+_processing_cfg = get_processing_config()
+TXT_FILE: str = _processing_cfg.default_txt_file
+OUTPUT_DIR: str = _processing_cfg.output_dir
+PROGRESS_FILE: str = _processing_cfg.progress_file
+ENCODINGS: list[str] = _processing_cfg.encodings
 
-# API相关配置 - 延迟验证，避免在导入时抛出异常
-# 只有在实际使用时才会调用api_key属性（会触发验证）
 try:
-    _api_cfg = get_api_config()
-    API_PROVIDER = _api_cfg.provider
-    # 不在这里验证api_key，避免导入时异常
-    # API_KEY 将通过 get_api_config().api_key 访问
-    API_BASE = _api_cfg.base_url
-    MODEL_NAME = _api_cfg.model_name
-    GEMINI_SAFETY_SETTINGS = _api_cfg.gemini_safety
+    _api_cfg_for_constants = get_api_config()
+    API_PROVIDER: str = _api_cfg_for_constants.provider
+    API_BASE: str | None = _api_cfg_for_constants.base_url
+    MODEL_NAME: str = _api_cfg_for_constants.model_name
+    GEMINI_SAFETY_SETTINGS: str = _api_cfg_for_constants.gemini_safety
 except Exception as e:
-    # 如果配置加载失败，使用默认值（向后兼容）
     logger.warning(f"加载API配置失败，使用默认值: {e}")
     API_PROVIDER = "openai"
     API_BASE = None
@@ -402,7 +400,6 @@ class _APIKeyWrapper:
 API_KEY = _APIKeyWrapper()
 
 # 处理配置（这些不会在导入时验证）
-_processing_cfg = get_processing_config()
 MODEL_MAX_TOKENS = _processing_cfg.model_max_tokens
 TARGET_TOKENS_PER_CHUNK = _processing_cfg.target_tokens_per_chunk
 PARALLEL_LIMIT = _processing_cfg.parallel_limit

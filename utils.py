@@ -96,8 +96,20 @@ def setup_logging(level=None, log_dir="logs", log_backup_days=30):
     _logging_configured = True
 
 
-# 自动配置日志（首次导入时）
-setup_logging()
+def init_logging(level=None, log_dir="logs", log_backup_days=30):
+    """显式初始化日志系统（应在应用入口处调用）
+
+    Args:
+        level: 日志级别，默认从环境变量 LOG_LEVEL 读取
+        log_dir: 日志目录，默认从环境变量 LOG_DIR 读取
+        log_backup_days: 日志保留天数，默认从环境变量 LOG_BACKUP_DAYS 读取
+
+    Returns:
+        logging.Logger: 根日志器
+    """
+    setup_logging(level, log_dir, log_backup_days)
+    return logging.getLogger()
+
 
 logger = logging.getLogger(__name__)
 
