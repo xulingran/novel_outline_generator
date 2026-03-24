@@ -8,16 +8,9 @@ from unittest.mock import patch
 import pytest
 
 from config import (
-    API_KEY,
-    API_PROVIDER,
-    ENCODINGS,
-    OUTPUT_DIR,
-    PROGRESS_FILE,
     SUPPORTED_API_PROVIDERS,
-    TXT_FILE,
     APIConfig,
     ProcessingConfig,
-    _APIKeyWrapper,
     create_env_file,
     get_api_config,
     get_processing_config,
@@ -539,22 +532,6 @@ class TestSupportedAPIProviders:
         assert "aihubmix" in SUPPORTED_API_PROVIDERS
 
 
-class TestAPIKeyWrapper:
-    """测试_APIKeyWrapper类"""
-
-    def test_api_key_wrapper_str(self):
-        """测试_APIKeyWrapper的__str__方法"""
-        with patch.dict(os.environ, {"API_PROVIDER": "openai", "OPENAI_API_KEY": "sk-test"}):
-            wrapper = _APIKeyWrapper()
-            assert str(wrapper) == "sk-test"
-
-    def test_api_key_wrapper_repr(self):
-        """测试_APIKeyWrapper的__repr__方法"""
-        with patch.dict(os.environ, {"API_PROVIDER": "openai", "OPENAI_API_KEY": "sk-test"}):
-            wrapper = _APIKeyWrapper()
-            assert repr(wrapper) == "'sk-test'"
-
-
 class TestCreateEnvFile:
     """测试create_env_file函数"""
 
@@ -616,48 +593,3 @@ MODEL_MAX_TOKENS=300000
         """测试init_config没有.env文件"""
         monkeypatch.chdir("/tmp")
         init_config(create_env_if_missing=False)
-
-
-class TestBackwardCompatibility:
-    """测试向后兼容性"""
-
-    def test_api_provider_constant(self):
-        """测试API_PROVIDER常量"""
-        assert isinstance(API_PROVIDER, str)
-        assert API_PROVIDER in SUPPORTED_API_PROVIDERS
-
-    def test_legacy_constants_keep_native_types(self):
-        """测试兼容常量保持原生类型，避免旧调用方崩溃"""
-        assert isinstance(TXT_FILE, str)
-        assert isinstance(OUTPUT_DIR, str)
-        assert isinstance(PROGRESS_FILE, str)
-        assert isinstance(ENCODINGS, list)
-        assert os.path.join(OUTPUT_DIR, "test.txt").endswith("test.txt")
-
-    def test_api_key_wrapper(self):
-        """测试API_KEY包装器"""
-        assert isinstance(API_KEY, _APIKeyWrapper)
-
-    def test_get_txt_file(self):
-        """测试get_txt_file函数"""
-        from config import get_txt_file
-
-        assert get_txt_file() == get_processing_config().default_txt_file
-
-    def test_get_output_dir(self):
-        """测试get_output_dir函数"""
-        from config import get_output_dir
-
-        assert get_output_dir() == get_processing_config().output_dir
-
-    def test_get_progress_file(self):
-        """测试get_progress_file函数"""
-        from config import get_progress_file
-
-        assert get_progress_file() == get_processing_config().progress_file
-
-    def test_get_encodings(self):
-        """测试get_encodings函数"""
-        from config import get_encodings
-
-        assert get_encodings() == get_processing_config().encodings

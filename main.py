@@ -9,7 +9,7 @@ import logging
 import webbrowser
 from pathlib import Path
 
-from config import get_api_config, get_processing_config, get_txt_file, init_config
+from config import get_api_config, get_processing_config, init_config
 from exceptions import APIKeyError, ConfigurationError, NovelOutlineError
 from services.file_service import FileService
 from services.novel_processing_service import NovelProcessingService
@@ -158,7 +158,7 @@ class NovelOutlineApp:
 
     def _get_input_file_path(self) -> str:
         """获取输入文件路径"""
-        default_file = get_txt_file()
+        default_file = get_processing_config().default_txt_file
 
         while True:
             user_input = input("\n请输入要分析的txt文件名（直接回车使用默认值）: ").strip()
