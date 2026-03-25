@@ -210,9 +210,10 @@ def merger_setup():
     cancel_event = asyncio.Event()
     emit_progress_fn = MagicMock()          # 同步 Callable[[], None]
     accumulate_tokens_fn = MagicMock()
-    processing_state = MagicMock()
-    processing_state.merge_level = 0
-    processing_state.merge_outlines_count = 0
+
+    # 使用真实的 ProcessingState，因为源码会对 merge_level 做 += 和 -= 操作
+    from models.processing_state import ProcessingState
+    processing_state = ProcessingState(file_path="test.txt", total_chunks=10)
 
     merger = OutlineMerger(
         llm_service=llm_service,
@@ -765,11 +766,11 @@ class TestLLMRegistry:
         assert "aihubmix" in providers
 
     def test_create_llm_service_with_known_provider(self, monkeypatch):
-        from services.llm_service import create_llm_service
-        import config
-        api_cfg = config.get_api_config()
-        monkeypatch.setattr(api_cfg, "provider", "openai")
-        # 只验证能实例化（不真实连接）—— 此处 DummyService 已验证工厂逻辑
+        """已注册的提供商名称应能从注册表中找到对应类"""
+        from services.llm_service import OpenAIService, _LLM_PROVIDER_REGISTRY
+        # 直接验证注册表映射而非实例化（实例化需要真实 API Key）
+        assert "openai" in _LLM_PROVIDER_REGISTRY
+        assert _LLM_PROVIDER_REGISTRY["openai"] is OpenAIService
 
     def test_create_llm_service_unknown_provider_raises(self, monkeypatch):
         from services.llm_service import create_llm_service
@@ -924,28 +925,27 @@ head -60 tests/test_web_api.py
 
 - [ ] **Step 2: 在 `tests/test_web_api.py` 末尾追加端点测试**
 
-> 注意：在现有 fixture 基础上追加。先确认现有 `client` fixture 如何定义，再以相同方式注入 mock。
+> 注意：现有 `test_web_api.py` 没有共享 `client` fixture，每个测试函数内部直接构造 `TestClient(web_api.app)`。追加时遵循相同模式，使用 `isolate_web_api_state` autouse fixture 自动隔离状态。
 
 ```python
 # 以下追加到 tests/test_web_api.py 末尾
 
-class TestEnvEndpoint:
-    """GET /env 端点测试"""
 
-    def test_get_env_returns_200(self, client):
+class TestEnvEndpointExtra:
+    """GET /env 端点额外覆盖"""
+
+    def test_get_env_response_structure(self):
+        client = TestClient(web_api.app)
         response = client.get("/env")
         assert response.status_code == 200
-
-    def test_get_env_returns_dict(self, client):
-        response = client.get("/env")
-        data = response.json()
-        assert isinstance(data, dict)
+        assert isinstance(response.json(), dict)
 
 
-class TestUploadEndpoint:
+class TestUploadEndpointExtra:
     """POST /upload 端点测试"""
 
-    def test_upload_txt_file_success(self, client, tmp_path):
+    def test_upload_txt_file_success(self, tmp_path):
+        client = TestClient(web_api.app)
         txt_file = tmp_path / "test.txt"
         txt_file.write_text("小说内容", encoding="utf-8")
         with open(txt_file, "rb") as f:
@@ -957,7 +957,8 @@ class TestUploadEndpoint:
         data = response.json()
         assert "file_path" in data or "filename" in data or "path" in data
 
-    def test_upload_non_txt_rejected(self, client, tmp_path):
+    def test_upload_non_txt_rejected(self, tmp_path):
+        client = TestClient(web_api.app)
         pdf_file = tmp_path / "test.pdf"
         pdf_file.write_bytes(b"PDF content")
         with open(pdf_file, "rb") as f:
@@ -968,35 +969,40 @@ class TestUploadEndpoint:
         assert response.status_code in (400, 422)
 
 
-class TestEstimateEndpoint:
+class TestEstimateEndpointExtra:
     """GET /estimate 端点测试"""
 
-    def test_estimate_requires_file_path(self, client):
+    def test_estimate_requires_file_path(self):
+        client = TestClient(web_api.app)
         response = client.get("/estimate")
         # 缺少必填参数，应返回 422
         assert response.status_code == 422
 
 
-class TestJobsEndpoint:
+class TestJobsEndpointExtra:
     """GET /jobs/{job_id} 端点测试"""
 
-    def test_nonexistent_job_returns_404(self, client):
+    def test_nonexistent_job_returns_404(self):
+        client = TestClient(web_api.app)
         response = client.get("/jobs/nonexistent-job-id-12345")
         assert response.status_code == 404
 
 
-class TestQueueEndpoints:
+class TestQueueEndpointsExtra:
     """队列相关端点测试"""
 
-    def test_queue_list_returns_200(self, client):
+    def test_queue_list_returns_200(self):
+        client = TestClient(web_api.app)
         response = client.get("/queue/list")
         assert response.status_code == 200
 
-    def test_queue_stats_returns_200(self, client):
+    def test_queue_stats_returns_200(self):
+        client = TestClient(web_api.app)
         response = client.get("/queue/stats")
         assert response.status_code == 200
 
-    def test_queue_clear_returns_200(self, client):
+    def test_queue_clear_returns_200(self):
+        client = TestClient(web_api.app)
         response = client.post("/queue/clear")
         assert response.status_code == 200
 ```
