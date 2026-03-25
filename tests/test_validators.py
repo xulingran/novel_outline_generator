@@ -164,3 +164,113 @@ class TestSanitizeFilename:
         long_name = "a" * 300 + ".txt"
         result = sanitize_filename(long_name)
         assert len(result) <= 255
+
+
+class TestValidateFilePathEdgeCases:
+    """Edge cases for validate_file_path"""
+
+    def test_path_is_directory_raises(self):
+        """路径是目录而非文件时应抛出异常"""
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with pytest.raises(FileValidationError, match="路径不是文件"):
+                validate_file_path(tmpdir)
+
+    def test_file_exceeds_max_size_raises(self, tmp_path):
+        """文件超过大小限制时应抛出异常"""
+        large_file = tmp_path / "large.txt"
+        large_file.write_bytes(b"x" * 1024)  # 1KB
+        with pytest.raises(FileValidationError, match="文件过大"):
+            validate_file_path(str(large_file), max_size_mb=0.0001)
+
+    def test_unsupported_extension_raises(self, tmp_path):
+        """不支持的扩展名应抛出异常"""
+        f = tmp_path / "test.xyz"
+        f.write_text("content")
+        with pytest.raises(FileValidationError, match="不支持的文件扩展名"):
+            validate_file_path(str(f), allowed_extensions=[".txt"])
+
+    def test_double_slash_path_is_normalized(self, tmp_path):
+        """双斜杠路径应被 normpath 规范化后正常访问"""
+        f = tmp_path / "test.txt"
+        f.write_text("content")
+        normalized = str(f).replace("/", "//", 1)
+        result = validate_file_path(normalized)
+        assert result.exists()
+
+
+class TestValidateOutputDirEdgeCases:
+    """Edge cases for validate_output_dir"""
+
+    def test_empty_path_raises(self):
+        """空路径应抛出异常"""
+        with pytest.raises(FileValidationError, match="路径不能为空"):
+            validate_output_dir("")
+
+
+class TestValidateEncodingListEdgeCases:
+    """Edge cases for validate_encoding_list"""
+
+    def test_unsupported_encoding_is_filtered(self):
+        """不支持的编码应被过滤掉，保留有效编码"""
+        result = validate_encoding_list(["utf-8", "xyz-unknown", "gbk"])
+        assert "utf-8" in result
+        assert "gbk" in result
+        assert "xyz-unknown" not in result
+
+    def test_all_unsupported_raises(self):
+        """全部为不支持编码时应抛出异常"""
+        with pytest.raises(FileValidationError, match="没有找到有效的编码"):
+            validate_encoding_list(["xyz-123", "abc-456"])
+
+    def test_empty_list_raises(self):
+        """空列表应抛出异常"""
+        with pytest.raises(FileValidationError):
+            validate_encoding_list([])
+
+
+class TestValidateChunkSizeAndParallelLimit:
+    """Test validate_chunk_size and validate_parallel_limit"""
+
+    def test_chunk_size_exceeds_max_tokens_raises(self):
+        """块大小超过模型最大 token 数时应抛出异常"""
+        from validators import validate_chunk_size
+
+        with pytest.raises(FileValidationError, match="块大小"):
+            validate_chunk_size(chunk_size=8192, max_tokens=4096)
+
+    def test_chunk_size_warning_near_limit(self):
+        """块大小接近模型限制时应触发 UserWarning"""
+        import warnings
+
+        from validators import validate_chunk_size
+
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            validate_chunk_size(chunk_size=7000, max_tokens=8192)
+            assert any(issubclass(warning.category, UserWarning) for warning in w)
+
+    def test_parallel_limit_exceeds_recommendation_warns(self):
+        """并发限制超过建议值时应触发 UserWarning"""
+        import warnings
+
+        from validators import validate_parallel_limit
+
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            validate_parallel_limit(21)  # RECOMMENDED_MAX_PARALLEL_LIMIT = 20，严格大于才触发
+            assert any(issubclass(warning.category, UserWarning) for warning in w)
+
+    def test_parallel_limit_at_boundary_no_warning(self):
+        """并发限制恰好等于建议值时不触发警告"""
+        import warnings
+
+        from validators import validate_parallel_limit
+
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            result = validate_parallel_limit(20)
+            user_warnings = [x for x in w if issubclass(x.category, UserWarning)]
+            assert len(user_warnings) == 0
+        assert result == 20
