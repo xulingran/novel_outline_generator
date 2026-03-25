@@ -74,3 +74,9 @@ settings.json
 
 # Git worktrees
 .worktrees/
+
+# IDE tools
+.codebuddy/
+
+# Review reports
+code_review_report.md

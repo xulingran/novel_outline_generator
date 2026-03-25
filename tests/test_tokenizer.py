@@ -160,6 +160,7 @@ class TestFallbackEncoder:
     def test_fallback_encode_decode_roundtrip(self):
         """_FallbackEncoder 的 encode/decode 应当可逆"""
         import tokenizer as tok_module
+
         fb = tok_module._FallbackEncoder()
         text = "Hello 世界"
         encoded = fb.encode(text)
@@ -169,6 +170,7 @@ class TestFallbackEncoder:
     def test_fallback_used_when_tiktoken_none(self, monkeypatch):
         """当 tiktoken 为 None 时，get_encoder 使用 FallbackEncoder"""
         import tokenizer as tok_module
+
         original_encoder = tok_module._encoder
         original_tiktoken = tok_module.tiktoken
         try:
