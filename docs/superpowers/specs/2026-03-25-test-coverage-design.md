@@ -137,15 +137,21 @@ def test_fallback_encoder_used_when_tiktoken_missing()
 def merger_fixture():
     """完整的 OutlineMerger fixture，包含所有必需依赖"""
     llm_service = AsyncMock()
-    llm_service.generate.return_value = LLMResponse(
+    llm_service.call = AsyncMock(return_value=LLMResponse(
         content="merged outline",
         token_usage={"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15}
-    )
+    ))
+    processing_config = MagicMock()
+    processing_config.model_max_tokens = 8192
     processing_state = MagicMock()
     cancel_event = asyncio.Event()
     emit_progress_fn = AsyncMock()
     accumulate_tokens_fn = MagicMock()
-    merger = OutlineMerger(llm_service=llm_service, cancel_event=cancel_event)
+    merger = OutlineMerger(
+        llm_service=llm_service,
+        processing_config=processing_config,
+        cancel_event=cancel_event,
+    )
     return merger, processing_state, emit_progress_fn, accumulate_tokens_fn
 
 class TestOutlineMerger:
@@ -229,10 +235,10 @@ def test_save_progress_creates_file(tmp_path)
 def test_load_progress_returns_saved_state(tmp_path)
 def test_load_progress_missing_file_returns_none()
 def test_load_progress_corrupted_file_tries_bak_recovery(tmp_path)
-# 注：损坏文件时会尝试 .bak 备份恢复，并生成 .corrupt_* 文件，非简单返回 None
-def test_has_partial_progress_returns_true_when_exists()
-def test_has_partial_progress_returns_false_when_missing()
-# 注：ProgressService 不提供 cleanup_expired 方法，过期清理属于 JobManager 职责
+# 注：损坏文件时优先尝试 .bak 备份恢复；无 bak 可用时删除损坏文件并返回 None
+def test_load_progress_returns_none_when_no_bak_available(tmp_path)
+# 注：ProgressService 不提供 has_partial_progress / cleanup_expired 方法
+# 用 load_progress() 返回值是否为 None 来测试"是否有历史进度"
 ```
 
 ---
