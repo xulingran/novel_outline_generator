@@ -35,7 +35,12 @@
 
 ### 1. llm_service.py（39% → 80%）
 
-**策略**：mock httpx + 可选集成测试（分两个文件）
+**策略**：各 Provider 分别 mock 对应 SDK + 可选集成测试（分两个文件）
+
+> **重要**：各 Provider 使用不同的 HTTP 客户端，不能统一 mock httpx：
+> - `OpenAIService` / `ZhipuService`：mock `self.client.chat.completions.create`
+> - `GeminiService`：mock `google.generativeai.GenerativeModel.generate_content`
+> - `AiHubMixService`：mock `requests.post`（同步调用，用 `run_in_executor` 包装）
 
 **扩充 `tests/test_llm_service.py`**
 
@@ -45,33 +50,32 @@
 
 ```python
 def test_circuit_breaker_initial_state_closed()
-def test_circuit_breaker_opens_after_threshold()      # CLOSED → OPEN
-def test_circuit_breaker_half_open_after_timeout()    # OPEN → HALF_OPEN
-def test_circuit_breaker_closes_on_success()          # HALF_OPEN → CLOSED
-def test_circuit_breaker_reopens_on_half_open_fail()  # HALF_OPEN → OPEN
+def test_circuit_breaker_stays_closed_below_threshold()   # 未达阈值时保持 CLOSED
+def test_circuit_breaker_opens_after_threshold()          # CLOSED → OPEN
+def test_circuit_breaker_half_open_after_timeout()        # OPEN → HALF_OPEN
+def test_circuit_breaker_closes_on_success()              # HALF_OPEN → CLOSED
+def test_circuit_breaker_reopens_on_half_open_fail()      # HALF_OPEN → OPEN
 def test_circuit_breaker_blocks_calls_when_open()
 ```
 
-#### 组 2 - HTTP 层 mock（各 Provider 请求构造和响应解析）
-
-使用 `unittest.mock.patch` mock `httpx.AsyncClient`：
+#### 组 2 - Provider 层 mock（各 SDK 分别 mock）
 
 ```python
-@pytest.fixture
-def mock_openai_response():
-    return {
-        "choices": [{"message": {"content": "outline content"}}],
-        "usage": {"prompt_tokens": 100, "completion_tokens": 50, "total_tokens": 150}
-    }
+# OpenAI Provider
+async def test_openai_provider_parse_response()           # mock client.chat.completions.create
+async def test_openai_provider_handles_rate_limit()       # 抛出 openai.RateLimitError
+async def test_openai_provider_handles_timeout()          # 抛出 openai.APITimeoutError
+async def test_openai_provider_no_retry_on_content_filter()
 
-async def test_openai_provider_parse_response(mock_openai_response)
-async def test_openai_provider_constructs_correct_request()
-async def test_provider_handles_rate_limit_error()      # 429 响应
-async def test_provider_handles_network_timeout()
-async def test_provider_retry_on_transient_error()      # 500/503 响应触发重试
-async def test_provider_no_retry_on_content_filter()    # ContentFilterError 不重试
-async def test_gemini_provider_parse_response()
-async def test_zhipu_provider_parse_response()
+# Gemini Provider
+async def test_gemini_provider_parse_response()           # mock GenerativeModel.generate_content
+
+# Zhipu Provider
+async def test_zhipu_provider_parse_response()            # mock client.chat.completions.create
+
+# 通用重试逻辑（通过 DummyService 子类覆盖 _call_api，沿用现有测试模式）
+async def test_provider_retry_on_transient_error()
+async def test_provider_exhausts_retries_raises()
 ```
 
 #### 组 3 - 注册机制
@@ -97,7 +101,7 @@ class TestLLMIntegration:
     async def test_real_gemini_call()
 ```
 
-**依赖**：无需新增库，使用 `unittest.mock.patch` 即可（`respx` 为可选增强）
+**依赖**：无需新增库，各 Provider 使用对应 SDK 的 mock
 
 ---
 
@@ -111,9 +115,13 @@ class TestLLMIntegration:
 def test_count_tokens_empty_string()
 def test_count_tokens_chinese_text()
 def test_count_tokens_mixed_language()
-def test_count_tokens_exceeds_model_limit_returns_capped()
-def test_tokenizer_fallback_when_tiktoken_unavailable()
 def test_count_tokens_special_characters()
+def test_estimate_tokens_from_chars_basic()           # 补充 estimate_tokens_from_chars() 覆盖
+def test_estimate_tokens_from_chars_empty_string()
+def test_truncate_by_tokens_truncates_correctly()     # truncate_by_tokens() 而非 count_tokens 截断
+def test_truncate_by_tokens_no_truncate_when_short()
+# 注：tokenizer 使用模块级单例 _encoder，fallback 测试需通过 importlib.reload 重置状态
+def test_fallback_encoder_used_when_tiktoken_missing()
 ```
 
 ---
@@ -126,18 +134,28 @@ def test_count_tokens_special_characters()
 
 ```python
 @pytest.fixture
-def mock_llm_service():
-    service = AsyncMock()
-    service.generate.return_value = LLMResponse(content="merged outline", token_usage={...})
-    return service
+def merger_fixture():
+    """完整的 OutlineMerger fixture，包含所有必需依赖"""
+    llm_service = AsyncMock()
+    llm_service.generate.return_value = LLMResponse(
+        content="merged outline",
+        token_usage={"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15}
+    )
+    processing_state = MagicMock()
+    cancel_event = asyncio.Event()
+    emit_progress_fn = AsyncMock()
+    accumulate_tokens_fn = MagicMock()
+    merger = OutlineMerger(llm_service=llm_service, cancel_event=cancel_event)
+    return merger, processing_state, emit_progress_fn, accumulate_tokens_fn
 
 class TestOutlineMerger:
     async def test_merge_single_chunk_returns_as_is()
     async def test_merge_two_chunks_calls_llm_once()
-    async def test_merge_recursive_batching()           # 超过批大小时分批合并
-    async def test_merge_respects_cancel_event()        # cancel_event 触发后抛出 CancelledError
+    async def test_merge_recursive_batching()
+    # 触发条件：mock count_tokens 使 input_tokens > model_max_tokens * MAX_INPUT_TOKEN_RATIO
+    async def test_merge_respects_cancel_event()        # cancel_event.set() 后抛出 CancelledError
     async def test_merge_partial_outlines_list()
-    async def test_merge_handles_empty_input()
+    async def test_merge_handles_empty_input()          # 测试 merge_outlines_recursive([]) 返回 ""
     async def test_merge_accumulates_token_usage()
 ```
 
@@ -190,7 +208,7 @@ class TestQueueEndpoints:
 
 ```python
 def test_validate_path_with_traversal_attack()        # ../../../etc/passwd
-def test_validate_path_with_encoded_traversal()       # URL 编码变体
+def test_validate_path_double_slash()                 # /etc//passwd（替代 URL 编码变体，更符合实际）
 def test_validate_parallel_limit_at_boundary_20()    # limit=20 触发 warning
 def test_validate_parallel_limit_exceeds_boundary()  # limit=21
 def test_validate_empty_filename_raises()
@@ -210,9 +228,11 @@ def test_validate_unsupported_extension_raises()
 def test_save_progress_creates_file(tmp_path)
 def test_load_progress_returns_saved_state(tmp_path)
 def test_load_progress_missing_file_returns_none()
-def test_load_progress_corrupted_file_returns_none()
-def test_cleanup_expired_progress_files(tmp_path)
+def test_load_progress_corrupted_file_tries_bak_recovery(tmp_path)
+# 注：损坏文件时会尝试 .bak 备份恢复，并生成 .corrupt_* 文件，非简单返回 None
 def test_has_partial_progress_returns_true_when_exists()
+def test_has_partial_progress_returns_false_when_missing()
+# 注：ProgressService 不提供 cleanup_expired 方法，过期清理属于 JobManager 职责
 ```
 
 ---
@@ -224,7 +244,13 @@ def test_has_partial_progress_returns_true_when_exists()
 3. `llm_service.py`（最复杂，单独攻克）
 4. `web_api.py`（依赖前面服务稳定后再做）
 
-每个文件完成后运行 `pytest tests/ --cov` 验证覆盖率提升，再提交。
+每个文件完成后运行以下命令验证覆盖率提升，再提交：
+
+```bash
+.venv/bin/python -m pytest tests/ --cov=. --cov-report=term-missing -q
+```
+
+> GUI 测试（`tests/test_gui/`）使用 mock customtkinter，可在无图形环境运行，纳入统计。
 
 ---
 
