@@ -342,6 +342,105 @@ class TestFinalizeProgress:
         assert not progress_file.exists()
 
 
+class TestSaveProgressEdgeCases:
+    """Edge cases for save_progress"""
+
+    def test_save_progress_exception_is_raised(
+        self, progress_service, mock_progress_data, monkeypatch
+    ):
+        """save_progress 中的异常应向外抛出"""
+
+        def failing_write(*args, **kwargs):
+            raise OSError("disk full")
+
+        monkeypatch.setattr(progress_service.file_service, "write_json_file", failing_write)
+
+        with pytest.raises(OSError, match="disk full"):
+            progress_service.save_progress(mock_progress_data)
+
+
+class TestTryRecoverProgress:
+    """Test _try_recover_progress"""
+
+    def test_try_recover_without_bak_does_nothing(self, progress_service, tmp_path):
+        """无 .bak 文件时 _try_recover_progress 静默返回"""
+        progress_file = tmp_path / "progress.json"
+        progress_file.write_text("{}")
+        # 不创建任何 .bak 文件，应静默返回无异常
+        progress_service._try_recover_progress(progress_file)
+
+    def test_try_recover_with_bak_copies_file(self, progress_service, tmp_path):
+        """有 .bak 文件时 _try_recover_progress 复制最新的备份"""
+        progress_file = tmp_path / "progress.json"
+        progress_file.write_text("{ broken }")
+
+        bak_file = tmp_path / "progress.bak"
+        bak_file.write_text('{"valid": true}')
+
+        progress_service._try_recover_progress(progress_file)
+        # progress.json 应被替换为 bak 的内容
+        assert progress_file.read_text() == '{"valid": true}'
+
+    def test_load_progress_triggers_recovery_when_read_raises(
+        self, progress_service, tmp_path, monkeypatch
+    ):
+        """read_json_file 抛出异常时触发 _try_recover_progress"""
+        progress_file = tmp_path / "progress.json"
+        progress_file.write_text("{}")
+        monkeypatch.setattr(progress_service.processing_config, "progress_file", str(progress_file))
+
+        # mock read_json_file 直接抛出异常（safe_read_json 通常会吞噬 JSON 错误）
+        def failing_read(*args, **kwargs):
+            raise OSError("permission denied")
+
+        monkeypatch.setattr(progress_service.file_service, "read_json_file", failing_read)
+
+        recover_called = []
+
+        def mock_recover(path):
+            recover_called.append(path)
+
+        monkeypatch.setattr(progress_service, "_try_recover_progress", mock_recover)
+        result = progress_service.load_progress()
+        assert result is None
+        assert len(recover_called) == 1
+
+
+class TestUpdateChunkCompletedAutoSave:
+    """Test update_chunk_completed auto-save every 5 chunks"""
+
+    def test_saves_every_5_chunks(self, progress_service, monkeypatch):
+        """每完成 5 个块时自动保存一次"""
+        save_calls = []
+
+        def mock_save(data):
+            save_calls.append(data)
+
+        monkeypatch.setattr(progress_service, "save_progress", mock_save)
+
+        progress = progress_service.create_progress("test.txt", 20, "hash")
+        for i in range(10):
+            progress_service.update_chunk_completed(progress, i, {"chunk_id": i})
+
+        # completed_count 达到 5 和 10 时各触发一次
+        assert len(save_calls) == 2
+
+    def test_no_save_below_5_chunks(self, progress_service, monkeypatch):
+        """未满 5 个块时不自动保存"""
+        save_calls = []
+
+        def mock_save(data):
+            save_calls.append(data)
+
+        monkeypatch.setattr(progress_service, "save_progress", mock_save)
+
+        progress = progress_service.create_progress("test.txt", 20, "hash")
+        for i in range(4):
+            progress_service.update_chunk_completed(progress, i, {"chunk_id": i})
+
+        assert len(save_calls) == 0
+
+
 class TestAddProgressError:
     """Test adding progress errors."""
 

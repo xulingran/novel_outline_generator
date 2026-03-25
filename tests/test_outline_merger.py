@@ -1,6 +1,7 @@
 """
 OutlineMerger 测试
 """
+
 import asyncio
 from unittest.mock import AsyncMock, MagicMock
 
@@ -185,7 +186,7 @@ async def test_merge_batching_when_token_limit_exceeded(merger_setup, monkeypatc
         # 首次调用返回超大值触发批次分割
         if call_count == 1:
             return 99999
-        return original_count_tokens(text)
+        return int(original_count_tokens(text))
 
     monkeypatch.setattr(om_module, "count_tokens", mock_count_tokens)
 
