@@ -1,7 +1,7 @@
 # 测试覆盖率提升设计文档
 
 **日期**: 2026-03-25
-**状态**: 待实施
+**状态**: 审查通过，待实施
 **目标**: 整体测试覆盖率从 58% 提升至 85%
 
 ---
@@ -82,8 +82,8 @@ async def test_provider_exhausts_retries_raises()
 
 ```python
 def test_provider_registry_registers_correctly()
-def test_get_llm_service_with_known_provider()
-def test_get_llm_service_with_unknown_provider_raises()
+def test_create_llm_service_with_known_provider()     # 工厂函数名为 create_llm_service()
+def test_create_llm_service_with_unknown_provider_raises()
 ```
 
 **新增 `tests/test_llm_integration.py`**
@@ -145,7 +145,7 @@ def merger_fixture():
     processing_config.model_max_tokens = 8192
     processing_state = MagicMock()
     cancel_event = asyncio.Event()
-    emit_progress_fn = AsyncMock()
+    emit_progress_fn = MagicMock()   # 同步调用（Callable[[], None]），非 AsyncMock
     accumulate_tokens_fn = MagicMock()
     merger = OutlineMerger(
         llm_service=llm_service,
