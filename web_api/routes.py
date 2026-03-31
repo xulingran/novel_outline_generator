@@ -1,23 +1,10 @@
-"""
-FastAPI 后端接口：
-- /env   GET 读取 .env（可视化配置查看）
-- /upload POST 上传文本文件
-- /process POST 启动小说处理（基于 NovelProcessingService）
-- /jobs/{job_id} GET 查询处理状态
-
-启动方式：
-  uvicorn web_api:app --reload --port 8000
-"""
+"""FastAPI 路由定义与应用实例"""
 
 import asyncio
 import logging
 import os
-import shutil
-import time
 import uuid
-from collections import defaultdict, deque
 from contextlib import asynccontextmanager
-from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -26,91 +13,16 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 from config import get_processing_config, init_config
-from config import load_env_file as load_env_file_from_config
-from services.novel_processing_service import NovelProcessingService
-from services.task_queue import QueueTask, get_global_queue
 from services.token_estimator import estimate_tokens
 from utils import init_logging
+from web_api.job_storage import (
+    Job,
+    _update_progress_from_info,
+    format_token_usage_log,
+)
 
 if TYPE_CHECKING:
-    from services.job_manager import JobManager
-else:
-    try:
-        from services.job_manager import JobManager
-    except ModuleNotFoundError:
-        # 回退实现：防止部署遗漏模块时 API 因导入失败无法启动
-        class JobManager:
-            """内存任务管理器（回退实现）。"""
-
-            def __init__(self, max_jobs: int = 100, max_age_hours: int = 24) -> None:
-                self.max_jobs = max_jobs
-                self.max_age_hours = max_age_hours
-                self.jobs: dict[str, Any] = {}
-
-            def get(self, job_id: str) -> Any | None:
-                return self.jobs.get(job_id)
-
-            def set(self, job_id: str, job: Any) -> None:
-                self.jobs[job_id] = job
-
-            def values(self):
-                return self.jobs.values()
-
-            def cleanup_expired(self, now: float) -> int:
-                cutoff_time = now - self.max_age_hours * 3600
-                expired_ids = []
-                for job_id, job in self.jobs.items():
-                    # 安全地获取created_at，支持对象属性或字典访问
-                    created_at: float
-                    if isinstance(job, dict):
-                        created_at = job.get("created_at", 0.0)
-                    else:
-                        created_at = getattr(job, "created_at", 0.0)
-                    if created_at < cutoff_time:
-                        expired_ids.append(job_id)
-                for job_id in expired_ids:
-                    del self.jobs[job_id]
-                return len(expired_ids)
-
-            def cleanup_excess(self) -> int:
-                if len(self.jobs) <= self.max_jobs:
-                    return 0
-
-                over_limit = len(self.jobs) - self.max_jobs
-                removed = 0
-
-                def _by_age(statuses: tuple[str, ...]) -> list[tuple[str, Any]]:
-                    def _get_status(job: Any) -> str:
-                        if isinstance(job, dict):
-                            return job.get("status", "")
-                        return getattr(job, "status", "")
-
-                    def _get_created_at(job: Any) -> float:
-                        if isinstance(job, dict):
-                            return job.get("created_at", 0.0)
-                        return getattr(job, "created_at", 0.0)
-
-                    return sorted(
-                        (
-                            (job_id, job)
-                            for job_id, job in self.jobs.items()
-                            if _get_status(job) in statuses
-                        ),
-                        key=lambda item: _get_created_at(item[1]),
-                    )
-
-                for statuses in (("success", "error"), ("pending",), ("running",)):
-                    if over_limit <= 0:
-                        break
-                    for job_id, _ in _by_age(statuses):
-                        if over_limit <= 0:
-                            break
-                        del self.jobs[job_id]
-                        over_limit -= 1
-                        removed += 1
-
-                return removed
-
+    from services.task_queue import QueueTask
 
 logger = logging.getLogger(__name__)
 
@@ -119,26 +31,35 @@ logger = logging.getLogger(__name__)
 # 读取到最新的环境变量（如容器注入的环境变量）。
 init_config(create_env_if_missing=False)
 
+UPLOAD_FILE_PARAM = File(...)
+UPLOAD_FILES_PARAM = File(...)
 
-def format_token_usage_log(token_usage: dict[str, Any], prefix: str = "合并完成，") -> str:
-    """格式化 token 使用日志
+# 敏感信息关键词（用于掩码处理）
+_SENSITIVE_KEYWORDS: set[str] = {"KEY", "SECRET", "TOKEN", "PASSWORD", "CREDENTIAL", "AUTH"}
+
+
+def _mask_sensitive_value(key: str, value: str) -> str:
+    """对敏感值（如 API Key、密码等）进行掩码处理
 
     Args:
-        token_usage: 包含 token 使用信息的字典
-        prefix: 日志前缀
+        key: 配置项的键名
+        value: 配置项的值
 
     Returns:
-        格式化后的日志字符串
+        掩码后的值（如果是敏感信息）或原值
     """
-    prompt_tokens = token_usage.get("prompt_tokens", 0)
-    completion_tokens = token_usage.get("completion_tokens", 0)
-    total_tokens = token_usage.get("total_tokens", 0)
-    return f"{prefix}Token统计: 输入={prompt_tokens:,}, 输出={completion_tokens:,}, 总计={total_tokens:,}"
+    key_upper = key.upper()
+    if not any(keyword in key_upper for keyword in _SENSITIVE_KEYWORDS):
+        return value
 
+    if not value:
+        return ""
 
-ENV_PATH = Path(".env")
-UPLOAD_DIR = Path("outputs/uploads")
-_UPLOAD_ROOT = UPLOAD_DIR.resolve()
+    # 对敏感值进行掩码：保留前4和后4位，中间用*替换
+    if len(value) <= 8:
+        return "********"
+
+    return value[:4] + "*" * (len(value) - 8) + value[-4:]
 
 
 # CORS 允许的来源，可通过环境变量配置
@@ -184,61 +105,6 @@ def _load_cors_origins() -> list[str]:
 CORS_ORIGINS = _load_cors_origins()
 
 
-class RateLimiter:
-    """简单内存限流器，按 IP 在时间窗口内计数。"""
-
-    def __init__(self) -> None:
-        self._requests: dict[str, deque[float]] = defaultdict(deque)
-
-    def check_rate_limit(self, client_ip: str, max_requests: int, window_seconds: int) -> None:
-        now = time.time()
-        window_start = now - window_seconds
-        bucket = self._requests[client_ip]
-        # 清理窗口外的请求时间戳
-        while bucket and bucket[0] < window_start:
-            bucket.popleft()
-        if len(bucket) >= max_requests:
-            raise HTTPException(status_code=429, detail="请求过于频繁，请稍后再试")
-        bucket.append(now)
-
-
-rate_limiter = RateLimiter()
-UPLOAD_FILE_PARAM = File(...)
-UPLOAD_FILES_PARAM = File(...)
-
-# 敏感信息关键词（用于掩码处理）
-_SENSITIVE_KEYWORDS: set[str] = {"KEY", "SECRET", "TOKEN", "PASSWORD", "CREDENTIAL", "AUTH"}
-
-
-def _mask_sensitive_value(key: str, value: str) -> str:
-    """对敏感值（如 API Key、密码等）进行掩码处理
-
-    Args:
-        key: 配置项的键名
-        value: 配置项的值
-
-    Returns:
-        掩码后的值（如果是敏感信息）或原值
-    """
-    key_upper = key.upper()
-    if not any(keyword in key_upper for keyword in _SENSITIVE_KEYWORDS):
-        return value
-
-    if not value:
-        return ""
-
-    # 对敏感值进行掩码：保留前4和后4位，中间用*替换
-    if len(value) <= 8:
-        return "********"
-
-    return value[:4] + "*" * (len(value) - 8) + value[-4:]
-
-
-def load_env_file() -> dict[str, str]:
-    """读取 .env 原始配置值（不掩码）。"""
-    return load_env_file_from_config(str(ENV_PATH))
-
-
 class ProcessRequest(BaseModel):
     file_path: str
     resume: bool = True
@@ -250,186 +116,26 @@ class MultipleFilesRequest(BaseModel):
     file_paths: list[str]
 
 
-@dataclass
-class Job:
-    id: str
-    file_path: str = ""
-    status: str = "pending"  # pending|running|success|error
-    message: str = ""
-    progress: float = 0.0
-    result: dict[str, Any] = field(default_factory=dict)
-    logs: list[str] = field(default_factory=list)
-    log_offset: int = 0
-    token_logged: bool = False
-    created_at: float = field(default_factory=time.time)
-
-    def log(self, text: str) -> None:
-        """Append a log line and keep list size bounded."""
-        self.logs.append(text)
-        if len(self.logs) > 200:
-            # 只保留最近 200 条，避免内存增长过快
-            # 使用 del 删除而非重新赋值，避免 list 对象变化导致前端轮询失效
-            overflow = len(self.logs) - 200
-            del self.logs[:overflow]
-            self.log_offset += overflow
-
-
-# 常量定义
-MAX_JOBS = 100
-JOB_MAX_AGE_HOURS = 24
-
-job_manager = JobManager(max_jobs=MAX_JOBS, max_age_hours=JOB_MAX_AGE_HOURS)
-# 向后兼容：JOBS 是 job_manager.jobs 的别名，测试代码使用
-JOBS: dict[str, Job] = job_manager.jobs
-_cleanup_task: asyncio.Task | None = None
-
-
-def _update_progress_from_info(
-    info: dict[str, Any],
-    target: Job | QueueTask,
-) -> None:
-    """从进度信息更新目标对象（Job 或 QueueTask）
-
-    Args:
-        info: 进度信息字典
-        target: 目标对象（Job 或 QueueTask）
-    """
-    target.progress = info.get("progress", target.progress)
-
-    # 更新结果字典中的字段
-    result_fields = [
-        "total_chunks",
-        "completed_chunks",
-        "failed_chunks",
-        "partial_chunks",
-        "partial_info",
-        "eta_seconds",
-        "eta_confidence",
-        "eta_method",
-        "phase",
-        "merge_level",
-        "merge_batch_current",
-        "merge_batch_total",
-        "merge_outlines_count",
-    ]
-
-    for field_name in result_fields:
-        if info.get(field_name) is not None:
-            target.result[field_name] = info[field_name]
-
-    # 处理块完成/失败日志
-    if info.get("last_chunk_id") is not None:
-        if info.get("last_error"):
-            target.log(f"块 {info['last_chunk_id']} 失败: {info['last_error']}")
-        else:
-            target.log(f"块 {info['last_chunk_id']} 完成")
-
-    # 处理 token 使用统计（只记录一次）
-    if info.get("token_usage") and not target.token_logged:
-        token_usage = info["token_usage"]
-        target.result["token_usage"] = token_usage
-        target.log(format_token_usage_log(token_usage, "合并完成，"))
-        target.token_logged = True
-
-
-async def _periodic_job_cleanup() -> None:
-    """定期清理过期和过多的job任务"""
-    while True:
-        try:
-            await asyncio.sleep(60)  # 每60秒检查一次
-            cleanup_expired_jobs()
-            cleanup_excess_jobs()
-        except asyncio.CancelledError:
-            break
-        except Exception as e:
-            logger.warning(f"定期清理job失败: {e}")
-
-
-def startup_cleanup_task() -> None:
-    """启动后台清理任务"""
-    global _cleanup_task
-    if _cleanup_task is None or _cleanup_task.done():
-        _cleanup_task = asyncio.create_task(_periodic_job_cleanup())
-
-
-def cleanup_expired_jobs() -> None:
-    """清理超过最大存活时间的job"""
-    job_manager.max_age_hours = JOB_MAX_AGE_HOURS
-    expired_count = job_manager.cleanup_expired(now=time.time())
-    if expired_count:
-        logger.debug(f"清理了 {expired_count} 个过期job")
-
-
-def cleanup_excess_jobs() -> None:
-    """清理过多的job，防止内存泄漏"""
-    job_manager.max_jobs = MAX_JOBS
-    job_manager.cleanup_excess()
-
-
-def _resolve_upload_path(path: str) -> Path | None:
-    """返回在 uploads 目录下的路径，其他情况返回 None。"""
-    try:
-        resolved = Path(path).resolve()
-    except (OSError, RuntimeError):
-        return None
-
-    if resolved == _UPLOAD_ROOT:
-        return None
-
-    try:
-        resolved.relative_to(_UPLOAD_ROOT)
-        return resolved
-    except ValueError:
-        return None
-
-
-def cleanup_uploads(protected_paths: set[Path] | None = None) -> int:
-    """删除上传目录中的内容，保留目录本身。
-
-    Args:
-        protected_paths: 需要保留的上传文件路径集合（已解析的绝对路径）
-    """
-    if not UPLOAD_DIR.exists():
-        return 0
-
-    keep = {p.resolve() for p in protected_paths} if protected_paths else set()
-
-    cleaned = 0
-    for item in UPLOAD_DIR.iterdir():
-        item_path = item.resolve()
-        if any(item_path == kept_path or item_path in kept_path.parents for kept_path in keep):
-            continue
-        try:
-            if item.is_dir():
-                shutil.rmtree(item, ignore_errors=True)
-            else:
-                item.unlink()
-            cleaned += 1
-        except Exception as e:
-            # 忽略清理失败，避免影响主流程
-            logger.warning(f"清理上传文件失败: {e}")
-    return cleaned
-
-
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    import web_api
+
     # 显式初始化日志系统
     init_logging()
     # 再次加载配置，确保 ASGI worker 启动后注入的环境变量（如容器 env）被拾取。
     # 模块级已调用过一次（用于 CORS 计算），此处刷新单例缓存。
     init_config(create_env_if_missing=False)
-    startup_cleanup_task()
+    web_api.startup_cleanup_task()
 
     # Initialize the queue callback
-    queue = get_global_queue()
+    queue = web_api.get_global_queue()
     queue.set_callback(run_queue_task)
 
     yield
-    global _cleanup_task
-    if _cleanup_task:
-        _cleanup_task.cancel()
+    if web_api._cleanup_task:
+        web_api._cleanup_task.cancel()
         try:
-            await _cleanup_task
+            await web_api._cleanup_task
         except asyncio.CancelledError:
             pass
     from services.llm_service import OpenAIService
@@ -449,7 +155,9 @@ app.add_middleware(
 
 @app.get("/env")
 def get_env() -> dict[str, Any]:
-    data = load_env_file()
+    import web_api
+
+    data = web_api.load_env_file()
     # 只返回掩码后的数据，防止API密钥泄露
     masked = {k: _mask_sensitive_value(k, v) for k, v in data.items()}
     return {"env": masked}
@@ -457,8 +165,10 @@ def get_env() -> dict[str, Any]:
 
 @app.post("/upload")
 async def upload_file(request: Request, file: UploadFile = UPLOAD_FILE_PARAM):
+    import web_api
+
     client_host = request.client.host if request.client else "unknown"
-    rate_limiter.check_rate_limit(client_host, 10, 60)
+    web_api.rate_limiter.check_rate_limit(client_host, 10, 60)
     if file.content_type not in ("text/plain", "text/markdown", "application/octet-stream"):
         raise HTTPException(status_code=400, detail="仅支持文本文件")
 
@@ -479,13 +189,13 @@ async def upload_file(request: Request, file: UploadFile = UPLOAD_FILE_PARAM):
     from validators import sanitize_filename
 
     safe_filename = sanitize_filename(file.filename)
-    UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
-    dest = UPLOAD_DIR / safe_filename
+    web_api.UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+    dest = web_api.UPLOAD_DIR / safe_filename
 
     # 验证最终路径仍在上传目录内（防止路径遍历攻击）
     try:
         dest_resolved = dest.resolve()
-        upload_root_resolved = _UPLOAD_ROOT.resolve()
+        upload_root_resolved = web_api._UPLOAD_ROOT.resolve()
         dest_resolved.relative_to(upload_root_resolved)
     except (ValueError, RuntimeError) as e:
         raise HTTPException(status_code=400, detail=f"无效的文件路径: {safe_filename}") from e
@@ -506,15 +216,17 @@ async def upload_file(request: Request, file: UploadFile = UPLOAD_FILE_PARAM):
 @app.post("/upload-multiple")
 async def upload_multiple_files(request: Request, files: list[UploadFile] = UPLOAD_FILES_PARAM):
     """批量上传多个文件"""
+    import web_api
+
     client_host = request.client.host if request.client else "unknown"
-    rate_limiter.check_rate_limit(client_host, 10, 60)
+    web_api.rate_limiter.check_rate_limit(client_host, 10, 60)
 
     # 获取配置
     processing_config = get_processing_config()
 
     from validators import sanitize_filename
 
-    UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+    web_api.UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
     uploaded_files = []
 
     for file in files:
@@ -530,7 +242,7 @@ async def upload_multiple_files(request: Request, files: list[UploadFile] = UPLO
             )
 
         safe_filename = sanitize_filename(file.filename)
-        dest = UPLOAD_DIR / safe_filename
+        dest = web_api.UPLOAD_DIR / safe_filename
         content = await file.read()
         max_size_bytes = processing_config.max_upload_file_size_mb * 1024 * 1024
         if len(content) > max_size_bytes:
@@ -546,6 +258,8 @@ async def upload_multiple_files(request: Request, files: list[UploadFile] = UPLO
 
 
 async def _run_job(job: Job, req: ProcessRequest):
+    import web_api
+
     job.status = "running"
     job.file_path = req.file_path
     job.progress = 0.0
@@ -572,7 +286,7 @@ async def _run_job(job: Job, req: ProcessRequest):
             job.token_logged = True
 
     try:
-        service = NovelProcessingService(progress_callback=handle_progress)
+        service = web_api.NovelProcessingService(progress_callback=handle_progress)
         result = await service.process_novel(req.file_path, resume=req.resume)
         job.result.update(result)
         job.progress = 1.0
@@ -586,21 +300,21 @@ async def _run_job(job: Job, req: ProcessRequest):
 
         job.log("处理完成")
         try:
-            current_upload = _resolve_upload_path(req.file_path)
+            current_upload = web_api._resolve_upload_path(req.file_path)
             if current_upload:
                 active_uploads: set[Path] = set()
-                for other_job in job_manager.values():
+                for other_job in web_api.job_manager.values():
                     if other_job.id == job.id:
                         continue
                     if other_job.status not in {"pending", "running"}:
                         continue
                     if not other_job.file_path:
                         continue
-                    upload_path = _resolve_upload_path(other_job.file_path)
+                    upload_path = web_api._resolve_upload_path(other_job.file_path)
                     if upload_path:
                         active_uploads.add(upload_path)
 
-                cleaned = cleanup_uploads(protected_paths=active_uploads)
+                cleaned = web_api.cleanup_uploads(protected_paths=active_uploads)
                 if cleaned:
                     job.log(f"已清理上传文件 {cleaned} 个")
         except Exception as cleanup_err:
@@ -613,15 +327,17 @@ async def _run_job(job: Job, req: ProcessRequest):
         job.log(f"错误: {e}")
 
 
-async def run_queue_task(task: QueueTask) -> None:
+async def run_queue_task(task: "QueueTask") -> None:
     """运行队列任务（由 TaskQueue 调用）"""
+    import web_api
+
     task.log(f"开始处理文件: {task.file_path}")
 
     def handle_progress(info: dict[str, Any]) -> None:
         _update_progress_from_info(info, task)
 
     try:
-        service = NovelProcessingService(
+        service = web_api.NovelProcessingService(
             progress_callback=handle_progress, cancel_event=task.cancel_event
         )
         # 检查是否强制完成
@@ -662,24 +378,26 @@ async def run_queue_task(task: QueueTask) -> None:
 
 @app.post("/process")
 async def start_process(request: Request, req: ProcessRequest):
+    import web_api
+
     client_host = request.client.host if request.client else "unknown"
-    rate_limiter.check_rate_limit(client_host, 5, 60)
+    web_api.rate_limiter.check_rate_limit(client_host, 5, 60)
     if not req.file_path:
         raise HTTPException(status_code=400, detail="file_path 不能为空")
     if not Path(req.file_path).exists():
         raise HTTPException(status_code=404, detail="文件不存在")
 
     # 清理旧job
-    cleanup_excess_jobs()
+    web_api.cleanup_excess_jobs()
 
     job_id = str(uuid.uuid4())
     job = Job(id=job_id, file_path=req.file_path)
-    job_manager.set(job_id, job)
+    web_api.job_manager.set(job_id, job)
 
     async def _run_job_wrapper(job: Job, req: ProcessRequest) -> None:
         """_run_job 的包装器，捕获启动异常并记录"""
         try:
-            await _run_job(job, req)
+            await web_api._run_job(job, req)
         except asyncio.CancelledError:
             # 取消错误需要向上传播
             raise
@@ -704,7 +422,9 @@ def estimate(file_path: str):
 
 @app.get("/jobs/{job_id}")
 def get_job(job_id: str):
-    job = job_manager.get(job_id)
+    import web_api
+
+    job = web_api.job_manager.get(job_id)
     if not job:
         raise HTTPException(status_code=404, detail="job 不存在")
     return {
@@ -720,38 +440,44 @@ def get_job(job_id: str):
 
 @app.get("/queue/list")
 async def list_queue():
+    import web_api
+
     """列出所有队列任务"""
-    queue = get_global_queue()
+    queue = web_api.get_global_queue()
     tasks = await queue.list_tasks()
     return {"tasks": tasks}
 
 
 @app.post("/queue/add")
 async def add_to_queue(request: Request, req: ProcessRequest):
+    import web_api
+
     """添加任务到队列"""
     client_host = request.client.host if request.client else "unknown"
-    rate_limiter.check_rate_limit(client_host, 5, 60)
+    web_api.rate_limiter.check_rate_limit(client_host, 5, 60)
 
     if not req.file_path:
         raise HTTPException(status_code=400, detail="file_path 不能为空")
     if not Path(req.file_path).exists():
         raise HTTPException(status_code=404, detail="文件不存在")
 
-    queue = get_global_queue()
+    queue = web_api.get_global_queue()
     task_id = await queue.add_task(req.file_path)
     return {"task_id": task_id, "message": "任务已添加到队列"}
 
 
 @app.post("/queue/add-multiple")
 async def add_multiple_to_queue(request: Request, req: MultipleFilesRequest):
+    import web_api
+
     """批量添加文件到队列"""
     client_host = request.client.host if request.client else "unknown"
-    rate_limiter.check_rate_limit(client_host, 5, 60)
+    web_api.rate_limiter.check_rate_limit(client_host, 5, 60)
 
     if not req.file_paths:
         raise HTTPException(status_code=400, detail="file_paths 不能为空")
 
-    queue = get_global_queue()
+    queue = web_api.get_global_queue()
     task_ids = []
 
     for file_path in req.file_paths:
@@ -771,11 +497,13 @@ async def add_multiple_to_queue(request: Request, req: MultipleFilesRequest):
 
 @app.post("/queue/cancel")
 async def cancel_queue_task(request: Request, task_id: str):
+    import web_api
+
     """取消队列任务"""
     client_host = request.client.host if request.client else "unknown"
-    rate_limiter.check_rate_limit(client_host, 10, 60)
+    web_api.rate_limiter.check_rate_limit(client_host, 10, 60)
 
-    queue = get_global_queue()
+    queue = web_api.get_global_queue()
     success = await queue.cancel_task(task_id)
 
     if not success:
@@ -786,19 +514,23 @@ async def cancel_queue_task(request: Request, task_id: str):
 
 @app.post("/queue/clear")
 async def clear_queue():
+    import web_api
+
     """清空队列（仅取消未开始的任务）"""
-    queue = get_global_queue()
+    queue = web_api.get_global_queue()
     count = await queue.clear_queue()
     return {"success": True, "cancelled_count": count}
 
 
 @app.post("/queue/force-complete/{task_id}")
 async def force_complete_queue_task(request: Request, task_id: str):
+    import web_api
+
     """强制完成任务（忽略未完成的块，直接合并已有结果）"""
     client_host = request.client.host if request.client else "unknown"
-    rate_limiter.check_rate_limit(client_host, 10, 60)
+    web_api.rate_limiter.check_rate_limit(client_host, 10, 60)
 
-    queue = get_global_queue()
+    queue = web_api.get_global_queue()
     success = await queue.force_complete_task(task_id)
 
     if not success:
@@ -809,8 +541,10 @@ async def force_complete_queue_task(request: Request, task_id: str):
 
 @app.get("/queue/stats")
 async def get_queue_stats():
+    import web_api
+
     """获取队列统计信息"""
-    queue = get_global_queue()
+    queue = web_api.get_global_queue()
     stats = await queue.get_stats()
     return stats
 
