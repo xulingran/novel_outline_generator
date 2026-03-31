@@ -7,7 +7,10 @@ from unittest.mock import patch
 
 import pytest
 
+# 导入延迟加载的常量（通过 __getattr__ 机制）
 from config import (
+    API_KEY,
+    API_PROVIDER,
     SUPPORTED_API_PROVIDERS,
     APIConfig,
     ProcessingConfig,
