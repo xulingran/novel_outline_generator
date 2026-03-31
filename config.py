@@ -160,7 +160,9 @@ class APIConfig:
         """获取当前API密钥"""
         self.validate()
         config = self._PROVIDER_REGISTRY[self.provider]
-        value = getattr(self, config["key_field"])
+        key_field = config["key_field"]
+        assert isinstance(key_field, str)
+        value = getattr(self, key_field)
         if not value:
             raise APIKeyError(f"{config['name']}密钥未配置")
         return value
@@ -171,13 +173,17 @@ class APIConfig:
         config = self._PROVIDER_REGISTRY.get(self.provider)
         if not config or not config.get("base_field"):
             return None
-        return getattr(self, config["base_field"])
+        base_field = config["base_field"]
+        assert isinstance(base_field, str)
+        return getattr(self, base_field)
 
     @property
     def model_name(self) -> str:
         """获取模型名称"""
         config = self._PROVIDER_REGISTRY[self.provider]
-        return getattr(self, config["model_field"])
+        model_field = config["model_field"]
+        assert isinstance(model_field, str)
+        return str(getattr(self, model_field))
 
 
 @dataclass
