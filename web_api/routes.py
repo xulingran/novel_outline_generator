@@ -138,9 +138,9 @@ async def lifespan(app: FastAPI):
             await web_api._cleanup_task
         except asyncio.CancelledError:
             pass
-    from services.llm_service import OpenAIService
+    from services.connection_pool import get_default_connection_pool
 
-    await OpenAIService.close_http_clients()
+    await get_default_connection_pool().close_all()
 
 
 app = FastAPI(title="Novel Outline API", version="0.1.0", lifespan=lifespan)

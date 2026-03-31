@@ -302,12 +302,188 @@ def reset_all_configs() -> None:
     reset_processing_config()
 
 
+# 为了向前兼容，保留一些常量
+# 以下函数已弃用，建议直接使用 get_processing_config()
+def get_txt_file() -> str:
+    """获取默认文本文件路径（已弃用）"""
+    import warnings
+
+    warnings.warn(
+        "get_txt_file() 已弃用，请使用 get_processing_config().default_txt_file",
+        DeprecationWarning,
+        stacklevel=2,
+    )
+    return get_processing_config().default_txt_file
+
+
+def get_output_dir() -> str:
+    """获取输出目录（已弃用）"""
+    import warnings
+
+    warnings.warn(
+        "get_output_dir() 已弃用，请使用 get_processing_config().output_dir",
+        DeprecationWarning,
+        stacklevel=2,
+    )
+    return get_processing_config().output_dir
+
+
+def get_progress_file() -> str:
+    """获取进度文件路径（已弃用）"""
+    import warnings
+
+    warnings.warn(
+        "get_progress_file() 已弃用，请使用 get_processing_config().progress_file",
+        DeprecationWarning,
+        stacklevel=2,
+    )
+    return get_processing_config().progress_file
+
+
+def get_encodings() -> list[str]:
+    """获取支持的编码列表（已弃用）"""
+    import warnings
+
+    warnings.warn(
+        "get_encodings() 已弃用，请使用 get_processing_config().encodings",
+        DeprecationWarning,
+        stacklevel=2,
+    )
+    return get_processing_config().encodings
+
+
+def _clear_config_cache() -> None:
+    """清除配置缓存（用于测试）"""
+    global _config_cache, _api_config, _processing_config
+    _config_cache.clear()
+    _api_config = None
+    _processing_config = None
+
+
+class _LazyAPIKey:
+    """延迟验证的 API Key 包装器
+
+    避免在导入时触发 API Key 验证，只在实际使用（转换为字符串）时才检查。
+    """
+
+    def __str__(self) -> str:
+        return get_api_config().api_key
+
+    def __repr__(self) -> str:
+        return repr(str(self))
+
+
+# 模块级缓存变量（延迟初始化）
+_config_cache: dict[str, Any] = {}
+
+
+class _LazyConfig:
+    """延迟配置访问包装器 - 保持向后兼容
+
+    通过 __getattr__ 实现延迟加载，只有在实际访问时才计算配置值。
+    这样可以避免模块导入时的副作用，同时保持 `from config import XXX` 的用法。
+    """
+
+    def __getattr__(self, name: str) -> Any:
+        """延迟加载配置值"""
+        if name in _config_cache:
+            return _config_cache[name]
+
+        # 处理各种配置常量
+        value = self._resolve_config(name)
+        _config_cache[name] = value
+        return value
+
+    def _resolve_config(self, name: str) -> Any:
+        """根据名称解析配置值"""
+        match name:
+            # 路径配置
+            case "TXT_FILE":
+                return get_txt_file()
+            case "OUTPUT_DIR":
+                return get_output_dir()
+            case "PROGRESS_FILE":
+                return get_progress_file()
+            case "ENCODINGS":
+                return get_encodings()
+
+            # API 配置（延迟验证，避免导入时触发）
+            case "API_PROVIDER":
+                return get_api_config().provider
+            case "API_BASE":
+                return get_api_config().base_url
+            case "MODEL_NAME":
+                return get_api_config().model_name
+            case "GEMINI_SAFETY_SETTINGS":
+                return get_api_config().gemini_safety
+            case "API_KEY":
+                # 延迟验证，只在实际使用时检查
+                return _LazyAPIKey()
+
+            # 处理配置
+            case "MODEL_MAX_TOKENS":
+                return get_processing_config().model_max_tokens
+            case "TARGET_TOKENS_PER_CHUNK":
+                return get_processing_config().target_tokens_per_chunk
+            case "PARALLEL_LIMIT":
+                return get_processing_config().parallel_limit
+            case "MAX_RETRY":
+                return get_processing_config().max_retry
+            case "LOG_EVERY":
+                return get_processing_config().log_every
+            case "USE_PROXY":
+                return get_processing_config().use_proxy
+            case "PROXY_URL":
+                return get_processing_config().proxy_url
+
+            case _:
+                raise AttributeError(f"模块 'config' 没有属性 '{name}'")
+
+
+# 创建延迟配置实例
+_lazy_config = _LazyConfig()
+
+
+# 为了支持 `from config import XXX` 语法，我们在模块级别定义 __getattr__
+# Python 3.7+ 支持模块级别的 __getattr__
+def __getattr__(name: str) -> Any:
+    """模块级延迟属性访问"""
+    return getattr(_lazy_config, name)
+
+
+# 为了 IDE 和类型检查器能识别这些常量，我们声明它们的类型
+# 实际值通过 __getattr__ 延迟加载
+if False:  # noqa: F601
+    # 路径配置
+    TXT_FILE: str = ""
+    OUTPUT_DIR: str = ""
+    PROGRESS_FILE: str = ""
+    ENCODINGS: list[str] = []
+
+    # API 配置
+    API_PROVIDER: str = ""
+    API_BASE: str | None = None
+    MODEL_NAME: str = ""
+    GEMINI_SAFETY_SETTINGS: str = ""
+    API_KEY: str = ""
+
+    # 处理配置
+    MODEL_MAX_TOKENS: int = 0
+    TARGET_TOKENS_PER_CHUNK: int = 0
+    PARALLEL_LIMIT: int = 0
+    MAX_RETRY: int = 0
+    LOG_EVERY: int = 0
+    USE_PROXY: bool = False
+    PROXY_URL: str = ""
+
+
 def create_env_file():
     """创建.env文件模板（如果不存在）"""
     env_file = ".env"
     if not os.path.exists(env_file):
         with open(env_file, "w", encoding="utf-8") as f:
-            f.write("""# 小说大纲生成工具环境变量配置
+            f.write(
+                """# 小说大纲生成工具环境变量配置
 # 复制此文件并填入你的API密钥
 
 # API提供商选择: openai, gemini, zhipu 或 aihubmix
@@ -351,7 +527,8 @@ PROXY_URL=http://127.0.0.1:7897
 # CORS_ORIGINS=http://localhost:8000,http://127.0.0.1:8000
 
 # 注意：提示词模板现已内置，使用 prompts.py 中的函数
-""")
+"""
+            )
         print(f"✓ 已创建环境变量模板文件: {env_file}")
         print("  请编辑该文件并填入你的API密钥")
 

@@ -8,6 +8,7 @@ import logging
 import time
 import uuid
 from collections import deque
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -62,11 +63,19 @@ class QueueTask:
 class TaskQueue:
     """任务队列管理器"""
 
-    def __init__(self, max_concurrent: int = 1, run_queue_task_callback=None):
+    def __init__(
+        self,
+        max_concurrent: int = 1,
+        run_queue_task_callback: Callable[[QueueTask], Awaitable[None]] | None = None,
+    ):
         """
         Args:
             max_concurrent: 最大并发处理数（默认为1，按顺序处理）
+            run_queue_task_callback: 任务处理回调函数
         """
+        if run_queue_task_callback is not None and not callable(run_queue_task_callback):
+            raise ValueError("run_queue_task_callback 必须是可调用的函数")
+
         self.max_concurrent = max_concurrent
         self._queue: deque[QueueTask] = deque()
         self._running_tasks: dict[str, QueueTask] = {}
@@ -90,8 +99,10 @@ class TaskQueue:
             self._queue.append(task)
             logger.info(f"任务 {task.id} 已添加到队列: {file_path}")
 
-            # 如果处理器未运行，启动它
-            if self._processor_task is None or self._processor_task.done():
+            # 如果处理器未运行且已设置回调，启动它
+            if self._run_queue_task_callback is not None and (
+                self._processor_task is None or self._processor_task.done()
+            ):
                 self._processor_task = asyncio.create_task(self._process_queue())
 
             return task.id
@@ -213,8 +224,10 @@ class TaskQueue:
                 "total": pending_count + running_count,
             }
 
-    def set_callback(self, callback) -> None:
+    def set_callback(self, callback: Callable[[QueueTask], Awaitable[None]]) -> None:
         """设置任务处理回调函数"""
+        if not callable(callback):
+            raise ValueError("callback 必须是可调用的函数")
         self._run_queue_task_callback = callback
 
     async def stop(self) -> None:

@@ -115,7 +115,9 @@ def test_upload_rate_limit():
 
 
 def test_process_and_job_status(monkeypatch, tmp_path):
-    async def fake_run_job(job, req):
+    async def fake_run_job(job, req, started_event=None):
+        if started_event:
+            started_event.set()
         job.status = "success"
         job.progress = 1.0
         job.result = {"ok": True}
@@ -144,7 +146,9 @@ def test_process_and_job_status(monkeypatch, tmp_path):
 
 
 def test_process_rate_limit(monkeypatch, tmp_path):
-    async def fake_run_job(job, req):
+    async def fake_run_job(job, req, started_event=None):
+        if started_event:
+            started_event.set()
         job.status = "success"
 
     monkeypatch.setattr(web_api, "_run_job", fake_run_job)

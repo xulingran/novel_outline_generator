@@ -60,7 +60,7 @@ class TextSplitter:
             logger.info(f"文本分割完成，共 {len(final_chunks)} 个块")
             return final_chunks
 
-        except Exception as e:
+        except (ValueError, TypeError, UnicodeError) as e:
             logger.error(f"分割文本失败: {e}")
             raise ProcessingError(f"分割文本失败: {str(e)}") from e
 
