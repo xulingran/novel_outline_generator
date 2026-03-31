@@ -6,7 +6,7 @@
 import logging
 import os
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, ClassVar
 
 from exceptions import APIKeyError, ConfigurationError
 
@@ -81,37 +81,41 @@ class APIConfig:
     aihubmix_api_base: str | None = env_field("AIHUBMIX_API_BASE", "https://aihubmix.com/v1")
     _validated: bool = field(default=False, init=False)
 
-    # API 密钥验证配置（字段名、提供商名称、环境变量名、提示）
-    _PROVIDER_KEY_CONFIG: dict[str, dict[str, str]] = field(
-        default_factory=lambda: {
-            "openai": {
-                "field": "openai_key",
-                "name": "OpenAI API",
-                "env_var": "OPENAI_API_KEY",
-                "hint": "提示：OpenAI API Key 通常以 'sk-' 开头",
-            },
-            "gemini": {
-                "field": "gemini_key",
-                "name": "Gemini API",
-                "env_var": "GEMINI_API_KEY",
-                "hint": "",
-            },
-            "zhipu": {
-                "field": "zhipu_key",
-                "name": "智谱API",  # 恢复原有格式，与测试期望一致
-                "env_var": "ZHIPU_API_KEY",
-                "hint": "",
-            },
-            "aihubmix": {
-                "field": "aihubmix_api_key",
-                "name": "AiHubMix API",
-                "env_var": "AIHUBMIX_API_KEY",
-                "hint": "",
-            },
+    # 统一的 provider 配置映射（类变量，不参与 dataclass 机制）
+    _PROVIDER_REGISTRY: ClassVar[dict[str, dict[str, str | None]]] = {
+        "openai": {
+            "key_field": "openai_key",
+            "base_field": "openai_base",
+            "model_field": "openai_model",
+            "name": "OpenAI API",
+            "env_var": "OPENAI_API_KEY",
+            "hint": "提示：OpenAI API Key 通常以 'sk-' 开头",
         },
-        init=False,
-        repr=False,
-    )
+        "gemini": {
+            "key_field": "gemini_key",
+            "base_field": None,
+            "model_field": "gemini_model",
+            "name": "Gemini API",
+            "env_var": "GEMINI_API_KEY",
+            "hint": "",
+        },
+        "zhipu": {
+            "key_field": "zhipu_key",
+            "base_field": "zhipu_base",
+            "model_field": "zhipu_model",
+            "name": "智谱API",
+            "env_var": "ZHIPU_API_KEY",
+            "hint": "",
+        },
+        "aihubmix": {
+            "key_field": "aihubmix_api_key",
+            "base_field": "aihubmix_api_base",
+            "model_field": "aihubmix_model",
+            "name": "AiHubMix API",
+            "env_var": "AIHUBMIX_API_KEY",
+            "hint": "",
+        },
+    }
 
     def _validate_api_key(self, key_value: str | None, config: dict[str, str]) -> None:
         """验证单个 API 密钥
@@ -121,20 +125,16 @@ class APIConfig:
             config: 提供商配置字典
         """
         if not key_value or "your_" in key_value.lower() or "here" in key_value.lower():
-            provider_name = config["name"]
+            name = config["name"]
             env_var = config["env_var"]
             hint = config.get("hint", "")
-            # 保持与原有测试兼容的错误消息格式
-            if provider_name == "OpenAI API":
-                raise ConfigurationError(
-                    f"使用{provider_name}时必须设置{env_var}环境变量。\n"
-                    f"当前值看起来像是占位符，请在 .env 文件中填入真实的 API Key。\n{hint}"
-                )
-            else:
-                raise ConfigurationError(
-                    f"使用{provider_name}时必须设置{env_var}环境变量。\n"
-                    "当前值看起来像是占位符，请在 .env 文件中填入真实的 API Key"
-                )
+            msg = (
+                f"使用{name}时必须设置{env_var}环境变量。\n"
+                "当前值看起来像是占位符，请在 .env 文件中填入真实的 API Key"
+            )
+            if hint:
+                msg += f"\n{hint}"
+            raise ConfigurationError(msg)
 
     def validate(self) -> None:
         """验证配置（延迟到实际使用时）"""
@@ -148,9 +148,9 @@ class APIConfig:
             )
 
         # 使用配置驱动的方式验证 API 密钥
-        provider_config = self._PROVIDER_KEY_CONFIG.get(self.provider)
+        provider_config = self._PROVIDER_REGISTRY.get(self.provider)
         if provider_config:
-            key_value = getattr(self, provider_config["field"])
+            key_value = getattr(self, provider_config["key_field"])
             self._validate_api_key(key_value, provider_config)
 
         self._validated = True
@@ -158,49 +158,26 @@ class APIConfig:
     @property
     def api_key(self) -> str:
         """获取当前API密钥"""
-        # 先验证配置
         self.validate()
-
-        if self.provider == "openai":
-            if not self.openai_key:
-                raise APIKeyError("OpenAI API密钥未配置")
-            return self.openai_key
-        elif self.provider == "gemini":
-            if not self.gemini_key:
-                raise APIKeyError("Gemini API密钥未配置")
-            return self.gemini_key
-        elif self.provider == "zhipu":
-            if not self.zhipu_key:
-                raise APIKeyError("智谱API密钥未配置")
-            return self.zhipu_key
-        else:  # aihubmix
-            if not self.aihubmix_api_key:
-                raise APIKeyError("AiHubMix API密钥未配置")
-            return self.aihubmix_api_key
+        config = self._PROVIDER_REGISTRY[self.provider]
+        value = getattr(self, config["key_field"])
+        if not value:
+            raise APIKeyError(f"{config['name']}密钥未配置")
+        return value
 
     @property
     def base_url(self) -> str | None:
         """获取API基础URL"""
-        if self.provider == "openai":
-            return self.openai_base
-        elif self.provider == "zhipu":
-            return self.zhipu_base
-        elif self.provider == "aihubmix":
-            return self.aihubmix_api_base
-        else:
+        config = self._PROVIDER_REGISTRY.get(self.provider)
+        if not config or not config.get("base_field"):
             return None
+        return getattr(self, config["base_field"])
 
     @property
     def model_name(self) -> str:
         """获取模型名称"""
-        if self.provider == "openai":
-            return self.openai_model
-        elif self.provider == "gemini":
-            return self.gemini_model
-        elif self.provider == "zhipu":
-            return self.zhipu_model
-        else:  # aihubmix
-            return self.aihubmix_model
+        config = self._PROVIDER_REGISTRY[self.provider]
+        return getattr(self, config["model_field"])
 
 
 @dataclass
