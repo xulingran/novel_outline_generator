@@ -7,6 +7,7 @@ from pathlib import Path
 
 import pytest
 
+import utils.logging_config as logging_config_mod
 from utils import setup_logging
 
 
@@ -14,9 +15,7 @@ from utils import setup_logging
 def reset_logging_state():
     """每次测试前重置日志配置状态"""
     # 导入前重置全局状态
-    import utils
-
-    utils._logging_configured = False
+    logging_config_mod._logging_configured = False
     # 清除所有处理器并关闭
     root = logging.getLogger()
     for handler in root.handlers[:]:
@@ -24,7 +23,7 @@ def reset_logging_state():
         root.removeHandler(handler)
     yield
     # 测试后再次清理，显式关闭处理器以释放文件句柄
-    utils._logging_configured = False
+    logging_config_mod._logging_configured = False
     for handler in root.handlers[:]:
         handler.close()
         root.removeHandler(handler)
