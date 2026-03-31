@@ -6,6 +6,7 @@
 import logging
 import os
 from dataclasses import dataclass, field
+from typing import Any
 
 from exceptions import APIKeyError, ConfigurationError
 
@@ -36,31 +37,48 @@ def load_env_file(path: str = ".env") -> dict[str, str]:
     return data
 
 
+def env_field(
+    env_var: str,
+    default: str | None = None,
+    *,
+    cast: type = str,
+) -> Any:
+    """从环境变量创建 dataclass field。
+
+    Args:
+        env_var: 环境变量名
+        default: 默认值（字符串形式）
+        cast: 类型转换函数（int、bool 等）
+    """
+
+    def factory():
+        raw = os.getenv(env_var, default)
+        if raw is None:
+            return None
+        if cast is bool:
+            return raw.lower() == "true"
+        return cast(raw) if cast is not str else raw
+
+    return field(default_factory=factory)
+
+
 @dataclass
 class APIConfig:
     """API配置类"""
 
-    provider: str = field(default_factory=lambda: os.getenv("API_PROVIDER", "openai"))
-    openai_key: str | None = field(default_factory=lambda: os.getenv("OPENAI_API_KEY"))
-    openai_base: str | None = field(default_factory=lambda: os.getenv("OPENAI_API_BASE"))
-    openai_model: str = field(default_factory=lambda: os.getenv("OPENAI_MODEL", "gpt-4o-mini"))
-    gemini_key: str | None = field(default_factory=lambda: os.getenv("GEMINI_API_KEY"))
-    gemini_model: str = field(default_factory=lambda: os.getenv("GEMINI_MODEL", "gemini-2.5-flash"))
-    gemini_safety: str = field(
-        default_factory=lambda: os.getenv("GEMINI_SAFETY_SETTINGS", "BLOCK_NONE")
-    )
-    zhipu_key: str | None = field(default_factory=lambda: os.getenv("ZHIPU_API_KEY"))
-    zhipu_base: str | None = field(
-        default_factory=lambda: os.getenv("ZHIPU_API_BASE", "https://open.bigmodel.cn/api/paas/v4")
-    )
-    zhipu_model: str = field(default_factory=lambda: os.getenv("ZHIPU_MODEL", "glm-4-flash"))
-    aihubmix_api_key: str | None = field(default_factory=lambda: os.getenv("AIHUBMIX_API_KEY"))
-    aihubmix_model: str = field(
-        default_factory=lambda: os.getenv("AIHUBMIX_MODEL", "gpt-3.5-turbo")
-    )
-    aihubmix_api_base: str | None = field(
-        default_factory=lambda: os.getenv("AIHUBMIX_API_BASE", "https://aihubmix.com/v1")
-    )
+    provider: str = env_field("API_PROVIDER", "openai")
+    openai_key: str | None = env_field("OPENAI_API_KEY")
+    openai_base: str | None = env_field("OPENAI_API_BASE")
+    openai_model: str = env_field("OPENAI_MODEL", "gpt-4o-mini")
+    gemini_key: str | None = env_field("GEMINI_API_KEY")
+    gemini_model: str = env_field("GEMINI_MODEL", "gemini-2.5-flash")
+    gemini_safety: str = env_field("GEMINI_SAFETY_SETTINGS", "BLOCK_NONE")
+    zhipu_key: str | None = env_field("ZHIPU_API_KEY")
+    zhipu_base: str | None = env_field("ZHIPU_API_BASE", "https://open.bigmodel.cn/api/paas/v4")
+    zhipu_model: str = env_field("ZHIPU_MODEL", "glm-4-flash")
+    aihubmix_api_key: str | None = env_field("AIHUBMIX_API_KEY")
+    aihubmix_model: str = env_field("AIHUBMIX_MODEL", "gpt-3.5-turbo")
+    aihubmix_api_base: str | None = env_field("AIHUBMIX_API_BASE", "https://aihubmix.com/v1")
     _validated: bool = field(default=False, init=False)
 
     # API 密钥验证配置（字段名、提供商名称、环境变量名、提示）
@@ -196,9 +214,7 @@ class ProcessingConfig:
     # 支持的文本文件扩展名
     allowed_extensions: list[str] = field(default_factory=lambda: [".txt", ".md", ".text"])
     # 上传文件大小限制（MB）
-    max_upload_file_size_mb: int = field(
-        default_factory=lambda: int(os.getenv("MAX_UPLOAD_FILE_SIZE_MB", "100"))
-    )
+    max_upload_file_size_mb: int = env_field("MAX_UPLOAD_FILE_SIZE_MB", "100", cast=int)
 
     # 编码配置
     encodings: list[str] = field(
@@ -217,28 +233,18 @@ class ProcessingConfig:
     )
 
     # 处理参数
-    model_max_tokens: int = field(
-        default_factory=lambda: int(os.getenv("MODEL_MAX_TOKENS", "200000"))
-    )
-    target_tokens_per_chunk: int = field(
-        default_factory=lambda: int(os.getenv("TARGET_TOKENS_PER_CHUNK", "64000"))
-    )
-    parallel_limit: int = field(default_factory=lambda: int(os.getenv("PARALLEL_LIMIT", "5")))
-    max_retry: int = field(default_factory=lambda: int(os.getenv("MAX_RETRY", "5")))
-    log_every: int = field(default_factory=lambda: int(os.getenv("LOG_EVERY", "1")))
-    sub_chunk_count: int = field(default_factory=lambda: int(os.getenv("SUB_CHUNK_COUNT", "5")))
-    retry_backoff_base: int = field(
-        default_factory=lambda: int(os.getenv("RETRY_BACKOFF_BASE", "1"))
-    )
-    stream_split_threshold_mb: int = field(
-        default_factory=lambda: int(os.getenv("STREAM_SPLIT_THRESHOLD_MB", "20"))
-    )
+    model_max_tokens: int = env_field("MODEL_MAX_TOKENS", "200000", cast=int)
+    target_tokens_per_chunk: int = env_field("TARGET_TOKENS_PER_CHUNK", "64000", cast=int)
+    parallel_limit: int = env_field("PARALLEL_LIMIT", "5", cast=int)
+    max_retry: int = env_field("MAX_RETRY", "5", cast=int)
+    log_every: int = env_field("LOG_EVERY", "1", cast=int)
+    sub_chunk_count: int = env_field("SUB_CHUNK_COUNT", "5", cast=int)
+    retry_backoff_base: int = env_field("RETRY_BACKOFF_BASE", "1", cast=int)
+    stream_split_threshold_mb: int = env_field("STREAM_SPLIT_THRESHOLD_MB", "20", cast=int)
 
     # 代理配置
-    use_proxy: bool = field(
-        default_factory=lambda: os.getenv("USE_PROXY", "false").lower() == "true"
-    )
-    proxy_url: str = field(default_factory=lambda: os.getenv("PROXY_URL", "http://127.0.0.1:7897"))
+    use_proxy: bool = env_field("USE_PROXY", "false", cast=bool)
+    proxy_url: str = env_field("PROXY_URL", "http://127.0.0.1:7897")
 
     def __post_init__(self):
         """初始化后处理"""
