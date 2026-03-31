@@ -28,17 +28,6 @@ pyinstaller>=6.0.0
 pywin32>=305; sys_platform == "win32"
 
 
-# GUI 框架
-customtkinter>=5.2.0
-pillow>=10.0.0
-
-# 打包工具
-pyinstaller>=6.0.0
-
-# 平台特定依赖
-pywin32>=305; sys_platform == "win32"
-
-
 # 测试依赖
 pytest>=7.0.0
 pytest-asyncio>=0.21.0
