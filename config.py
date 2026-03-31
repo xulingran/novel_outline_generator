@@ -117,7 +117,7 @@ class APIConfig:
         },
     }
 
-    def _validate_api_key(self, key_value: str | None, config: dict[str, str]) -> None:
+    def _validate_api_key(self, key_value: str | None, config: dict[str, str | None]) -> None:
         """验证单个 API 密钥
 
         Args:
@@ -150,8 +150,10 @@ class APIConfig:
         # 使用配置驱动的方式验证 API 密钥
         provider_config = self._PROVIDER_REGISTRY.get(self.provider)
         if provider_config:
-            key_value = getattr(self, provider_config["key_field"])
-            self._validate_api_key(key_value, provider_config)
+            key_field = provider_config["key_field"]
+            if key_field is not None:
+                key_value = getattr(self, key_field)
+                self._validate_api_key(key_value, provider_config)
 
         self._validated = True
 
@@ -162,7 +164,7 @@ class APIConfig:
         config = self._PROVIDER_REGISTRY[self.provider]
         key_field = config["key_field"]
         assert isinstance(key_field, str)
-        value = getattr(self, key_field)
+        value: str | None = getattr(self, key_field)
         if not value:
             raise APIKeyError(f"{config['name']}密钥未配置")
         return value
@@ -175,7 +177,8 @@ class APIConfig:
             return None
         base_field = config["base_field"]
         assert isinstance(base_field, str)
-        return getattr(self, base_field)
+        result: str | None = getattr(self, base_field)
+        return result
 
     @property
     def model_name(self) -> str:
