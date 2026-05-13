@@ -13,7 +13,7 @@ from exceptions import APIKeyError, ConfigurationError
 logger = logging.getLogger(__name__)
 
 # 支持的API提供商列表
-SUPPORTED_API_PROVIDERS = ["openai", "gemini", "zhipu", "aihubmix"]
+SUPPORTED_API_PROVIDERS = ["openai", "deepseek", "gemini", "zhipu", "aihubmix"]
 
 # 项目常量
 MAX_INPUT_TOKEN_RATIO = 0.8  # 输入token占模型最大token的比例上限
@@ -70,6 +70,9 @@ class APIConfig:
     openai_key: str | None = env_field("OPENAI_API_KEY")
     openai_base: str | None = env_field("OPENAI_API_BASE")
     openai_model: str = env_field("OPENAI_MODEL", "gpt-4o-mini")
+    deepseek_key: str | None = env_field("DEEPSEEK_API_KEY")
+    deepseek_base: str | None = env_field("DEEPSEEK_API_BASE", "https://api.deepseek.com/v1")
+    deepseek_model: str = env_field("DEEPSEEK_MODEL", "deepseek-chat")
     gemini_key: str | None = env_field("GEMINI_API_KEY")
     gemini_model: str = env_field("GEMINI_MODEL", "gemini-2.5-flash")
     gemini_safety: str = env_field("GEMINI_SAFETY_SETTINGS", "BLOCK_NONE")
@@ -79,6 +82,9 @@ class APIConfig:
     aihubmix_api_key: str | None = env_field("AIHUBMIX_API_KEY")
     aihubmix_model: str = env_field("AIHUBMIX_MODEL", "gpt-3.5-turbo")
     aihubmix_api_base: str | None = env_field("AIHUBMIX_API_BASE", "https://aihubmix.com/v1")
+    mimo_api_key: str | None = env_field("MIMO_API_KEY")
+    mimo_base: str | None = env_field("MIMO_API_BASE", "https://api.xiaomimimo.com/v1")
+    mimo_model: str = env_field("MIMO_MODEL", "mimo-v2-flash")
     _validated: bool = field(default=False, init=False)
 
     # 统一的 provider 配置映射（类变量，不参与 dataclass 机制）
@@ -90,6 +96,14 @@ class APIConfig:
             "name": "OpenAI API",
             "env_var": "OPENAI_API_KEY",
             "hint": "提示：OpenAI API Key 通常以 'sk-' 开头",
+        },
+        "deepseek": {
+            "key_field": "deepseek_key",
+            "base_field": "deepseek_base",
+            "model_field": "deepseek_model",
+            "name": "DeepSeek API",
+            "env_var": "DEEPSEEK_API_KEY",
+            "hint": "提示：DeepSeek API Key 可从 https://platform.deepseek.com 获取",
         },
         "gemini": {
             "key_field": "gemini_key",
@@ -114,6 +128,14 @@ class APIConfig:
             "name": "AiHubMix API",
             "env_var": "AIHUBMIX_API_KEY",
             "hint": "",
+        },
+        "mimo": {
+            "key_field": "mimo_api_key",
+            "base_field": "mimo_base",
+            "model_field": "mimo_model",
+            "name": "小米 MiMo API",
+            "env_var": "MIMO_API_KEY",
+            "hint": "提示：MiMo API Key 可从 https://platform.xiaomimimo.com 获取",
         },
     }
 

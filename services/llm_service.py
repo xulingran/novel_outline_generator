@@ -609,6 +609,85 @@ class AiHubMixService(LLMService):
             raise APIError(f"AiHubMix API错误: {str(e)}", is_retryable=True) from e
 
 
+@register_llm_provider("mimo")
+class MiMoService(LLMService):
+    """小米 MiMo 服务实现"""
+
+    def _init_client(self) -> None:
+        """初始化 MiMo 客户端"""
+        self._pool = HTTPConnectionPool()
+
+        try:
+            from openai import AsyncOpenAI
+
+            proxy_url = (
+                self.processing_config.proxy_url if self.processing_config.use_proxy else None
+            )
+            http_client = self._pool.get_client(proxy_url)
+            if proxy_url:
+                logger.debug(f"MiMo 客户端配置代理: {proxy_url}")
+
+            self.client = AsyncOpenAI(
+                api_key=self.api_config.api_key,
+                base_url=self.api_config.base_url,
+                http_client=http_client,
+            )
+            logger.info(f"MiMo API客户端初始化成功 (模型: {self.api_config.model_name})")
+
+        except ImportError as e:
+            raise APIKeyError("未安装openai库，请运行: pip install openai") from e
+        except Exception as e:
+            raise APIKeyError(f"MiMo API配置失败: {str(e)}") from e
+
+    async def _call_api(self, prompt: str, **kwargs) -> LLMResponse:
+        """调用 MiMo API"""
+        try:
+            # MiMo 使用 max_completion_tokens 而不是 max_tokens
+            # 同时添加 thinking 控制参数
+            request_params = {
+                "model": self.api_config.model_name,
+                "messages": [{"role": "user", "content": prompt}],
+                "timeout": 60,
+                **kwargs,
+            }
+
+            # 如果有 max_tokens，转换为 max_completion_tokens
+            if "max_tokens" in request_params:
+                request_params["max_completion_tokens"] = request_params.pop("max_tokens")
+
+            response = await self.client.chat.completions.create(**request_params)
+
+            return LLMResponse(
+                content=response.choices[0].message.content,
+                token_usage=response.usage.model_dump() if response.usage else None,
+                model=response.model,
+                finish_reason=response.choices[0].finish_reason,
+            )
+
+        except Exception as e:
+            error_str = str(e).lower()
+
+            # 检查特定错误类型
+            if "authentication" in error_str or "unauthorized" in error_str:
+                raise APIKeyError("API密钥无效或已过期") from e
+
+            if "rate" in error_str and "limit" in error_str:
+                retry_after = None
+                if hasattr(e, "response") and e.response:
+                    retry_after = e.response.headers.get("retry-after")
+                    if retry_after:
+                        retry_after = int(retry_after)
+                raise RateLimitError("API速率限制", retry_after=retry_after) from e
+
+            if "quota" in error_str or "exceeded" in error_str:
+                raise APIError("API配额已用尽", is_retryable=False) from e
+
+            if "421" in str(e) or "content_filter" in error_str or "moderation block" in error_str:
+                raise ContentFilterError("内容被安全过滤器阻止") from e
+
+            raise APIError(f"MiMo API错误: {str(e)}", is_retryable=True) from e
+
+
 def create_llm_service() -> LLMService:
     """工厂函数：创建LLM服务实例"""
     api_config = get_api_config()
@@ -623,3 +702,4 @@ def create_llm_service() -> LLMService:
 register_llm_provider("gemini")(GeminiService)
 register_llm_provider("zhipu")(ZhipuService)
 register_llm_provider("aihubmix")(AiHubMixService)
+register_llm_provider("deepseek")(OpenAIService)
