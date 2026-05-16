@@ -168,15 +168,18 @@ class TestSidebarCollapse:
                 with patch.object(Sidebar, "_update_active_state"):
                     with patch("gui.components.sidebar.ctk.CTkFrame.__init__", return_value=None):
                         sidebar = Sidebar(mock_master)
-                        sidebar._logo_label = MagicMock()
-                        sidebar._logo_label.pack_forget = MagicMock()
+                        mock_brand_text_frame = MagicMock()
+                        mock_footer_label = MagicMock()
+                        sidebar._brand_text_frame = mock_brand_text_frame
+                        sidebar._footer_label = mock_footer_label
                         sidebar._nav_buttons = {
                             NavItem.PROCESS: MagicMock(_label=MagicMock(pack_forget=MagicMock())),
                         }
 
                         sidebar._hide_labels()
 
-                        sidebar._logo_label.pack_forget.assert_called_once()
+                        mock_brand_text_frame.pack_forget.assert_called_once()
+                        mock_footer_label.pack_forget.assert_called_once()
 
     def test_show_labels(self):
         """测试显示标签"""
@@ -187,15 +190,20 @@ class TestSidebarCollapse:
                 with patch.object(Sidebar, "_update_active_state"):
                     with patch("gui.components.sidebar.ctk.CTkFrame.__init__", return_value=None):
                         sidebar = Sidebar(mock_master)
-                        mock_label = MagicMock()
-                        mock_label.winfo_exists = MagicMock(return_value=True)
-                        mock_label.pack = MagicMock()
-                        sidebar._logo_label = mock_label
+                        mock_brand_text_frame = MagicMock()
+                        mock_brand_text_frame.winfo_exists = MagicMock(return_value=True)
+                        mock_brand_text_frame.pack = MagicMock()
+                        mock_footer_label = MagicMock()
+                        mock_footer_label.winfo_exists = MagicMock(return_value=True)
+                        mock_footer_label.pack = MagicMock()
+                        sidebar._brand_text_frame = mock_brand_text_frame
+                        sidebar._footer_label = mock_footer_label
                         sidebar._nav_buttons = {}
 
                         sidebar._show_labels()
 
-                        mock_label.pack.assert_called_once()
+                        mock_brand_text_frame.pack.assert_called_once()
+                        mock_footer_label.pack.assert_called_once()
 
 
 class TestSidebarResize:
@@ -251,13 +259,13 @@ class TestSidebarResize:
                         sidebar._dragging = True
                         sidebar._drag_start_x = 100
                         sidebar._drag_start_width = 240
-                        sidebar.configure = MagicMock()
+                        sidebar._resize_after_id = None
+                        sidebar.after = MagicMock(return_value="after_id")
 
                         sidebar._do_resize(mock_event)
 
-                        sidebar.configure.assert_called_once()
-                        new_width = sidebar.configure.call_args[1]["width"]
-                        assert Sidebar.MIN_WIDTH <= new_width <= Sidebar.MAX_WIDTH
+                        assert Sidebar.MIN_WIDTH <= sidebar._pending_width <= Sidebar.MAX_WIDTH
+                        sidebar.after.assert_called_once()
 
     def test_do_resize_clamps_to_min(self):
         """测试调整宽度限制到最小值"""
@@ -273,12 +281,12 @@ class TestSidebarResize:
                         sidebar._dragging = True
                         sidebar._drag_start_x = 100
                         sidebar._drag_start_width = 240
-                        sidebar.configure = MagicMock()
+                        sidebar._resize_after_id = None
+                        sidebar.after = MagicMock(return_value="after_id")
 
                         sidebar._do_resize(mock_event)
 
-                        new_width = sidebar.configure.call_args[1]["width"]
-                        assert new_width == Sidebar.MIN_WIDTH
+                        assert sidebar._pending_width == Sidebar.MIN_WIDTH
 
     def test_do_resize_clamps_to_max(self):
         """测试调整宽度限制到最大值"""
@@ -294,12 +302,12 @@ class TestSidebarResize:
                         sidebar._dragging = True
                         sidebar._drag_start_x = 100
                         sidebar._drag_start_width = 240
-                        sidebar.configure = MagicMock()
+                        sidebar._resize_after_id = None
+                        sidebar.after = MagicMock(return_value="after_id")
 
                         sidebar._do_resize(mock_event)
 
-                        new_width = sidebar.configure.call_args[1]["width"]
-                        assert new_width == Sidebar.MAX_WIDTH
+                        assert sidebar._pending_width == Sidebar.MAX_WIDTH
 
     def test_end_resize(self):
         """测试结束调整"""
@@ -313,6 +321,9 @@ class TestSidebarResize:
                         sidebar = Sidebar(mock_master)
                         sidebar._dragging = True
                         sidebar._resize_handle = MagicMock()
+                        sidebar._resize_after_id = None
+                        sidebar.configure = MagicMock()
+                        sidebar.cget = MagicMock(return_value=240)
 
                         sidebar._end_resize(mock_event)
 
@@ -388,8 +399,8 @@ class TestSidebarNavigation:
 class TestSidebarTheme:
     """侧边栏主题测试"""
 
-    def test_get_theme_label(self):
-        """测试获取主题标签"""
+    def test_refresh_theme_updates_active_state(self):
+        """测试刷新主题会更新激活状态"""
         mock_master = MagicMock()
 
         with patch.object(Sidebar, "_setup_ui"):
@@ -397,8 +408,10 @@ class TestSidebarTheme:
                 with patch.object(Sidebar, "_update_active_state"):
                     with patch("gui.components.sidebar.ctk.CTkFrame.__init__", return_value=None):
                         sidebar = Sidebar(mock_master)
+                        sidebar.configure = MagicMock()
+                        sidebar._update_active_state = MagicMock()
 
-                        assert sidebar._get_theme_label("light") == "浅色"
-                        assert sidebar._get_theme_label("dark") == "深色"
-                        assert sidebar._get_theme_label("system") == "跟随系统"
-                        assert sidebar._get_theme_label("unknown") == "unknown"
+                        sidebar.refresh_theme()
+
+                        sidebar.configure.assert_called_once()
+                        sidebar._update_active_state.assert_called_once()

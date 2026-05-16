@@ -141,36 +141,9 @@ class ChunkProcessor:
             last_error: Exception | None = None
             for attempt in range(1, self.processing_config.max_retry + 1):
                 try:
-                    self._check_cancelled()
-
-                    start_time = datetime.now()
-                    prompt = chunk_prompt(chunk.content, chunk_id)
-                    llm_response = await self.llm_service.call(prompt, chunk_id)
-                    response = llm_response.content
-
-                    self._check_cancelled()
-                    self._accumulate_token_usage(llm_response.token_usage, f"块 {chunk_id}")
-
-                    outline_data = self.parse_llm_response(response, chunk_id)
-                    if "chunk_id" not in outline_data:
-                        outline_data["chunk_id"] = chunk_id
-
-                    processing_time = (datetime.now() - start_time).total_seconds()
-                    outline_data["raw_response"] = response
-                    outline_data["processing_time"] = processing_time
-
-                    self.progress_service.update_chunk_completed(
-                        progress_data, chunk_id, outline_data, processing_time
+                    return await self._attempt_single_call(
+                        chunk, chunk_id, processing_state, progress_data
                     )
-                    processing_state.update_progress(processed=1)
-                    self.eta_estimator.add_completion(
-                        processing_time, progress_data.completed_count
-                    )
-                    self._emit_progress(chunk_id=chunk_id)
-
-                    logger.debug(f"块 {chunk_id} 处理完成，耗时: {processing_time:.2f}秒")
-                    return outline_data
-
                 except asyncio.CancelledError:
                     logger.info(f"块 {chunk_id} 处理被取消")
                     raise
@@ -201,28 +174,76 @@ class ChunkProcessor:
                     else:
                         logger.error(f"块 {chunk_id} 已达到最大重试次数，放弃处理")
 
-            # 所有重试失败，尝试拆分
-            logger.info(
-                f"块 {chunk_id} 重试失败，尝试拆分为{self.processing_config.sub_chunk_count}个小块重新处理"
+            return await self._handle_failed_chunk(
+                chunk, sem, processing_state, progress_data, last_error
             )
-            try:
-                partial_outlines = await self.process_failing_chunk_as_partial(
-                    chunk, sem, processing_state, progress_data
-                )
-                if partial_outlines:
-                    return OutlineMerger.merge_partial_outlines(partial_outlines, chunk_id)
-                else:
-                    raise ProcessingError(f"块 {chunk_id} 拆分后所有小块都失败")
-            except Exception as split_error:
-                logger.error(f"块 {chunk_id} 拆分重试也失败: {split_error}")
-                processing_state.update_progress(processed=0, failed=1)
-                self.progress_service.add_progress_error(
-                    progress_data, chunk_id, str(last_error or split_error)
-                )
-                self._emit_progress(chunk_id=chunk_id, error=str(last_error or split_error))
-                raise ProcessingError(
-                    f"块 {chunk_id} 处理失败: {str(last_error or split_error)}"
-                ) from (last_error or split_error)
+
+    async def _attempt_single_call(
+        self,
+        chunk: TextChunk,
+        chunk_id: int,
+        processing_state: ProcessingState,
+        progress_data: Any,
+    ) -> dict[str, Any]:
+        """对单个块执行一次 LLM 调用，成功时返回大纲数据"""
+        self._check_cancelled()
+
+        start_time = datetime.now()
+        prompt = chunk_prompt(chunk.content, chunk_id)
+        llm_response = await self.llm_service.call(prompt, chunk_id)
+        response = llm_response.content
+
+        self._check_cancelled()
+        self._accumulate_token_usage(llm_response.token_usage, f"块 {chunk_id}")
+
+        outline_data = self.parse_llm_response(response, chunk_id)
+        if "chunk_id" not in outline_data:
+            outline_data["chunk_id"] = chunk_id
+
+        processing_time = (datetime.now() - start_time).total_seconds()
+        outline_data["raw_response"] = response
+        outline_data["processing_time"] = processing_time
+
+        self.progress_service.update_chunk_completed(
+            progress_data, chunk_id, outline_data, processing_time
+        )
+        processing_state.update_progress(processed=1)
+        self.eta_estimator.add_completion(processing_time, progress_data.completed_count)
+        self._emit_progress(chunk_id=chunk_id)
+
+        logger.debug(f"块 {chunk_id} 处理完成，耗时: {processing_time:.2f}秒")
+        return outline_data
+
+    async def _handle_failed_chunk(
+        self,
+        chunk: TextChunk,
+        sem: asyncio.Semaphore,
+        processing_state: ProcessingState,
+        progress_data: Any,
+        last_error: Exception | None,
+    ) -> dict[str, Any]:
+        """所有重试失败后，尝试拆分小块处理，最终失败则抛出异常"""
+        chunk_id = chunk.id
+        logger.info(
+            f"块 {chunk_id} 重试失败，尝试拆分为{self.processing_config.sub_chunk_count}个小块重新处理"
+        )
+        try:
+            partial_outlines = await self.process_failing_chunk_as_partial(
+                chunk, sem, processing_state, progress_data
+            )
+            if partial_outlines:
+                return OutlineMerger.merge_partial_outlines(partial_outlines, chunk_id)
+            raise ProcessingError(f"块 {chunk_id} 拆分后所有小块都失败")
+        except Exception as split_error:
+            logger.error(f"块 {chunk_id} 拆分重试也失败: {split_error}")
+            processing_state.update_progress(processed=0, failed=1)
+            self.progress_service.add_progress_error(
+                progress_data, chunk_id, str(last_error or split_error)
+            )
+            self._emit_progress(chunk_id=chunk_id, error=str(last_error or split_error))
+            raise ProcessingError(
+                f"块 {chunk_id} 处理失败: {str(last_error or split_error)}"
+            ) from (last_error or split_error)
 
     async def process_failing_chunk_as_partial(
         self,

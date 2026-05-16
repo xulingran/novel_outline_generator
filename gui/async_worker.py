@@ -20,25 +20,16 @@ class AsyncWorker(threading.Thread):
     在独立线程中运行异步任务，通过队列或回调将结果和进度更新
     传递回 GUI 主线程。
 
-    **重要线程安全说明：**
-    所有回调函数（progress_callback、completion_callback、error_callback）
-    都会在此 AsyncWorker 工作线程中被调用，而非 GUI 主线程。
-    调用者必须确保回调函数内部使用线程安全方式与 GUI 交互，
-    例如在 CustomTkinter 中使用 `after()` 方法调度到主线程：
-
-        def on_progress(data):
-            root.after(0, lambda: update_ui(data))
-
-        worker = AsyncWorker(
-            coro=my_coro,
-            progress_callback=on_progress
-        )
+    **线程安全说明：**
+    如果提供了 root 参数，所有回调会自动通过 root.after() 调度到 GUI 主线程。
+    如果未提供 root，回调将在工作线程中直接调用——调用者需自行保证线程安全。
 
     Args:
         coro: 要执行的异步协程
         progress_callback: 进度更新回调函数，接收 dict 参数
         completion_callback: 完成回调函数，接收任务结果
         error_callback: 错误回调函数，接收 Exception
+        root: 可选的 tkinter 根窗口，提供后回调自动调度到主线程
     """
 
     def __init__(
@@ -47,16 +38,30 @@ class AsyncWorker(threading.Thread):
         progress_callback: Callable[[dict], None] | None = None,
         completion_callback: Callable[[Any], None] | None = None,
         error_callback: Callable[[Exception], None] | None = None,
+        root: Any | None = None,
     ):
         super().__init__(daemon=True)
         self.coro = coro
         self.progress_callback = progress_callback
         self.completion_callback = completion_callback
         self.error_callback = error_callback
+        self._root = root
         self.loop: asyncio.AbstractEventLoop | None = None
         self._stop_event = threading.Event()
         self._result: Any = None
         self._exception: Exception | None = None
+
+    def _invoke_callback(self, callback: Callable[..., None] | None, *args: Any) -> None:
+        """安全调用回调：有 root 时调度到主线程，否则直接调用。"""
+        if callback is None:
+            return
+        if self._root is not None:
+            try:
+                self._root.after(0, lambda: callback(*args))
+            except Exception:
+                callback(*args)
+        else:
+            callback(*args)
 
     def run(self) -> None:
         """线程主函数：在新的事件循环中运行异步任务。"""
@@ -69,24 +74,20 @@ class AsyncWorker(threading.Thread):
             self._result = self.loop.run_until_complete(self.coro)
             logger.debug("AsyncWorker: 任务执行完成")
 
-            # 在主线程中调用完成回调
-            if self.completion_callback:
-                self.completion_callback(self._result)
+            self._invoke_callback(self.completion_callback, self._result)
 
         except Exception as e:
             logger.exception("AsyncWorker: 任务执行失败")
             self._exception = e
 
-            # 在主线程中调用错误回调
-            if self.error_callback:
-                self.error_callback(e)
+            self._invoke_callback(self.error_callback, e)
 
         finally:
             # 清理事件循环
             try:
                 self.loop.close()
             except Exception as e:
-                logger.warning(f"AsyncWorker: 关闭事件循环时出错: {e}")
+                logger.warning("AsyncWorker: 关闭事件循环时出错: %s", e)
 
     def stop(self) -> None:
         """请求停止任务。"""

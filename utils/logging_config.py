@@ -8,7 +8,10 @@ from pathlib import Path
 _logging_configured = False
 
 
-def setup_logging(level=None, log_dir="logs", log_backup_days=30):
+_DEFAULT = object()
+
+
+def setup_logging(level=None, log_dir=_DEFAULT, log_backup_days=30):
     """统一配置日志系统，支持按天自动轮转
 
     Args:
@@ -20,8 +23,9 @@ def setup_logging(level=None, log_dir="logs", log_backup_days=30):
     if _logging_configured:
         return
 
-    # 从环境变量读取配置
-    log_dir = os.getenv("LOG_DIR", log_dir)
+    # 从环境变量读取配置（仅当参数为默认值时）
+    if log_dir is _DEFAULT:
+        log_dir = os.getenv("LOG_DIR", "logs")
     if level is None:
         level_str = os.getenv("LOG_LEVEL", "INFO").upper()
         level = getattr(logging, level_str, logging.INFO)
@@ -84,7 +88,7 @@ def setup_logging(level=None, log_dir="logs", log_backup_days=30):
     _logging_configured = True
 
 
-def init_logging(level=None, log_dir="logs", log_backup_days=30):
+def init_logging(level=None, log_dir=_DEFAULT, log_backup_days=30):
     """显式初始化日志系统（应在应用入口处调用）
 
     Args:

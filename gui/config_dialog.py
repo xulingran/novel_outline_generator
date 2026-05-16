@@ -5,6 +5,8 @@
 """
 
 import logging
+import os
+import tempfile
 from pathlib import Path
 
 import customtkinter as ctk
@@ -211,7 +213,7 @@ class ConfigDialog(ctk.CTkToplevel):
         proxy_enable_frame = ctk.CTkFrame(frame, fg_color="transparent")
         proxy_enable_frame.pack(fill="x", padx=15, pady=5)
 
-        self.proxy_enabled_var = ctk.BooleanVar(value=False)
+        self.proxy_enabled_var = ctk.BooleanVar(value=self.proc_config.use_proxy)
         proxy_enable_checkbox = ctk.CTkCheckBox(
             proxy_enable_frame, text="启用代理", variable=self.proxy_enabled_var
         )
@@ -219,7 +221,11 @@ class ConfigDialog(ctk.CTkToplevel):
 
         # 代理地址
         self._create_text_field(
-            frame, "代理地址:", "", "proxy_url_var", placeholder="http://proxy.example.com:8080"
+            frame,
+            "代理地址:",
+            self.proc_config.proxy_url or "",
+            "proxy_url_var",
+            placeholder="http://proxy.example.com:8080",
         )
 
     def _create_api_key_field(
@@ -308,29 +314,31 @@ class ConfigDialog(ctk.CTkToplevel):
         return config_lines
 
     def _on_save(self):
-        """保存配置"""
+        """保存配置（原子写入，防止数据丢失）"""
         from tkinter import messagebox
 
-        # 收集配置
         config_lines = self._collect_config_lines()
-
-        # 写入 .env 文件
         env_file = Path(".env")
-        try:
-            # 备份现有配置
-            if env_file.exists():
-                backup_file = Path(".env.backup")
-                env_file.rename(backup_file)
 
-            # 写入新配置
-            env_file.write_text("\n".join(config_lines) + "\n", encoding="utf-8")
+        try:
+            # 先写入临时文件，再原子替换，防止写入失败时丢失原配置
+            tmp_fd, tmp_path = tempfile.mkstemp(suffix=".env.tmp", dir=env_file.parent or ".")
+            try:
+                with os.fdopen(tmp_fd, "w", encoding="utf-8") as f:
+                    f.write("\n".join(config_lines) + "\n")
+                os.replace(tmp_path, env_file)
+            except BaseException:
+                # 清理临时文件
+                try:
+                    os.unlink(tmp_path)
+                except OSError:
+                    pass
+                raise
 
             messagebox.showinfo("成功", "配置已保存。请重启应用以使配置生效。")
             logger.info("配置已保存到 .env 文件")
 
-            # 刷新配置缓存
             _refresh_config_cache()
-
             self.destroy()
 
         except Exception as e:

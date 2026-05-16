@@ -182,6 +182,20 @@ def safe_read_json(
         return default or {}
 
 
+def _check_bom_for_encoding(enc: str, header: bytes) -> bool:
+    """检查文件头是否匹配编码所需的 BOM。不匹配时返回 False。"""
+    normalized = enc.lower().replace("_", "-")
+    if normalized == "utf-16" and not (
+        header.startswith(b"\xff\xfe") or header.startswith(b"\xfe\xff")
+    ):
+        return False
+    if normalized == "utf-16-le" and not header.startswith(b"\xff\xfe"):
+        return False
+    if normalized == "utf-16-be" and not header.startswith(b"\xfe\xff"):
+        return False
+    return True
+
+
 def safe_read_text(
     file_path: str | Path,
     encoding: str = "utf-8",
@@ -211,17 +225,8 @@ def safe_read_text(
 
     last_error = None
     for enc in encodings:
-        normalized_enc = enc.lower().replace("_", "-")
-        if normalized_enc == "utf-16" and not (
-            file_header.startswith(b"\xff\xfe") or file_header.startswith(b"\xfe\xff")
-        ):
-            logger.debug(f"跳过编码 {enc}: 缺少 UTF-16 BOM")
-            continue
-        if normalized_enc == "utf-16-le" and not file_header.startswith(b"\xff\xfe"):
-            logger.debug(f"跳过编码 {enc}: 缺少 UTF-16 LE BOM")
-            continue
-        if normalized_enc == "utf-16-be" and not file_header.startswith(b"\xfe\xff"):
-            logger.debug(f"跳过编码 {enc}: 缺少 UTF-16 BE BOM")
+        if not _check_bom_for_encoding(enc, file_header):
+            logger.debug(f"跳过编码 {enc}: 缺少对应 BOM")
             continue
 
         try:
@@ -262,14 +267,7 @@ def detect_text_encoding(
 
     last_error = None
     for enc in encodings:
-        normalized_enc = enc.lower().replace("_", "-")
-        if normalized_enc == "utf-16" and not (
-            raw_sample.startswith(b"\xff\xfe") or raw_sample.startswith(b"\xfe\xff")
-        ):
-            continue
-        if normalized_enc == "utf-16-le" and not raw_sample.startswith(b"\xff\xfe"):
-            continue
-        if normalized_enc == "utf-16-be" and not raw_sample.startswith(b"\xfe\xff"):
+        if not _check_bom_for_encoding(enc, raw_sample[:4]):
             continue
 
         try:

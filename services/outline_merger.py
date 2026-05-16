@@ -23,6 +23,7 @@ class OutlineMerger:
     """大纲合并器：负责将多个块大纲递归合并为最终大纲"""
 
     _MAX_MERGE_LEVELS: int = 10
+    _BATCH_SIZE_RATIO: float = 0.8
 
     def __init__(
         self,
@@ -57,6 +58,34 @@ class OutlineMerger:
         )
         return final_outline
 
+    def _normalize_outlines(
+        self,
+        outlines: list[dict[str, Any]] | list[str],
+        is_text_mode: bool,
+    ) -> tuple[list[dict[str, Any]] | list[str], bool]:
+        """检测并标准化大纲格式，返回 (标准化后的大纲列表, 是否文本模式)"""
+        if is_text_mode or not outlines:
+            return outlines, is_text_mode
+
+        first = outlines[0]
+        if isinstance(first, str):
+            return outlines, True
+        if isinstance(first, dict) and "merged_content" in first:
+            outlines_dicts = cast(list[dict[str, Any]], outlines)
+            return [item["merged_content"] for item in outlines_dicts], True
+        return outlines, False
+
+    def _build_merge_prompt(
+        self,
+        outlines: list[dict[str, Any]] | list[str],
+        is_text_mode: bool,
+    ) -> str:
+        """根据模式生成合并提示词"""
+        if is_text_mode:
+            return merge_text_prompt(cast(list[str], outlines))
+        outlines_json = json.dumps(outlines, ensure_ascii=False)
+        return merge_prompt(outlines_json)
+
     async def merge_outlines_recursive(
         self,
         outlines: list[dict[str, Any]] | list[str],
@@ -81,23 +110,9 @@ class OutlineMerger:
         processing_state.merge_outlines_count = len(outlines)
         emit_progress_fn()
 
-        # 判断模式
-        if not is_text_mode and len(outlines) > 0:
-            if isinstance(outlines[0], str):
-                is_text_mode = True
-            elif isinstance(outlines[0], dict) and "merged_content" in outlines[0]:
-                outlines_dicts = cast(list[dict[str, Any]], outlines)
-                outlines = [item["merged_content"] for item in outlines_dicts]
-                is_text_mode = True
+        outlines, is_text_mode = self._normalize_outlines(outlines, is_text_mode)
+        merge_prompt_text = self._build_merge_prompt(outlines, is_text_mode)
 
-        # 生成合并提示
-        if is_text_mode:
-            merge_prompt_text = merge_text_prompt(cast(list[str], outlines))
-        else:
-            outlines_json = json.dumps(outlines, ensure_ascii=False)
-            merge_prompt_text = merge_prompt(outlines_json)
-
-        # 检查 token 数量
         input_tokens = count_tokens(merge_prompt_text)
         max_input_tokens = int(self.processing_config.model_max_tokens * MAX_INPUT_TOKEN_RATIO)
 
@@ -112,10 +127,33 @@ class OutlineMerger:
             emit_progress_fn()
             return llm_response.content
 
-        # 输入过大，拆分批次
-        logger.warning(f"层级 {level}: 输入过大，拆分为多个批次")
-        batch_size = max(1, int(max_input_tokens / (input_tokens / len(outlines)) * 0.8))
+        return await self._merge_in_batches(
+            outlines,
+            processing_state,
+            emit_progress_fn,
+            accumulate_tokens_fn,
+            level,
+            is_text_mode,
+            max_input_tokens,
+            input_tokens,
+        )
 
+    async def _merge_in_batches(
+        self,
+        outlines: list[dict[str, Any]] | list[str],
+        processing_state: ProcessingState,
+        emit_progress_fn: Callable[[], None],
+        accumulate_tokens_fn: Callable[[dict[str, int] | None, str], None],
+        level: int,
+        is_text_mode: bool,
+        max_input_tokens: int,
+        input_tokens: int,
+    ) -> str:
+        """将过大输入拆分为批次，逐批合并后递归合并批次结果"""
+        logger.warning(f"层级 {level}: 输入过大，拆分为多个批次")
+        batch_size = max(
+            1, int(max_input_tokens / (input_tokens / len(outlines)) * self._BATCH_SIZE_RATIO)
+        )
         batches = [outlines[i : i + batch_size] for i in range(0, len(outlines), batch_size)]
 
         processing_state.merge_batch_total = len(batches)

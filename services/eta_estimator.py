@@ -147,6 +147,41 @@ class ETAEstimator:
         logger.debug(f"ETA 估算器：吞吐量={throughput:.2f} 块/秒")
         return throughput
 
+    def _estimate_by_throughput(self, remaining: int) -> dict[str, Any] | None:
+        """基于实际吞吐量估算（最准确的策略）"""
+        throughput = self._calculate_throughput()
+        if throughput is None or throughput <= 0:
+            return None
+        return {
+            "eta_seconds": remaining / throughput,
+            "confidence": "high",
+            "method": "throughput",
+        }
+
+    def _estimate_by_weighted_average(self, remaining: int, failed_chunks: int) -> dict[str, Any]:
+        """基于加权平均时间的估算（备选策略）"""
+        filtered_times = self._filter_outliers(list(self.processing_times))
+        if not filtered_times:
+            return {"eta_seconds": None, "confidence": "low", "method": "none"}
+
+        weighted_avg = self._calculate_weighted_average(filtered_times)
+        effective_avg = weighted_avg / self.parallel_limit
+
+        estimated_retry_time = 0.0
+        if self.retry_times:
+            avg_retry = sum(self.retry_times) / len(self.retry_times)
+            estimated_retry_time = failed_chunks * avg_retry
+
+        eta = remaining * effective_avg + estimated_retry_time
+        confidence = "high" if len(filtered_times) >= self.window_size else "medium"
+
+        logger.debug(
+            f"ETA 估算：剩余={remaining}，平均时间={weighted_avg:.2f}s，"
+            f"并发={self.parallel_limit}，ETA={eta:.2f}s，置信度={confidence}"
+        )
+
+        return {"eta_seconds": eta, "confidence": confidence, "method": "weighted_average"}
+
     def estimate(
         self,
         total_chunks: int,
@@ -164,69 +199,21 @@ class ETAEstimator:
         Returns:
             包含 eta_seconds, confidence, method 等信息的字典
         """
-        result: dict[str, Any] = {
-            "eta_seconds": None,
-            "confidence": "low",
-            "method": "none",
-        }
-
         if total_chunks == 0:
-            return result
+            return {"eta_seconds": None, "confidence": "low", "method": "none"}
 
         remaining = max(total_chunks - completed_chunks, 0)
         if remaining == 0:
-            result["eta_seconds"] = 0.0
-            result["confidence"] = "high"
-            result["method"] = "completed"
-            return result
+            return {"eta_seconds": 0.0, "confidence": "high", "method": "completed"}
 
-        # 样本不足
         if len(self.processing_times) < self.min_samples:
+            return {"eta_seconds": None, "confidence": "low", "method": "none"}
+
+        result = self._estimate_by_throughput(remaining)
+        if result is not None:
             return result
 
-        # 策略1：基于吞吐量的估算（最准确）
-        throughput = self._calculate_throughput()
-        if throughput is not None and throughput > 0:
-            eta = remaining / throughput
-            result["eta_seconds"] = eta
-            result["confidence"] = "high"
-            result["method"] = "throughput"
-            return result
-
-        # 策略2：基于加权平均时间的估算
-        filtered_times = self._filter_outliers(list(self.processing_times))
-        if not filtered_times:
-            return result
-
-        weighted_avg = self._calculate_weighted_average(filtered_times)
-
-        # 考虑并发处理
-        effective_avg = weighted_avg / self.parallel_limit
-
-        # 考虑失败块的重试时间
-        if self.retry_times:
-            avg_retry = sum(self.retry_times) / len(self.retry_times)
-            # 假设失败块需要重试一次
-            estimated_retry_time = failed_chunks * avg_retry
-        else:
-            estimated_retry_time = 0.0
-
-        eta = remaining * effective_avg + estimated_retry_time
-
-        result["eta_seconds"] = eta
-        result["confidence"] = "medium"
-        result["method"] = "weighted_average"
-
-        # 如果有足够样本，提高置信度
-        if len(filtered_times) >= self.window_size:
-            result["confidence"] = "high"
-
-        logger.debug(
-            f"ETA 估算：剩余={remaining}，平均时间={weighted_avg:.2f}s，"
-            f"并发={self.parallel_limit}，ETA={eta:.2f}s，置信度={result['confidence']}"
-        )
-
-        return result
+        return self._estimate_by_weighted_average(remaining, failed_chunks)
 
     def reset(self) -> None:
         """重置估算器"""

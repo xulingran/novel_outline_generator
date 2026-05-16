@@ -26,7 +26,7 @@ def _resolve_upload_path(path: str) -> Path | None:
 
     try:
         resolved = Path(path).resolve()
-    except (OSError, RuntimeError):
+    except (OSError, RuntimeError, ValueError):
         return None
 
     upload_root = web_api._UPLOAD_ROOT

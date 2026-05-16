@@ -65,7 +65,9 @@ class AboutPage(ctk.CTkFrame):
             logo_icon = Icon(hero_inner, name="rocket", size=IconSize.XXL)
             logo_icon.pack(anchor="center", pady=(SPACING["sm"], SPACING["md"]))
         except Exception:
-            fallback_icon = ctk.CTkLabel(hero_inner, text="N", font=ctk.CTkFont(size=40, weight="bold"))
+            fallback_icon = ctk.CTkLabel(
+                hero_inner, text="N", font=ctk.CTkFont(size=40, weight="bold")
+            )
             fallback_icon.pack(anchor="center", pady=(SPACING["sm"], SPACING["md"]))
 
         name_label = ctk.CTkLabel(
@@ -229,12 +231,10 @@ class AboutPage(ctk.CTkFrame):
         """打开 GitHub 仓库"""
         import webbrowser
 
-        webbrowser.open("https://github.com/yourusername/novel-outline-generator")
+        webbrowser.open("https://github.com/xulingran/novel_outline_generator")
 
     def _open_docs(self):
         """打开文档"""
         import webbrowser
 
-        webbrowser.open(
-            "https://github.com/yourusername/novel-outline-generator/blob/main/README.md"
-        )
+        webbrowser.open("https://github.com/xulingran/novel_outline_generator/blob/main/README.md")

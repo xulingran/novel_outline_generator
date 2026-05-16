@@ -50,6 +50,7 @@ dmypy.json
 # AI tools cache
 .claude/
 .trae/
+.codeartsdoer/
 
 # Additional Python tools
 .coverage.*

@@ -5,12 +5,27 @@
 """
 
 import logging
+from dataclasses import dataclass
 
 import customtkinter as ctk
 
 from gui.theme_manager import SPACING, get_color
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass
+class ProgressUpdate:
+    """进度更新数据，封装 update_progress 的所有参数"""
+
+    completed: int
+    total: int
+    failed: int = 0
+    partial: int = 0
+    phase: str = ""
+    eta_seconds: int | float | str | None = None
+    eta_confidence: float | str = 0.0
+    progress: float | None = None
 
 
 class ProgressBar(ctk.CTkFrame):
@@ -113,8 +128,8 @@ class ProgressBar(ctk.CTkFrame):
 
     def update_progress(
         self,
-        completed: int,
-        total: int,
+        completed: int | ProgressUpdate,
+        total: int = 0,
         failed: int = 0,
         partial: int = 0,
         phase: str = "",
@@ -125,8 +140,12 @@ class ProgressBar(ctk.CTkFrame):
         """
         更新进度
 
+        支持两种调用方式（向后兼容）：
+        - update_progress(ProgressUpdate(...))
+        - update_progress(completed, total, failed=0, ...)
+
         Args:
-            completed: 已完成块数
+            completed: 已完成块数 或 ProgressUpdate 实例
             total: 总块数
             failed: 失败块数
             partial: 部分完成块数
@@ -135,6 +154,16 @@ class ProgressBar(ctk.CTkFrame):
             eta_confidence: 置信度（0-1）或等级字符串（low/medium/high）
             progress: 进度值（0-1），优先于 completed/total 计算
         """
+        if isinstance(completed, ProgressUpdate):
+            u = completed
+            completed, total = u.completed, u.total
+            failed, partial, phase = u.failed, u.partial, u.phase
+            eta_seconds, eta_confidence, progress = (
+                u.eta_seconds,
+                u.eta_confidence,
+                u.progress,
+            )
+
         self.completed_chunks = completed
         self.total_chunks = total
         self.failed_chunks = failed

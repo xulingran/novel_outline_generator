@@ -185,44 +185,8 @@ async def upload_file(request: Request, file: UploadFile = UPLOAD_FILE_PARAM):
 
     client_host = request.client.host if request.client else "unknown"
     web_api.rate_limiter.check_rate_limit(client_host, 10, 60)
-    if file.content_type not in ("text/plain", "text/markdown", "application/octet-stream"):
-        raise HTTPException(status_code=400, detail="仅支持文本文件")
 
-    # 获取配置
-    processing_config = get_processing_config()
-
-    # 验证文件名存在
-    if not file.filename:
-        raise HTTPException(status_code=400, detail="文件名不能为空")
-
-    suffix = Path(file.filename).suffix.lower()
-    if suffix not in processing_config.allowed_extensions:
-        raise HTTPException(
-            status_code=400, detail=f"仅支持 {', '.join(processing_config.allowed_extensions)} 文件"
-        )
-
-    # 使用安全文件名，防止路径遍历攻击
-    from validators import sanitize_filename
-
-    safe_filename = sanitize_filename(file.filename)
-    web_api.UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
-    dest = web_api.UPLOAD_DIR / safe_filename
-
-    # 验证最终路径仍在上传目录内（防止路径遍历攻击）
-    try:
-        dest_resolved = dest.resolve()
-        upload_root_resolved = web_api._UPLOAD_ROOT.resolve()
-        dest_resolved.relative_to(upload_root_resolved)
-    except (ValueError, RuntimeError) as e:
-        raise HTTPException(status_code=400, detail=f"无效的文件路径: {safe_filename}") from e
-
-    content = await file.read()
-    max_size_bytes = processing_config.max_upload_file_size_mb * 1024 * 1024
-    if len(content) > max_size_bytes:
-        raise HTTPException(
-            status_code=400, detail=f"文件过大，限制{processing_config.max_upload_file_size_mb}MB"
-        )
-    dest.write_bytes(content)
+    dest = await _validate_and_save_upload(file)
     return {"file_path": str(dest)}
 
 
@@ -237,40 +201,53 @@ async def upload_multiple_files(request: Request, files: list[UploadFile] = UPLO
     client_host = request.client.host if request.client else "unknown"
     web_api.rate_limiter.check_rate_limit(client_host, 10, 60)
 
-    # 获取配置
-    processing_config = get_processing_config()
-
-    from validators import sanitize_filename
-
-    web_api.UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
     uploaded_files = []
-
     for file in files:
-        # 验证文件名存在
-        if not file.filename:
-            raise HTTPException(status_code=400, detail="文件名不能为空")
-
-        suffix = Path(file.filename).suffix.lower()
-        if suffix not in processing_config.allowed_extensions:
-            raise HTTPException(
-                status_code=400,
-                detail=f"仅支持 {', '.join(processing_config.allowed_extensions)} 文件: {file.filename}",
-            )
-
-        safe_filename = sanitize_filename(file.filename)
-        dest = web_api.UPLOAD_DIR / safe_filename
-        content = await file.read()
-        max_size_bytes = processing_config.max_upload_file_size_mb * 1024 * 1024
-        if len(content) > max_size_bytes:
-            raise HTTPException(
-                status_code=400,
-                detail=f"文件过大，限制{processing_config.max_upload_file_size_mb}MB: {file.filename}",
-            )
-
-        dest.write_bytes(content)
+        dest = await _validate_and_save_upload(file)
         uploaded_files.append(str(dest))
 
     return {"file_paths": uploaded_files}
+
+
+async def _validate_and_save_upload(file: UploadFile) -> Path:
+    """验证并保存上传文件，返回目标路径。验证失败时抛出 HTTPException。"""
+    import web_api
+    from validators import sanitize_filename
+
+    if not file.filename:
+        raise HTTPException(status_code=400, detail="文件名不能为空")
+
+    if file.content_type not in ("text/plain", "text/markdown", "application/octet-stream"):
+        raise HTTPException(status_code=400, detail="仅支持文本文件")
+
+    processing_config = get_processing_config()
+    suffix = Path(file.filename).suffix.lower()
+    if suffix not in processing_config.allowed_extensions:
+        raise HTTPException(
+            status_code=400,
+            detail=f"仅支持 {', '.join(processing_config.allowed_extensions)} 文件: {file.filename}",
+        )
+
+    safe_filename = sanitize_filename(file.filename)
+    web_api.UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+    dest = web_api.UPLOAD_DIR / safe_filename
+
+    try:
+        dest_resolved = dest.resolve()
+        upload_root_resolved = web_api._UPLOAD_ROOT.resolve()
+        dest_resolved.relative_to(upload_root_resolved)
+    except (ValueError, RuntimeError) as e:
+        raise HTTPException(status_code=400, detail=f"无效的文件路径: {safe_filename}") from e
+
+    content = await file.read()
+    max_size_bytes = processing_config.max_upload_file_size_mb * 1024 * 1024
+    if len(content) > max_size_bytes:
+        raise HTTPException(
+            status_code=400,
+            detail=f"文件过大，限制{processing_config.max_upload_file_size_mb}MB: {file.filename}",
+        )
+    dest.write_bytes(content)
+    return dest
 
 
 async def _run_job(job: Job, req: ProcessRequest):
@@ -304,43 +281,52 @@ async def _run_job(job: Job, req: ProcessRequest):
     try:
         service = web_api.NovelProcessingService(progress_callback=handle_progress)
         result = await service.process_novel(req.file_path, resume=req.resume)
-        job.result.update(result)
-        job.progress = 1.0
-        job.status = "success"
-
-        # 输出token统计
-        if "token_usage" in result and not job.token_logged:
-            token_usage = result["token_usage"]
-            job.log(format_token_usage_log(token_usage))
-            job.token_logged = True
-
-        job.log("处理完成")
-        try:
-            current_upload = web_api._resolve_upload_path(req.file_path)
-            if current_upload:
-                active_uploads: set[Path] = set()
-                for other_job in web_api.job_manager.values():
-                    if other_job.id == job.id:
-                        continue
-                    if other_job.status not in {"pending", "running"}:
-                        continue
-                    if not other_job.file_path:
-                        continue
-                    upload_path = web_api._resolve_upload_path(other_job.file_path)
-                    if upload_path:
-                        active_uploads.add(upload_path)
-
-                cleaned = web_api.cleanup_uploads(protected_paths=active_uploads)
-                if cleaned:
-                    job.log(f"已清理上传文件 {cleaned} 个")
-        except Exception as cleanup_err:
-            job.log(f"清理上传文件失败: {cleanup_err}")
-
+        _finalize_job(job, result)
+        _cleanup_uploads(web_api, job, req.file_path)
     except Exception as e:
         logger.exception("Job %s failed with error: %s", job.id, e)
         job.status = "error"
         job.message = str(e)
         job.log(f"错误: {e}")
+
+
+def _finalize_job(job: Job, result: dict[str, Any]) -> None:
+    """将处理结果写入 job 对象并输出 token 统计"""
+    job.result.update(result)
+    job.progress = 1.0
+    job.status = "success"
+
+    if "token_usage" in result and not job.token_logged:
+        token_usage = result["token_usage"]
+        job.log(format_token_usage_log(token_usage))
+        job.token_logged = True
+
+    job.log("处理完成")
+
+
+def _cleanup_uploads(web_api: Any, job: Job, file_path: str) -> None:
+    """清理已完成 job 对应的上传文件（保护其他活跃 job 的文件）"""
+    try:
+        current_upload = web_api._resolve_upload_path(file_path)
+        if not current_upload:
+            return
+        active_uploads: set[Path] = set()
+        for other_job in web_api.job_manager.values():
+            if other_job.id == job.id:
+                continue
+            if other_job.status not in {"pending", "running"}:
+                continue
+            if not other_job.file_path:
+                continue
+            upload_path = web_api._resolve_upload_path(other_job.file_path)
+            if upload_path:
+                active_uploads.add(upload_path)
+
+        cleaned = web_api.cleanup_uploads(protected_paths=active_uploads)
+        if cleaned:
+            job.log(f"已清理上传文件 {cleaned} 个")
+    except Exception as cleanup_err:
+        job.log(f"清理上传文件失败: {cleanup_err}")
 
 
 async def run_queue_task(task: "QueueTask") -> None:

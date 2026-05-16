@@ -10,6 +10,7 @@ from enum import Enum
 import customtkinter as ctk
 
 from gui.theme_manager import CORNER_RADIUS, get_color
+from gui.utils.color import darken_color, lighten_color
 
 logger = logging.getLogger(__name__)
 
@@ -169,57 +170,10 @@ class Button(ctk.CTkButton):
             调整后的颜色
         """
         if isinstance(hex_color, tuple):
-            light_color = self._lighten(hex_color[0], percent)
-            dark_color = self._darken(hex_color[1], percent)
+            light_color = lighten_color(hex_color[0], percent)
+            dark_color = darken_color(hex_color[1], percent)
             return (light_color, dark_color)
-        return self._lighten(hex_color, percent)
-
-    def _hex_to_rgb(self, hex_color: str) -> tuple[int, int, int]:
-        """将十六进制颜色转换为 RGB"""
-        hex_color = hex_color.lstrip("#")
-        return (
-            int(hex_color[0:2], 16),
-            int(hex_color[2:4], 16),
-            int(hex_color[4:6], 16),
-        )
-
-    def _rgb_to_hex(self, r: int, g: int, b: int) -> str:
-        """将 RGB 转换为十六进制颜色"""
-        return f"#{r:02x}{g:02x}{b:02x}"
-
-    def _lighten(self, hex_color: str, percent: int) -> str:
-        """
-        使颜色变亮
-
-        Args:
-            hex_color: 十六进制颜色
-            percent: 变亮百分比
-
-        Returns:
-            变亮后的十六进制颜色
-        """
-        r, g, b = self._hex_to_rgb(hex_color)
-        r = min(255, int(r + (255 - r) * percent / 100))
-        g = min(255, int(g + (255 - g) * percent / 100))
-        b = min(255, int(b + (255 - b) * percent / 100))
-        return self._rgb_to_hex(r, g, b)
-
-    def _darken(self, hex_color: str, percent: int) -> str:
-        """
-        使颜色变暗
-
-        Args:
-            hex_color: 十六进制颜色
-            percent: 变暗百分比
-
-        Returns:
-            变暗后的十六进制颜色
-        """
-        r, g, b = self._hex_to_rgb(hex_color)
-        r = max(0, int(r * (100 - percent) / 100))
-        g = max(0, int(g * (100 - percent) / 100))
-        b = max(0, int(b * (100 - percent) / 100))
-        return self._rgb_to_hex(r, g, b)
+        return lighten_color(hex_color, percent)
 
     def _add_icon(self):
         """添加图标到按钮"""
