@@ -153,6 +153,22 @@ app.add_middleware(
 )
 
 
+# 获取前端 HTML 文件路径
+_UI_HTML_PATH = Path(__file__).parent.parent / "ui" / "index.html"
+
+
+@app.get("/")
+async def get_index():
+    """返回前端 HTML 页面"""
+    if _UI_HTML_PATH.exists():
+        from fastapi.responses import HTMLResponse
+
+        html_content = _UI_HTML_PATH.read_text(encoding="utf-8")
+        return HTMLResponse(content=html_content)
+    else:
+        raise HTTPException(status_code=404, detail=f"前端文件未找到: {_UI_HTML_PATH}")
+
+
 @app.get("/env")
 def get_env() -> dict[str, Any]:
     import web_api

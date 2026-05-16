@@ -20,6 +20,7 @@ BREAKPOINTS = {
     "compact": 900,
     "normal": 1200,
 }
+LAYOUT_HYSTERESIS = 48
 
 
 @dataclasses.dataclass
@@ -101,22 +102,47 @@ class ProcessPage(ctk.CTkFrame):
 
         self._setup_ui()
         self.bind("<Configure>", self._on_resize)
+        self.after_idle(self.refresh_layout)
 
     def _on_resize(self, event):
         """窗口大小变化时调整布局"""
         if not hasattr(self, "_main_container"):
             return
-        width = event.width
-        new_mode = self._get_layout_mode(width)
+        width = self._normalize_width(event.width)
+        new_mode = self._get_layout_mode(width, self._current_layout_mode)
         if new_mode != self._current_layout_mode:
             self._current_layout_mode = new_mode
             self._apply_layout_mode(new_mode)
 
-    def _get_layout_mode(self, width: int) -> str:
+    def _normalize_width(self, width: int) -> int:
+        """将 CTk 物理像素宽度转换为逻辑宽度，适配高 DPI 缩放"""
+        try:
+            scaling = ctk.ScalingTracker.get_window_scaling(self)
+        except Exception:
+            scaling = 1.0
+
+        if scaling <= 0:
+            return width
+
+        return int(width / scaling)
+
+    def _get_layout_mode(self, width: int, current_mode: str | None = None) -> str:
         """根据宽度获取布局模式"""
-        if width < BREAKPOINTS["compact"]:
+        mode = current_mode or self._current_layout_mode
+
+        if mode == "compact":
+            if width >= BREAKPOINTS["compact"] + LAYOUT_HYSTERESIS:
+                return "medium"
             return "compact"
-        elif width < BREAKPOINTS["normal"]:
+
+        if mode == "medium":
+            if width < BREAKPOINTS["compact"] - LAYOUT_HYSTERESIS:
+                return "compact"
+            if width >= BREAKPOINTS["normal"] + LAYOUT_HYSTERESIS:
+                return "normal"
+            return "medium"
+
+        if width < BREAKPOINTS["normal"] - LAYOUT_HYSTERESIS:
             return "medium"
         return "normal"
 
@@ -143,9 +169,20 @@ class ProcessPage(ctk.CTkFrame):
                 self._main_container.grid_rowconfigure(3, weight=0)
             case "medium":
                 self._top_left.grid(
-                    row=0, column=0, sticky="nsew", padx=(0, SPACING["md"]), pady=(0, SPACING["lg"])
+                    row=0,
+                    column=0,
+                    columnspan=1,
+                    sticky="nsew",
+                    padx=(0, SPACING["md"]),
+                    pady=(0, SPACING["lg"]),
                 )
-                self._top_right.grid(row=0, column=1, sticky="nsew", pady=(0, SPACING["lg"]))
+                self._top_right.grid(
+                    row=0,
+                    column=1,
+                    columnspan=1,
+                    sticky="nsew",
+                    pady=(0, SPACING["lg"]),
+                )
                 self._bottom_log.grid(row=1, column=0, columnspan=2, sticky="nsew")
                 self._action_row.grid(row=2, column=0, columnspan=2, sticky="ew")
                 self._main_container.grid_columnconfigure(0, weight=40, minsize=280)
@@ -156,9 +193,20 @@ class ProcessPage(ctk.CTkFrame):
                 self._main_container.grid_rowconfigure(3, weight=0)
             case _:
                 self._top_left.grid(
-                    row=0, column=0, sticky="nsew", padx=(0, SPACING["lg"]), pady=(0, SPACING["lg"])
+                    row=0,
+                    column=0,
+                    columnspan=1,
+                    sticky="nsew",
+                    padx=(0, SPACING["lg"]),
+                    pady=(0, SPACING["lg"]),
                 )
-                self._top_right.grid(row=0, column=1, sticky="nsew", pady=(0, SPACING["lg"]))
+                self._top_right.grid(
+                    row=0,
+                    column=1,
+                    columnspan=1,
+                    sticky="nsew",
+                    pady=(0, SPACING["lg"]),
+                )
                 self._bottom_log.grid(row=1, column=0, columnspan=2, sticky="nsew")
                 self._action_row.grid(row=2, column=0, columnspan=2, sticky="ew")
                 self._main_container.grid_columnconfigure(0, weight=32, minsize=320)
@@ -201,8 +249,8 @@ class ProcessPage(ctk.CTkFrame):
     def refresh_layout(self):
         """刷新布局"""
         self.update_idletasks()
-        width = self.winfo_width()
-        self._current_layout_mode = self._get_layout_mode(width)
+        width = self._normalize_width(self.winfo_width())
+        self._current_layout_mode = self._get_layout_mode(width, self._current_layout_mode)
         self._apply_layout_mode(self._current_layout_mode)
 
     def _safe_update_progress_bar(self, value: float) -> None:
@@ -364,7 +412,8 @@ class ProcessPage(ctk.CTkFrame):
 
         self._stat_labels = {}
 
-        for key, label in [("completed", "已完成"), ("failed", "失败"), ("partial", "部分完成")]:
+        stats = [("completed", "已完成"), ("failed", "失败"), ("partial", "部分完成")]
+        for index, (key, label) in enumerate(stats):
             stat_card = ctk.CTkFrame(
                 stats_frame,
                 fg_color=get_color("bg_secondary", mode="auto"),
@@ -373,7 +422,8 @@ class ProcessPage(ctk.CTkFrame):
                 corner_radius=8,
                 height=80,
             )
-            stat_card.pack(side="left", fill="both", expand=True, padx=(0, SPACING["sm"]))
+            right_padding = SPACING["sm"] if index < len(stats) - 1 else 0
+            stat_card.pack(side="left", fill="both", expand=True, padx=(0, right_padding))
             stat_card.pack_propagate(False)
 
             stat_label = ctk.CTkLabel(

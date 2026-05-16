@@ -26,6 +26,16 @@ def isolate_web_api_state(monkeypatch, tmp_path):
     yield
 
 
+def test_get_root():
+    """测试根路径返回前端 HTML"""
+    client = TestClient(web_api.app)
+    response = client.get("/")
+    assert response.status_code == 200
+    # 验证返回的是 HTML 内容
+    assert "text/html" in response.headers.get("content-type", "")
+    assert "Novel Outline Studio" in response.text
+
+
 def test_get_env():
     client = TestClient(web_api.app)
     response = client.get("/env")

@@ -234,6 +234,7 @@ class ThemeManager:
             return
 
         self._theme = theme
+        self.apply_theme()
         self._save_theme()
 
         # 通知所有订阅者

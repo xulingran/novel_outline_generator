@@ -177,18 +177,48 @@ class MainWindow(ctk.CTk):
 
     def _on_theme_changed(self, theme: str):
         """主题变化回调"""
+        self.configure(fg_color=get_color("bg_primary", mode="auto"))
+        self._content_frame.configure(fg_color=get_color("bg_primary", mode="auto"))
+        if hasattr(self, "_sidebar"):
+            self._sidebar.refresh_theme()
+
+        for page in self._pages.values():
+            try:
+                page.configure(fg_color=get_color("bg_primary", mode="auto"))
+            except Exception:
+                logger.debug("Failed to refresh page fg color", exc_info=True)
+
+            if hasattr(page, "refresh_layout"):
+                try:
+                    page.refresh_layout()
+                except Exception:
+                    logger.debug("Failed to refresh page layout after theme change", exc_info=True)
+
+        self.update_idletasks()
         logger.info(f"Theme changed to: {theme}")
 
     def _on_resize(self, event):
         """窗口大小变化回调"""
         if event.widget != self:
             return
-        width = event.width
+        width = self._normalize_width(event.width)
         should_be_compact = width < self.COMPACT_MODE_THRESHOLD
 
         if should_be_compact != self._compact_mode:
             self._compact_mode = should_be_compact
             self._apply_compact_mode(should_be_compact)
+
+    def _normalize_width(self, width: int) -> int:
+        """将窗口物理像素宽度转换为逻辑宽度，适配高 DPI 缩放"""
+        try:
+            scaling = ctk.ScalingTracker.get_window_scaling(self)
+        except Exception:
+            scaling = 1.0
+
+        if scaling <= 0:
+            return width
+
+        return int(width / scaling)
 
     def _apply_compact_mode(self, compact: bool):
         """应用紧凑模式"""

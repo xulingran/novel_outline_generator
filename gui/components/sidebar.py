@@ -1,7 +1,7 @@
 """
 侧边导航栏组件
 
-提供左侧导航菜单，支持激活指示器、图标、主题切换器。
+提供左侧导航菜单，支持激活指示器、图标和折叠状态。
 """
 
 import logging
@@ -35,7 +35,6 @@ class NavItemSpec:
     badge: str | None = None
 
 
-# 导航项定义
 NAV_ITEMS = [
     NavItemSpec(NavItem.PROCESS, "处理", "rocket"),
     NavItemSpec(NavItem.CONFIG, "配置", "sliders"),
@@ -48,15 +47,8 @@ class Sidebar(ctk.CTkFrame):
     """
     侧边导航栏
 
-    提供左侧导航菜单，包含 Logo、导航项、激活指示器和主题切换器。
+    提供左侧导航菜单，包含品牌区、导航项、激活指示器和底部说明。
     支持宽度调整和折叠功能。
-
-    Args:
-        master: 父容器
-        width: 侧边栏宽度，默认 240px
-        active_item: 当前激活的导航项
-        on_navigation: 导航回调函数，接收 NavItem 参数
-        **kwargs: 其他 Frame 参数
     """
 
     MIN_WIDTH = 180
@@ -79,6 +71,8 @@ class Sidebar(ctk.CTkFrame):
         self._dragging = False
         self._drag_start_x = 0
         self._drag_start_width = 0
+        self._pending_width = width
+        self._resize_after_id: str | None = None
 
         super().__init__(
             master,
@@ -133,6 +127,7 @@ class Sidebar(ctk.CTkFrame):
         self._dragging = True
         self._drag_start_x = event.x_root
         self._drag_start_width = self._width
+        self._pending_width = self._width
         self._resize_handle.configure(fg_color=get_color("accent", mode="auto"))
 
     def _do_resize(self, event):
@@ -146,11 +141,28 @@ class Sidebar(ctk.CTkFrame):
 
         if not self._collapsed:
             self._width = new_width
-            self.configure(width=new_width)
+            self._pending_width = new_width
+            if self._resize_after_id is None:
+                self._resize_after_id = self.after(16, self._apply_pending_width)
+
+    def _apply_pending_width(self):
+        """以较低频率应用侧边栏宽度，减少拖拽时的整窗重绘"""
+        self._resize_after_id = None
+
+        if self._collapsed:
+            return
+
+        current_width = int(self.cget("width"))
+        if abs(current_width - self._pending_width) >= 1:
+            self.configure(width=self._pending_width)
 
     def _end_resize(self, event):
         """结束调整宽度"""
         self._dragging = False
+        if self._resize_after_id is not None:
+            self.after_cancel(self._resize_after_id)
+            self._resize_after_id = None
+        self._apply_pending_width()
         self._resize_handle.configure(fg_color="transparent")
 
     def toggle_collapse(self):
@@ -165,53 +177,85 @@ class Sidebar(ctk.CTkFrame):
 
     def _hide_labels(self):
         """隐藏标签（折叠模式）"""
-        if hasattr(self, "_logo_label"):
-            self._logo_label.pack_forget()
+        for widget_name in ("_brand_text_frame", "_footer_label"):
+            widget = getattr(self, widget_name, None)
+            if widget is not None:
+                widget.pack_forget()
+
         for button in self._nav_buttons.values():
             label = getattr(button, "_label", None)
-            if label:
+            if label is not None:
                 label.pack_forget()
 
     def _show_labels(self):
         """显示标签（展开模式）"""
-        if hasattr(self, "_logo_label") and self._logo_label.winfo_exists():
-            self._logo_label.pack(side="left", fill="x", expand=True)
+        if hasattr(self, "_brand_text_frame") and self._brand_text_frame.winfo_exists():
+            self._brand_text_frame.pack(fill="x", pady=(SPACING["md"], 0))
+
+        if hasattr(self, "_footer_label") and self._footer_label.winfo_exists():
+            self._footer_label.pack(fill="x")
+
         for button in self._nav_buttons.values():
             label = getattr(button, "_label", None)
-            if label and label.winfo_exists():
+            if label is not None and label.winfo_exists():
                 label.pack(side="left", fill="x", expand=True)
 
     def _setup_logo(self):
-        """设置 Logo 区域"""
-        logo_frame = ctk.CTkFrame(self._content_frame, fg_color="transparent", height=64)
-        logo_frame.pack(fill="x", pady=(SPACING["lg"], SPACING["lg"]))
-        logo_frame.pack_propagate(False)
+        """设置顶部品牌区"""
+        self._brand_wrapper = ctk.CTkFrame(self._content_frame, fg_color="transparent")
+        self._brand_wrapper.pack(fill="x", padx=SPACING["md"], pady=(SPACING["xl"], SPACING["lg"]))
+
+        brand_card = ctk.CTkFrame(
+            self._brand_wrapper,
+            fg_color=get_color("bg_secondary", mode="auto"),
+            border_width=1,
+            border_color=get_color("border", mode="auto"),
+            corner_radius=14,
+        )
+        brand_card.pack(fill="x")
+
+        self._brand_card = brand_card
+
+        inner = ctk.CTkFrame(brand_card, fg_color="transparent")
+        inner.pack(fill="x", padx=SPACING["md"], pady=SPACING["lg"])
 
         try:
             from gui.components.icon import Icon, IconSize
 
-            logo_icon = Icon(logo_frame, name="rocket", size=IconSize.LG)
-            logo_icon.pack(side="left", padx=(SPACING["lg"], SPACING["sm"]))
+            self._logo_icon = Icon(inner, name="rocket", size=IconSize.LG)
+            self._logo_icon.pack(anchor="center")
         except Exception:
-            pass
+            self._logo_icon = None
+
+        self._brand_text_frame = ctk.CTkFrame(inner, fg_color="transparent")
+        self._brand_text_frame.pack(fill="x", pady=(SPACING["md"], 0))
 
         self._logo_label = ctk.CTkLabel(
-            logo_frame,
-            text="Novel\nOutline",
-            font=ctk.CTkFont(size=16, weight="bold"),
+            self._brand_text_frame,
+            text="Novel\nOutline\nGenerator",
+            font=ctk.CTkFont(size=18, weight="bold"),
             text_color=get_color("fg_primary", mode="auto"),
-            anchor="w",
+            justify="center",
         )
-        self._logo_label.pack(side="left", fill="x", expand=True)
+        self._logo_label.pack(fill="x")
+
+        self._brand_subtitle = ctk.CTkLabel(
+            self._brand_text_frame,
+            text="AI 驱动的小说大纲工作台",
+            font=ctk.CTkFont(size=12),
+            text_color=get_color("fg_secondary", mode="auto"),
+            justify="center",
+        )
+        self._brand_subtitle.pack(fill="x", pady=(SPACING["xs"], 0))
 
     def _setup_navigation(self):
         """设置导航区域"""
-        nav_frame = ctk.CTkFrame(self._content_frame, fg_color="transparent")
-        nav_frame.pack(fill="x", expand=True)
+        self._nav_frame = ctk.CTkFrame(self._content_frame, fg_color="transparent")
+        self._nav_frame.pack(fill="x", expand=True, padx=SPACING["md"])
 
         for item_spec in NAV_ITEMS:
-            button = self._create_nav_button(nav_frame, item_spec)
-            button.pack(fill="x", padx=SPACING["md"], pady=(0, SPACING["xs"]))
+            button = self._create_nav_button(self._nav_frame, item_spec)
+            button.pack(fill="x", pady=(0, SPACING["sm"]))
             self._nav_buttons[item_spec.id] = button
 
     def _create_nav_button(self, parent, item_spec: NavItemSpec) -> ctk.CTkFrame:
@@ -219,22 +263,22 @@ class Sidebar(ctk.CTkFrame):
         button = ctk.CTkFrame(
             parent,
             fg_color="transparent",
-            corner_radius=SPACING["sm"],
-            height=40,
+            border_width=0,
+            border_color=get_color("border", mode="auto"),
+            corner_radius=12,
+            height=46,
         )
         button.pack_propagate(False)
 
-        # 激活指示器（左侧竖线）
         indicator = ctk.CTkFrame(
             button,
-            width=3,
+            width=4,
             fg_color="transparent",
             corner_radius=SPACING["xs"],
         )
-        indicator.pack(side="left", fill="y")
+        indicator.pack(side="left", fill="y", padx=(0, SPACING["sm"]))
         button._indicator = indicator
 
-        # 图标
         try:
             from gui.components.icon import Icon, IconSize
 
@@ -244,12 +288,11 @@ class Sidebar(ctk.CTkFrame):
                 size=IconSize.SM,
                 color=get_color("fg_secondary", mode="auto"),
             )
-            icon.pack(side="left", padx=(SPACING["md"], SPACING["sm"]))
+            icon.pack(side="left", padx=(SPACING["sm"], SPACING["sm"]))
             button._icon = icon
         except Exception:
             pass
 
-        # 文字
         label = ctk.CTkLabel(
             button,
             text=item_spec.label,
@@ -260,7 +303,6 @@ class Sidebar(ctk.CTkFrame):
         label.pack(side="left", fill="x", expand=True)
         button._label = label
 
-        # 徽章（可选）
         if item_spec.badge:
             badge = ctk.CTkLabel(
                 button,
@@ -273,11 +315,13 @@ class Sidebar(ctk.CTkFrame):
             )
             badge.pack(side="right", padx=(0, SPACING["sm"]))
 
-        # 绑定事件
-        button.bind("<Button-1>", lambda e: self._on_nav_click(item_spec.id))
-        label.bind("<Button-1>", lambda e: self._on_nav_click(item_spec.id))
+        click_targets = [button, label]
+        if hasattr(button, "_icon"):
+            click_targets.append(button._icon)
 
-        # 悬停效果
+        for target in click_targets:
+            target.bind("<Button-1>", lambda e, item_id=item_spec.id: self._on_nav_click(item_id))
+
         button.bind("<Enter>", lambda e: self._on_nav_enter(button, item_spec.id))
         button.bind("<Leave>", lambda e: self._on_nav_leave(button, item_spec.id))
 
@@ -292,12 +336,20 @@ class Sidebar(ctk.CTkFrame):
     def _on_nav_enter(self, button: ctk.CTkFrame, item_id: NavItem):
         """导航项悬停进入"""
         if item_id != self._active_item:
-            button.configure(fg_color=get_color("bg_secondary", mode="auto"))
+            button.configure(
+                fg_color=get_color("bg_secondary", mode="auto"),
+                border_color=get_color("border", mode="auto"),
+                border_width=1,
+            )
 
     def _on_nav_leave(self, button: ctk.CTkFrame, item_id: NavItem):
         """导航项悬停离开"""
         if item_id != self._active_item:
-            button.configure(fg_color="transparent")
+            button.configure(
+                fg_color="transparent",
+                border_color=get_color("border", mode="auto"),
+                border_width=0,
+            )
 
     def _update_active_state(self):
         """更新激活状态"""
@@ -305,20 +357,26 @@ class Sidebar(ctk.CTkFrame):
             is_active = item_id == self._active_item
 
             if is_active:
-                # 激活状态
-                button.configure(fg_color=get_color("bg_secondary", mode="auto"))
+                button.configure(
+                    fg_color=get_color("bg_secondary", mode="auto"),
+                    border_color=get_color("border", mode="auto"),
+                    border_width=1,
+                )
                 button._indicator.configure(fg_color=get_color("accent", mode="auto"))
 
                 if hasattr(button, "_icon"):
                     button._icon.configure(color=get_color("accent", mode="auto"))
                 if hasattr(button, "_label"):
                     button._label.configure(
-                        text_color=get_color("accent", mode="auto"),
+                        text_color=get_color("fg_primary", mode="auto"),
                         font=ctk.CTkFont(size=14, weight="bold"),
                     )
             else:
-                # 非激活状态
-                button.configure(fg_color="transparent")
+                button.configure(
+                    fg_color="transparent",
+                    border_color=get_color("border", mode="auto"),
+                    border_width=0,
+                )
                 button._indicator.configure(fg_color="transparent")
 
                 if hasattr(button, "_icon"):
@@ -331,175 +389,52 @@ class Sidebar(ctk.CTkFrame):
 
     def _setup_bottom(self):
         """设置底部区域"""
-        bottom_frame = ctk.CTkFrame(self._content_frame, fg_color="transparent")
-        bottom_frame.pack(fill="x", side="bottom", pady=SPACING["lg"])
+        self._bottom_frame = ctk.CTkFrame(self._content_frame, fg_color="transparent")
+        self._bottom_frame.pack(fill="x", side="bottom", padx=SPACING["md"], pady=SPACING["lg"])
 
         separator = ctk.CTkFrame(
-            bottom_frame,
+            self._bottom_frame,
             height=1,
             fg_color=get_color("border", mode="auto"),
         )
-        separator.pack(fill="x", padx=SPACING["md"], pady=(0, SPACING["md"]))
+        separator.pack(fill="x", pady=(0, SPACING["md"]))
+        self._footer_separator = separator
 
-        theme_switcher = self._create_theme_switcher(bottom_frame)
-        theme_switcher.pack(fill="x", padx=SPACING["md"])
-
-    def _create_theme_switcher(self, parent) -> ctk.CTkFrame:
-        """创建主题切换器"""
-        switcher = ctk.CTkFrame(
-            parent,
-            fg_color="transparent",
-            height=40,
+        self._footer_label = ctk.CTkLabel(
+            self._bottom_frame,
+            text="在“关于”页中切换外观模式",
+            font=ctk.CTkFont(size=11),
+            text_color=get_color("fg_tertiary", mode="auto"),
+            justify="center",
         )
-        switcher.pack_propagate(False)
+        self._footer_label.pack(fill="x")
 
-        # 当前主题显示
-        try:
-            from gui.theme_manager import get_theme_manager
+    def refresh_theme(self):
+        """刷新主题相关样式"""
+        self.configure(fg_color=get_color("bg_tertiary", mode="auto"))
 
-            theme_manager = get_theme_manager()
-            current_theme = theme_manager.get_current_theme()
-
-            theme_label = ctk.CTkLabel(
-                switcher,
-                text=self._get_theme_label(current_theme),
-                font=ctk.CTkFont(size=13),
-                text_color=get_color("fg_secondary", mode="auto"),
-                anchor="w",
+        if hasattr(self, "_brand_card"):
+            self._brand_card.configure(
+                fg_color=get_color("bg_secondary", mode="auto"),
+                border_color=get_color("border", mode="auto"),
             )
-            theme_label.pack(side="left", fill="x", expand=True)
-            switcher._theme_label = theme_label
 
-        except Exception as e:
-            logger.debug(f"Failed to get theme: {e}")
+        if hasattr(self, "_logo_label"):
+            self._logo_label.configure(text_color=get_color("fg_primary", mode="auto"))
 
-        # 切换按钮
-        try:
-            from gui.components.icon import Icon, IconSize
+        if hasattr(self, "_brand_subtitle"):
+            self._brand_subtitle.configure(text_color=get_color("fg_secondary", mode="auto"))
 
-            toggle_button = ctk.CTkFrame(
-                switcher,
-                fg_color="transparent",
-                width=32,
-                height=32,
-            )
-            toggle_button.pack(side="right")
-            toggle_button.pack_propagate(False)
+        if hasattr(self, "_footer_separator"):
+            self._footer_separator.configure(fg_color=get_color("border", mode="auto"))
 
-            # 绑定点击事件
-            toggle_button.bind("<Button-1>", lambda e: self._toggle_theme())
-            toggle_button._bind_label = theme_label
+        if hasattr(self, "_footer_label"):
+            self._footer_label.configure(text_color=get_color("fg_tertiary", mode="auto"))
 
-            # 图标
-            toggle_icon = Icon(
-                toggle_button,
-                name="moon",
-                size=IconSize.SM,
-                color=get_color("fg_primary", mode="auto"),
-            )
-            toggle_icon.place(relx=0.5, rely=0.5, anchor="center")
-            switcher._toggle_icon = toggle_icon
-
-            # 悬停效果
-            toggle_button.bind(
-                "<Enter>",
-                lambda e: toggle_button.configure(fg_color=get_color("bg_secondary", mode="auto")),
-            )
-            toggle_button.bind("<Leave>", lambda e: toggle_button.configure(fg_color="transparent"))
-
-        except Exception as e:
-            logger.debug(f"Failed to create theme toggle: {e}")
-
-        return switcher
-
-    def _get_theme_label(self, theme: str) -> str:
-        """获取主题标签"""
-        labels = {
-            "light": "浅色",
-            "dark": "深色",
-            "system": "跟随系统",
-        }
-        return labels.get(theme, theme)
-
-    def _toggle_theme(self):
-        """切换主题（带过渡动画）"""
-        try:
-            from gui.theme_manager import get_theme_manager
-
-            theme_manager = get_theme_manager()
-            current = theme_manager.get_current_theme()
-
-            themes = ["dark", "light", "system"]
-            current_index = themes.index(current) if current in themes else 0
-            next_theme = themes[(current_index + 1) % len(themes)]
-
-            self._animate_theme_switch(lambda: self._apply_theme_change(next_theme))
-
-        except Exception as e:
-            logger.error(f"Failed to toggle theme: {e}")
-
-    def _animate_theme_switch(self, callback):
-        """主题切换动画"""
-        try:
-            main_window = self.winfo_toplevel()
-            if hasattr(main_window, "attributes"):
-                current_alpha = main_window.attributes("-alpha")
-                steps = 5
-                delay = 30
-
-                def fade_out(step):
-                    if step >= steps:
-                        callback()
-                        fade_in(0)
-                        return
-                    alpha = current_alpha - (0.1 * (step + 1))
-                    main_window.attributes("-alpha", max(0.5, alpha))
-                    self.after(delay, lambda: fade_out(step + 1))
-
-                def fade_in(step):
-                    if step >= steps:
-                        main_window.attributes("-alpha", 1.0)
-                        return
-                    alpha = 0.5 + (0.1 * (step + 1))
-                    main_window.attributes("-alpha", min(1.0, alpha))
-                    self.after(delay, lambda: fade_in(step + 1))
-
-                fade_out(0)
-            else:
-                callback()
-        except Exception as e:
-            logger.debug(f"Theme animation failed: {e}")
-            callback()
-
-    def _apply_theme_change(self, next_theme: str):
-        """应用主题变更"""
-        try:
-            from gui.theme_manager import get_theme_manager
-
-            theme_manager = get_theme_manager()
-            theme_manager.set_theme(next_theme)
-
-            if hasattr(self, "_theme_label"):
-                self._theme_label.configure(text=self._get_theme_label(next_theme))
-
-            if hasattr(self, "_toggle_icon"):
-                icon_name = (
-                    "sun"
-                    if next_theme == "light"
-                    else "moon" if next_theme == "dark" else "desktop"
-                )
-                self._toggle_icon.configure(name=icon_name)
-
-        except Exception as e:
-            logger.error(f"Failed to apply theme: {e}")
+        self._update_active_state()
 
     def set_active_item(self, item_id: NavItem):
-        """
-        设置激活的导航项
-
-        Args:
-            item_id: 导航项 ID
-        """
+        """设置激活的导航项"""
         self._active_item = item_id
         self._update_active_state()
 
