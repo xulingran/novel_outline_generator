@@ -119,7 +119,7 @@ class ProcessingPipeline:
             ProcessingError: 阶段执行失败
         """
         self.state.current_phase = phase_name
-        self.service._emit_progress()
+        self.service.emit_progress()
 
         try:
             result = await phase_func(*args, **kwargs)
@@ -131,11 +131,11 @@ class ProcessingPipeline:
 
     async def _load_file(self, file_path: str) -> tuple[str, str]:
         """加载并验证文件"""
-        return await self.service._load_and_validate_file(file_path)
+        return await self.service.load_and_validate_file(file_path)
 
     async def _split_text(self, text: str) -> list:
         """将文本分割成块"""
-        return self.service._split_text_into_chunks(text)
+        return self.service.split_text_into_chunks(text)
 
     async def _handle_processing(
         self,
@@ -147,13 +147,13 @@ class ProcessingPipeline:
         file_path = self.state.file_path
 
         # 处理或恢复进度
-        progress_data = await self.service._handle_progress_resume(
+        progress_data = await self.service.handle_progress_resume(
             file_path, chunks, resume, encoding
         )
 
         if progress_data is None:
             # 全新处理
-            return await self.service._process_chunks(chunks)
+            return await self.service.process_chunks(chunks)
 
         # 恢复进度
         outlines = list(progress_data.outlines)
@@ -167,7 +167,7 @@ class ProcessingPipeline:
 
         if remaining_chunks:
             logger.info(f"恢复进度: 剩余 {len(remaining_chunks)} 个块待处理")
-            new_outlines = await self.service._process_chunks(
+            new_outlines = await self.service.process_chunks(
                 remaining_chunks,
                 progress_data=progress_data,
                 total_chunks=len(chunks),
@@ -188,7 +188,7 @@ class ProcessingPipeline:
         """递归合并大纲"""
         result = await self.service.merge_outlines_recursive(outlines)
         # 报告 token 使用情况
-        self.service._emit_progress(
+        self.service.emit_progress(
             token_usage={
                 "prompt_tokens": self.service.total_prompt_tokens,
                 "completion_tokens": self.service.total_completion_tokens,
@@ -210,7 +210,7 @@ class ProcessingPipeline:
             self.config.output_dir = output_dir
 
         # 保存结果
-        await self.service._save_results(outlines, final_outline, file_path)
+        await self.service.save_results(outlines, final_outline, file_path)
 
         # 清理备份文件
         try:
@@ -221,7 +221,7 @@ class ProcessingPipeline:
 
         # 清理中间结果文件
         try:
-            cleaned = self.service._cleanup_intermediate_outputs(Path(self.config.output_dir))
+            cleaned = self.service.cleanup_intermediate_outputs(Path(self.config.output_dir))
             if cleaned:
                 logger.info(f"已清理中间结果文件: {', '.join(cleaned)}")
         except Exception as e:

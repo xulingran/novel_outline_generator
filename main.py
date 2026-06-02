@@ -10,7 +10,7 @@ import webbrowser
 from pathlib import Path
 
 from config import get_api_config, get_processing_config, init_config
-from exceptions import APIKeyError, ConfigurationError, NovelOutlineError
+from exceptions import APIKeyError, ConfigurationError, NovelOutlineError, UserCancelledError
 from services.file_service import FileService
 from services.novel_processing_service import NovelProcessingService
 from services.progress_service import ProgressService
@@ -21,6 +21,9 @@ from validators import validate_file_path
 init_logging()
 
 logger = logging.getLogger(__name__)
+
+CHUNK_RESPONSE_RATIO = 0.3
+MERGE_TOKEN_RATIO = 0.1
 
 
 class NovelOutlineApp:
@@ -50,6 +53,8 @@ class NovelOutlineApp:
 
         except KeyboardInterrupt:
             print("\n用户中断操作")
+        except UserCancelledError:
+            print("\n操作已取消")
         except (APIKeyError, ConfigurationError) as e:
             print(f"\n❌ 配置错误: {e}")
             print("\n💡 请检查环境变量或.env文件中的配置")
@@ -211,8 +216,8 @@ class NovelOutlineApp:
 
         # 估算token消耗
         chunk_tokens = sum(count_tokens(chunk) for chunk in chunks)
-        chunk_responses = int(chunk_tokens * 0.3)  # 估算响应
-        merge_tokens = count_tokens(text) * 0.1  # 估算合并消耗
+        chunk_responses = int(chunk_tokens * CHUNK_RESPONSE_RATIO)
+        merge_tokens = count_tokens(text) * MERGE_TOKEN_RATIO
 
         total_estimated = chunk_tokens + chunk_responses + merge_tokens
 
@@ -228,8 +233,7 @@ class NovelOutlineApp:
             if user_input in ["y", "yes"]:
                 return
             elif user_input in ["n", "no"]:
-                print("操作已取消")
-                exit(0)
+                raise UserCancelledError("用户取消操作")
             else:
                 print("请输入 y/yes 或 n/no")
 

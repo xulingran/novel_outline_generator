@@ -14,6 +14,9 @@ from typing import Any
 
 logger = logging.getLogger(__name__)
 
+MAX_LOG_ENTRIES = 200
+MAX_COMPLETED_TASKS = 20
+
 
 @dataclass
 class QueueTask:
@@ -39,8 +42,8 @@ class QueueTask:
     def log(self, text: str) -> None:
         """添加日志"""
         self.logs.append(text)
-        if len(self.logs) > 200:
-            overflow = len(self.logs) - 200
+        if len(self.logs) > MAX_LOG_ENTRIES:
+            overflow = len(self.logs) - MAX_LOG_ENTRIES
             del self.logs[:overflow]
             self.log_offset += overflow
 
@@ -82,7 +85,8 @@ class TaskQueue:
         self._lock = asyncio.Lock()
         self._processor_task: asyncio.Task | None = None
         self._run_queue_task_callback = run_queue_task_callback
-        self._completed_tasks: deque[QueueTask] = deque()  # 保留已完成的任务
+        self._completed_tasks: deque[QueueTask] = deque()
+        self._new_task_event = asyncio.Event()
 
     async def add_task(self, file_path: str) -> str:
         """
@@ -98,6 +102,8 @@ class TaskQueue:
             task = QueueTask(id=str(uuid.uuid4()), file_path=file_path)
             self._queue.append(task)
             logger.info(f"任务 {task.id} 已添加到队列: {file_path}")
+
+            self._new_task_event.set()
 
             # 如果处理器未运行且已设置回调，启动它
             if self._run_queue_task_callback is not None and (
@@ -240,31 +246,31 @@ class TaskQueue:
                 pass
 
     async def _process_queue(self) -> None:
-        """队列处理器（后台运行）"""
+        """队列处理器（后台运行，事件驱动）"""
         logger.info("队列处理器已启动")
 
         try:
             while True:
-                # 检查是否可以启动新任务
-                if len(self._running_tasks) < self.max_concurrent and self._queue:
-                    # 取出下一个任务
+                await self._new_task_event.wait()
+
+                while self._queue:
+                    if len(self._running_tasks) >= self.max_concurrent:
+                        break
+
                     task = self._queue.popleft()
 
-                    # 跳过已取消的任务
                     if task.is_cancelled():
                         logger.info(f"任务 {task.id} 已取消，跳过")
                         continue
 
-                    # 启动任务
                     task.status = "running"
                     task.started_at = time.time()
                     self._running_tasks[task.id] = task
 
-                    # 创建任务处理协程
                     asyncio.create_task(self._run_task(task))
 
-                # 等待一段时间再检查
-                await asyncio.sleep(0.5)
+                if not self._queue:
+                    self._new_task_event.clear()
 
         except asyncio.CancelledError:
             logger.info("队列处理器已停止")
@@ -296,11 +302,13 @@ class TaskQueue:
             if task.id in self._running_tasks:
                 del self._running_tasks[task.id]
 
+            self._new_task_event.set()
+
             # 添加到已完成列表（success/error/cancelled）
             if task.status in ("success", "error", "cancelled"):
                 self._completed_tasks.append(task)
-                # 只保留最近的20个已完成任务
-                if len(self._completed_tasks) > 20:
+                # 只保留最近的MAX_COMPLETED_TASKS个已完成任务
+                if len(self._completed_tasks) > MAX_COMPLETED_TASKS:
                     self._completed_tasks.popleft()
 
             logger.info(f"任务 {task.id} 处理完成，状态: {task.status}")

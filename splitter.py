@@ -5,6 +5,7 @@
 
 import logging
 import re
+import threading
 from collections.abc import Iterable, Iterator
 
 from config import ProcessingConfig, get_processing_config
@@ -212,13 +213,16 @@ class TextSplitter:
 
 # 全局分割器实例
 _splitter: TextSplitter | None = None
+_splitter_lock = threading.Lock()
 
 
 def get_splitter() -> TextSplitter:
-    """获取分割器实例（单例模式）"""
+    """获取分割器实例（单例模式，线程安全）"""
     global _splitter
     if _splitter is None:
-        _splitter = TextSplitter()
+        with _splitter_lock:
+            if _splitter is None:
+                _splitter = TextSplitter()
     return _splitter
 
 

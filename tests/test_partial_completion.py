@@ -543,7 +543,7 @@ class TestProcessFailingChunkAsPartial:
         assert "partial_info" in last_call_args
         assert "5块部分完成" in last_call_args["partial_info"]
 
-    def test_emit_progress_partial_weight(self):
+    def testemit_progress_partial_weight(self):
         """测试部分完成权重参与进度计算"""
         from services.novel_processing_service import NovelProcessingService
 
@@ -581,7 +581,7 @@ class TestProcessFailingChunkAsPartial:
             ]
             service.current_progress_data = progress_data
 
-            service._emit_progress()
+            service.emit_progress()
 
             last_call_args = service.progress_callback.call_args[0][0]
             assert last_call_args["progress"] == pytest.approx((2 + 3 / 5) / 10)

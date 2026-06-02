@@ -30,7 +30,7 @@ logger = logging.getLogger(__name__)
 class NovelProcessingService:
     """小说处理服务类"""
 
-    _MAX_MERGE_LEVELS: int = 10  # 最大递归深度限制
+    _MAX_MERGE_LEVELS: int = 10
 
     def __init__(
         self,
@@ -46,20 +46,20 @@ class NovelProcessingService:
         self.progress_callback = progress_callback
         self.current_progress_data: ProgressData | None = None
         self.cancel_event = cancel_event or asyncio.Event()
-        # Token统计
         self.total_prompt_tokens = 0
         self.total_completion_tokens = 0
         self.total_tokens = 0
-        # 强制完成标志
         self.force_complete: bool = False
-        # ETA 估算器
         self.eta_estimator = ETAEstimator(
             window_size=20,
             outlier_threshold=2.5,
             min_samples=3,
         )
         self.eta_estimator.set_parallel_limit(self.processing_config.parallel_limit)
-        # 内部组件
+        self._init_sub_components()
+
+    def _init_sub_components(self) -> None:
+        """初始化子组件（将组装逻辑从构造器中分离）"""
         self._outline_merger = OutlineMerger(
             llm_service=self.llm_service,
             processing_config=self.processing_config,
@@ -77,16 +77,11 @@ class NovelProcessingService:
             cancel_event=self.cancel_event,
             progress_service=self.progress_service,
             eta_estimator=self.eta_estimator,
-            emit_progress_fn=self._emit_progress,
+            emit_progress_fn=self.emit_progress,
             accumulate_tokens_fn=self._accumulate_token_usage,
         )
 
     def _check_cancelled(self) -> None:
-        """检查任务是否被取消，如果取消则抛出 CancelledError
-
-        Raises:
-            asyncio.CancelledError: 任务已被取消
-        """
         if self.cancel_event.is_set():
             logger.info("任务已被取消")
             raise asyncio.CancelledError()
@@ -141,7 +136,7 @@ class NovelProcessingService:
             if self.processing_state is None:
                 raise ProcessingError("处理状态未初始化")
             self.processing_state.complete()
-            self._emit_progress()
+            self.emit_progress()
 
             return self._build_success_result(final_outline, len(chunks))
 
@@ -151,7 +146,7 @@ class NovelProcessingService:
         except Exception as e:
             if self.processing_state:
                 self.processing_state.fail(str(e))
-                self._emit_progress()
+                self.emit_progress()
             logger.error(f"处理小说失败: {e}")
             raise ProcessingError(f"处理小说失败: {str(e)}") from e
 
@@ -163,22 +158,22 @@ class NovelProcessingService:
 
         self.processing_state = ProcessingState(file_path=file_path, total_chunks=0)
         self.processing_state.current_phase = "loading"
-        self._emit_progress()
+        self.emit_progress()
 
     async def _prepare_chunks(self, file_path: str) -> tuple[list[TextChunk], str]:
         """加载文件并切分为文本块。"""
         if self._should_use_streaming(file_path):
             return self._prepare_chunks_streaming(file_path)
 
-        text, encoding = await self._load_and_validate_file(file_path)
-        chunks = self._split_text_into_chunks(text)
+        text, encoding = await self.load_and_validate_file(file_path)
+        chunks = self.split_text_into_chunks(text)
 
         if self.processing_state:
             self.processing_state.total_chunks = len(chunks)
         if not chunks:
             raise ProcessingError("未检测到可处理的内容")
 
-        self._emit_progress()
+        self.emit_progress()
         return chunks, encoding
 
     def _should_use_streaming(self, file_path: str) -> bool:
@@ -213,16 +208,16 @@ class NovelProcessingService:
         if not chunks:
             raise ProcessingError("未检测到可处理的内容")
 
-        self._emit_progress()
+        self.emit_progress()
         return chunks, encoding
 
     async def _collect_outlines(
         self, file_path: str, chunks: list[TextChunk], resume: bool, encoding: str
     ) -> list[dict[str, Any]]:
         """处理或恢复文本块并返回排序后的大纲列表。"""
-        progress_data = await self._handle_progress_resume(file_path, chunks, resume, encoding)
+        progress_data = await self.handle_progress_resume(file_path, chunks, resume, encoding)
         if progress_data is None:
-            outlines = await self._process_chunks(chunks)
+            outlines = await self.process_chunks(chunks)
         else:
             outlines = await self._process_remaining_chunks(chunks, progress_data)
 
@@ -243,7 +238,7 @@ class NovelProcessingService:
         remaining_chunks = [chunk for chunk in chunks if chunk.id not in completed_ids]
         if remaining_chunks:
             logger.info(f"恢复进度: 剩余 {len(remaining_chunks)} 个块待处理")
-            new_outlines = await self._process_chunks(
+            new_outlines = await self.process_chunks(
                 remaining_chunks,
                 progress_data=progress_data,
                 total_chunks=len(chunks),
@@ -259,9 +254,9 @@ class NovelProcessingService:
         if self.processing_state is None:
             raise ProcessingError("处理状态未初始化")
         self.processing_state.current_phase = "merging"
-        self._emit_progress()
+        self.emit_progress()
         final_outline = await self.merge_outlines_recursive(outlines)
-        self._emit_progress(
+        self.emit_progress(
             token_usage={
                 "prompt_tokens": self.total_prompt_tokens,
                 "completion_tokens": self.total_completion_tokens,
@@ -281,7 +276,7 @@ class NovelProcessingService:
         if output_dir:
             self.processing_config.output_dir = output_dir
 
-        await self._save_results(outlines, final_outline, file_path)
+        await self.save_results(outlines, final_outline, file_path)
 
         try:
             removed = self.file_service.remove_backups(self.processing_config.output_dir, "*.bak")
@@ -290,7 +285,7 @@ class NovelProcessingService:
             logger.warning(f"清理备份文件失败: {cleanup_err}")
 
         try:
-            cleaned = self._cleanup_intermediate_outputs(Path(self.processing_config.output_dir))
+            cleaned = self.cleanup_intermediate_outputs(Path(self.processing_config.output_dir))
             if cleaned:
                 logger.info(f"已清理中间结果文件: {', '.join(cleaned)}")
         except Exception as cleanup_err:
@@ -312,8 +307,7 @@ class NovelProcessingService:
             },
         }
 
-    async def _load_and_validate_file(self, file_path: str) -> tuple[str, str]:
-        """加载并验证文件"""
+    async def load_and_validate_file(self, file_path: str) -> tuple[str, str]:
         logger.info(f"正在读取文件: {file_path}")
         try:
             text, encoding = self.file_service.read_text_file(file_path)
@@ -323,8 +317,7 @@ class NovelProcessingService:
         except Exception as e:
             raise ProcessingError(f"读取文件失败: {str(e)}") from e
 
-    def _split_text_into_chunks(self, text: str) -> list[TextChunk]:
-        """分割文本为块"""
+    def split_text_into_chunks(self, text: str) -> list[TextChunk]:
         logger.info("正在分割文本...")
         try:
             raw_chunks = split_text(text)
@@ -351,7 +344,7 @@ class NovelProcessingService:
         except Exception as e:
             raise ProcessingError(f"分割文本失败: {str(e)}") from e
 
-    async def _handle_progress_resume(
+    async def handle_progress_resume(
         self,
         file_path: str,
         chunks: list[TextChunk],
@@ -368,10 +361,10 @@ class NovelProcessingService:
         )
         if progress_data is not None:
             self.current_progress_data = progress_data
-            self._emit_progress()
+            self.emit_progress()
         return progress_data
 
-    async def _process_chunks(
+    async def process_chunks(
         self,
         chunks: list[TextChunk],
         progress_data: ProgressData | None = None,
@@ -438,13 +431,13 @@ class NovelProcessingService:
         return await self._outline_merger.merge_outlines_recursive(
             outlines=outlines,
             processing_state=self.processing_state,
-            emit_progress_fn=self._emit_progress,
+            emit_progress_fn=self.emit_progress,
             accumulate_tokens_fn=self._accumulate_token_usage,
             level=level,
             is_text_mode=is_text_mode,
         )
 
-    async def _save_results(
+    async def save_results(
         self, outlines: list[dict[str, Any]], final_outline: str, original_file: str
     ) -> None:
         """保存结果文件"""
@@ -453,7 +446,7 @@ class NovelProcessingService:
 
         processing_state = self.processing_state
         processing_state.current_phase = "saving"
-        self._emit_progress()
+        self.emit_progress()
 
         # 确保输出目录存在
         output_dir = self.file_service.ensure_output_directory()
@@ -482,7 +475,7 @@ class NovelProcessingService:
 
         logger.info(f"结果已保存到: {output_dir}")
 
-    def _cleanup_intermediate_outputs(self, output_dir: Path) -> list[str]:
+    def cleanup_intermediate_outputs(self, output_dir: Path) -> list[str]:
         """删除中间产物，保留最终大纲"""
         targets = [
             output_dir / "chunk_outlines.json",
@@ -505,7 +498,7 @@ class NovelProcessingService:
 
         return self.processing_state.get_summary()
 
-    def _emit_progress(
+    def emit_progress(
         self,
         chunk_id: int | None = None,
         error: str | None = None,

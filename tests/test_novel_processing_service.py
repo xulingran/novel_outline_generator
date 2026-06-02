@@ -86,7 +86,7 @@ class TestProcessNovel:
         # Mock文件加载
         mock_service.file_service.read_text_file.return_value = ("test content", "utf-8")
         # Mock文本分割
-        mock_service._split_text_into_chunks = MagicMock(
+        mock_service.split_text_into_chunks = MagicMock(
             return_value=[
                 TextChunk(id=1, content="test", token_count=10, start_position=0, end_position=10)
             ]
@@ -102,25 +102,25 @@ class TestProcessNovel:
             chunks_hash="hash",
         )
         # Mock块处理
-        mock_service._process_chunks = AsyncMock(
+        mock_service.process_chunks = AsyncMock(
             return_value=[{"chunk_id": 1, "plot": ["test"], "characters": [], "relationships": []}]
         )
         # Mock大纲合并
         mock_service.merge_outlines_recursive = AsyncMock(return_value="Final outline")
         # Mock结果保存
-        mock_service._save_results = AsyncMock()
+        mock_service.save_results = AsyncMock()
         # Mock清理
-        mock_service._cleanup_intermediate_outputs = MagicMock(return_value=[])
+        mock_service.cleanup_intermediate_outputs = MagicMock(return_value=[])
 
         await mock_service.process_novel("test.txt", "output", resume=False)
 
         # 验证流程
         mock_service.file_service.read_text_file.assert_called_once_with("test.txt")
-        mock_service._split_text_into_chunks.assert_called_once()
-        mock_service._process_chunks.assert_called_once()
+        mock_service.split_text_into_chunks.assert_called_once()
+        mock_service.process_chunks.assert_called_once()
         mock_service.merge_outlines_recursive.assert_called_once()
-        mock_service._save_results.assert_called_once()
-        mock_service._cleanup_intermediate_outputs.assert_called_once()
+        mock_service.save_results.assert_called_once()
+        mock_service.cleanup_intermediate_outputs.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_process_novel_with_resume(
@@ -128,23 +128,23 @@ class TestProcessNovel:
     ):
         """测试恢复处理模式"""
         mock_service.file_service.read_text_file.return_value = ("test content", "utf-8")
-        mock_service._split_text_into_chunks = MagicMock(return_value=sample_chunks)
+        mock_service.split_text_into_chunks = MagicMock(return_value=sample_chunks)
         mock_service.progress_service.load_progress.return_value = sample_progress_data
         mock_service.progress_service.is_progress_valid.return_value = True
-        mock_service._process_chunks = AsyncMock(
+        mock_service.process_chunks = AsyncMock(
             return_value=[
                 {"chunk_id": 2, "plot": ["new"]},
                 {"chunk_id": 3, "plot": ["new"]},
             ]
         )
         mock_service.merge_outlines_recursive = AsyncMock(return_value="Merged")
-        mock_service._save_results = AsyncMock()
-        mock_service._cleanup_intermediate_outputs = MagicMock(return_value=[])
+        mock_service.save_results = AsyncMock()
+        mock_service.cleanup_intermediate_outputs = MagicMock(return_value=[])
 
         await mock_service.process_novel("test.txt", "output", resume=True)
 
         # 应该处理剩余的块（2和3）
-        called_chunks = mock_service._process_chunks.call_args.args[0]
+        called_chunks = mock_service.process_chunks.call_args.args[0]
         assert [c.id for c in called_chunks] == [2, 3]
 
     @pytest.mark.asyncio
@@ -162,7 +162,7 @@ class TestProcessNovel:
         """测试取消处理"""
 
         mock_service.file_service.read_text_file.return_value = ("test content", "utf-8")
-        mock_service._split_text_into_chunks = MagicMock(
+        mock_service.split_text_into_chunks = MagicMock(
             return_value=[
                 TextChunk(id=1, content="test", token_count=10, start_position=0, end_position=10)
             ]
@@ -176,7 +176,7 @@ class TestProcessNovel:
             last_update=datetime.now(),
             chunks_hash="hash",
         )
-        mock_service._process_chunks = AsyncMock(side_effect=ProcessingError("Cancelled"))
+        mock_service.process_chunks = AsyncMock(side_effect=ProcessingError("Cancelled"))
         mock_service.cancel_event.is_set.return_value = True
         mock_service.progress_service.save_progress = MagicMock()
 
@@ -187,7 +187,7 @@ class TestProcessNovel:
     async def test_process_novel_token_accumulation(self, mock_service, mock_llm_response):
         """测试Token统计累加"""
         mock_service.file_service.read_text_file.return_value = ("test content", "utf-8")
-        mock_service._split_text_into_chunks = MagicMock(
+        mock_service.split_text_into_chunks = MagicMock(
             return_value=[
                 TextChunk(id=1, content="test", token_count=10, start_position=0, end_position=10)
             ]
@@ -202,17 +202,17 @@ class TestProcessNovel:
             chunks_hash="hash",
         )
 
-        # Mock _process_chunks 来设置token统计
+        # Mock process_chunks 来设置token统计
         async def mock_process(*args, **kwargs):
             mock_service.total_prompt_tokens = 100
             mock_service.total_completion_tokens = 50
             mock_service.total_tokens = 150
             return [{"chunk_id": 1, "plot": ["test"]}]
 
-        mock_service._process_chunks = AsyncMock(side_effect=mock_process)
+        mock_service.process_chunks = AsyncMock(side_effect=mock_process)
         mock_service.merge_outlines_recursive = AsyncMock(return_value="Final")
-        mock_service._save_results = AsyncMock()
-        mock_service._cleanup_intermediate_outputs = MagicMock(return_value=[])
+        mock_service.save_results = AsyncMock()
+        mock_service.cleanup_intermediate_outputs = MagicMock(return_value=[])
 
         await mock_service.process_novel("test.txt", "output", resume=False)
 
@@ -238,24 +238,24 @@ class TestLoadAndValidateFile:
     """测试文件加载和验证"""
 
     @pytest.mark.asyncio
-    async def test_load_and_validate_file_success(self, mock_service):
+    async def testload_and_validate_file_success(self, mock_service):
         """测试成功加载文件"""
         mock_service.file_service.read_text_file.return_value = ("test content", "utf-8")
 
-        text, encoding = await mock_service._load_and_validate_file("test.txt")
+        text, encoding = await mock_service.load_and_validate_file("test.txt")
 
         assert text == "test content"
         assert encoding == "utf-8"
         mock_service.file_service.read_text_file.assert_called_once_with("test.txt")
 
     @pytest.mark.asyncio
-    async def test_load_and_validate_file_empty(self, mock_service):
+    async def testload_and_validate_file_empty(self, mock_service):
         """测试加载空文件"""
 
         mock_service.file_service.read_text_file.return_value = ("", "utf-8")
 
         with pytest.raises(ProcessingError, match="文件内容为空"):
-            await mock_service._load_and_validate_file("test.txt")
+            await mock_service.load_and_validate_file("test.txt")
 
 
 class TestPrepareChunks:
@@ -284,21 +284,21 @@ class TestPrepareChunks:
         mock_service._prepare_chunks_streaming.assert_called_once_with("test.txt")
 
     @pytest.mark.asyncio
-    async def test_load_and_validate_file_not_found(self, mock_service):
+    async def testload_and_validate_file_not_found(self, mock_service):
         """测试文件不存在"""
 
         mock_service.file_service.read_text_file.side_effect = FileValidationError("文件不存在")
 
         with pytest.raises(ProcessingError, match="读取文件失败"):
-            await mock_service._load_and_validate_file("test.txt")
+            await mock_service.load_and_validate_file("test.txt")
 
 
 class TestSplitTextIntoChunks:
     """测试文本分割"""
 
-    def test_split_text_into_chunks_normal(self, mock_service):
+    def testsplit_text_into_chunks_normal(self, mock_service):
         """测试正常文本分割"""
-        mock_service._split_text_into_chunks = MagicMock(
+        mock_service.split_text_into_chunks = MagicMock(
             side_effect=lambda text: [
                 TextChunk(
                     id=1,
@@ -310,31 +310,31 @@ class TestSplitTextIntoChunks:
             ]
         )
 
-        chunks = mock_service._split_text_into_chunks("test content")
+        chunks = mock_service.split_text_into_chunks("test content")
 
         assert len(chunks) == 1
         assert chunks[0].content == "test content"
         assert chunks[0].id == 1
 
-    def test_split_text_into_chunks_empty(self, mock_service):
+    def testsplit_text_into_chunks_empty(self, mock_service):
         """测试空文本分割"""
 
-        mock_service._split_text_into_chunks = MagicMock(side_effect=lambda text: [])
+        mock_service.split_text_into_chunks = MagicMock(side_effect=lambda text: [])
 
-        chunks = mock_service._split_text_into_chunks("")
+        chunks = mock_service.split_text_into_chunks("")
 
         assert len(chunks) == 0
 
-    def test_split_text_into_chunks_multiple(self, mock_service):
+    def testsplit_text_into_chunks_multiple(self, mock_service):
         """测试多块分割"""
-        mock_service._split_text_into_chunks = MagicMock(
+        mock_service.split_text_into_chunks = MagicMock(
             side_effect=lambda text: [
                 TextChunk(id=1, content="part1", token_count=5, start_position=0, end_position=5),
                 TextChunk(id=2, content="part2", token_count=5, start_position=5, end_position=10),
             ]
         )
 
-        chunks = mock_service._split_text_into_chunks("part1part2")
+        chunks = mock_service.split_text_into_chunks("part1part2")
 
         assert len(chunks) == 2
         assert chunks[0].id == 1
@@ -345,7 +345,7 @@ class TestProcessChunks:
     """测试批量处理"""
 
     @pytest.mark.asyncio
-    async def test_process_chunks_all_success(self, mock_service, sample_chunks, mock_llm_response):
+    async def testprocess_chunks_all_success(self, mock_service, sample_chunks, mock_llm_response):
         """测试所有块处理成功"""
         mock_service.llm_service.call.return_value = mock_llm_response
         mock_service.progress_service.update_chunk_completed = MagicMock()
@@ -367,13 +367,13 @@ class TestProcessChunks:
             chunks_hash="hash",
         )
 
-        results = await mock_service._process_chunks(sample_chunks, progress_data, 3)
+        results = await mock_service.process_chunks(sample_chunks, progress_data, 3)
 
         assert len(results) == 3
         assert all(r["chunk_id"] in [1, 2, 3] for r in results)
 
     @pytest.mark.asyncio
-    async def test_process_chunks_partial_failure(self, mock_service, sample_chunks):
+    async def testprocess_chunks_partial_failure(self, mock_service, sample_chunks):
         """测试部分块失败"""
 
         async def mock_process_single(chunk, sem, processing_state, progress_data):
@@ -396,14 +396,14 @@ class TestProcessChunks:
             chunks_hash="hash",
         )
 
-        results = await mock_service._process_chunks(sample_chunks, progress_data, 3)
+        results = await mock_service.process_chunks(sample_chunks, progress_data, 3)
 
         # 应该只返回成功的块
         assert len(results) == 2
         assert all(r["chunk_id"] in [1, 3] for r in results)
 
     @pytest.mark.asyncio
-    async def test_process_chunks_all_failure(self, mock_service, sample_chunks):
+    async def testprocess_chunks_all_failure(self, mock_service, sample_chunks):
         """测试所有块失败"""
 
         async def mock_process_single(chunk, sem, progress_data):
@@ -421,7 +421,7 @@ class TestProcessChunks:
             chunks_hash="hash",
         )
 
-        results = await mock_service._process_chunks(sample_chunks, progress_data, 3)
+        results = await mock_service.process_chunks(sample_chunks, progress_data, 3)
 
         assert len(results) == 0
 
@@ -764,7 +764,7 @@ class TestSaveResults:
     """测试结果保存"""
 
     @pytest.mark.asyncio
-    async def test_save_results_json(self, mock_service):
+    async def testsave_results_json(self, mock_service):
         """测试保存JSON格式结果"""
         outlines = [
             {"chunk_id": 1, "plot": ["event1"]},
@@ -777,7 +777,7 @@ class TestSaveResults:
         mock_service.file_service.write_json_file = MagicMock()
         mock_service.file_service.write_text_file = MagicMock()
 
-        await mock_service._save_results(outlines, final_outline, original_file)
+        await mock_service.save_results(outlines, final_outline, original_file)
 
         # 验证JSON文件被保存（应该调用两次：chunk_outlines.json和processing_metadata.json）
         assert mock_service.file_service.write_json_file.call_count == 2
@@ -785,7 +785,7 @@ class TestSaveResults:
         mock_service.file_service.write_text_file.assert_called_once()
 
     @pytest.mark.asyncio
-    async def test_save_results_creates_output_dir(self, mock_service):
+    async def testsave_results_creates_output_dir(self, mock_service):
         """测试创建输出目录"""
         outlines = [{"chunk_id": 1, "plot": ["event1"]}]
         final_outline = "Final outline"
@@ -795,12 +795,12 @@ class TestSaveResults:
         mock_service.file_service.write_json_file = MagicMock()
         mock_service.file_service.write_text_file = MagicMock()
 
-        await mock_service._save_results(outlines, final_outline, original_file)
+        await mock_service.save_results(outlines, final_outline, original_file)
 
         mock_service.file_service.ensure_output_directory.assert_called_once()
 
     @pytest.mark.asyncio
-    async def test_save_results_metadata(self, mock_service):
+    async def testsave_results_metadata(self, mock_service):
         """测试保存元数据"""
         outlines = [{"chunk_id": 1, "plot": ["event1"]}]
         final_outline = "Final outline"
@@ -815,7 +815,7 @@ class TestSaveResults:
         mock_service.total_completion_tokens = 500
         mock_service.total_tokens = 1500
 
-        await mock_service._save_results(outlines, final_outline, original_file)
+        await mock_service.save_results(outlines, final_outline, original_file)
 
         # 验证元数据被保存
         json_call = mock_service.file_service.write_json_file.call_args
@@ -825,7 +825,7 @@ class TestSaveResults:
 class TestCleanupIntermediateOutputs:
     """测试中间文件清理"""
 
-    def test_cleanup_intermediate_outputs_success(self, mock_service, tmp_path):
+    def testcleanup_intermediate_outputs_success(self, mock_service, tmp_path):
         """测试成功清理中间文件"""
         output_dir = tmp_path / "output"
         output_dir.mkdir()
@@ -836,13 +836,13 @@ class TestCleanupIntermediateOutputs:
 
         mock_service.file_service.remove_backups.return_value = 0
 
-        mock_service._cleanup_intermediate_outputs(output_dir)
+        mock_service.cleanup_intermediate_outputs(output_dir)
 
         # 验证文件被删除
         assert not (output_dir / "chunk_outlines.json").exists()
         assert not (output_dir / "processing_metadata.json").exists()
 
-    def test_cleanup_intermediate_outputs_files_not_exist(self, mock_service, tmp_path):
+    def testcleanup_intermediate_outputs_files_not_exist(self, mock_service, tmp_path):
         """测试文件不存在时的清理"""
         output_dir = tmp_path / "output"
         output_dir.mkdir()
@@ -850,11 +850,11 @@ class TestCleanupIntermediateOutputs:
         mock_service.file_service.remove_backups.return_value = 0
 
         # 不应该抛出异常
-        removed = mock_service._cleanup_intermediate_outputs(output_dir)
+        removed = mock_service.cleanup_intermediate_outputs(output_dir)
 
         assert isinstance(removed, list)
 
-    def test_cleanup_intermediate_outputs_partial_files(self, mock_service, tmp_path):
+    def testcleanup_intermediate_outputs_partial_files(self, mock_service, tmp_path):
         """测试部分文件存在时的清理"""
         output_dir = tmp_path / "output"
         output_dir.mkdir()
@@ -864,7 +864,7 @@ class TestCleanupIntermediateOutputs:
 
         mock_service.file_service.remove_backups.return_value = 0
 
-        mock_service._cleanup_intermediate_outputs(output_dir)
+        mock_service.cleanup_intermediate_outputs(output_dir)
 
         # 验证存在的文件被删除
         assert not (output_dir / "chunk_outlines.json").exists()
@@ -874,13 +874,13 @@ class TestHandleProgressResume:
     """测试进度恢复处理"""
 
     @pytest.mark.asyncio
-    async def test_handle_progress_resume_no_progress(self, mock_service):
+    async def testhandle_progress_resume_no_progress(self, mock_service):
         """测试无进度数据"""
         mock_service.progress_service.load_progress.return_value = None
 
         chunks = [TextChunk(id=1, content="test", token_count=10, start_position=0, end_position=4)]
 
-        progress_data = await mock_service._handle_progress_resume(
+        progress_data = await mock_service.handle_progress_resume(
             "test.txt", chunks, False, "utf-8"
         )
 
@@ -888,7 +888,7 @@ class TestHandleProgressResume:
         assert progress_data is None
 
     @pytest.mark.asyncio
-    async def test_handle_progress_resume_invalid_progress(self, mock_service):
+    async def testhandle_progress_resume_invalid_progress(self, mock_service):
         """测试进度验证失败"""
         mock_service.progress_service.load_progress.return_value = ProgressData(
             txt_file="test.txt",
@@ -903,13 +903,13 @@ class TestHandleProgressResume:
 
         chunks = [TextChunk(id=1, content="test", token_count=10, start_position=0, end_position=4)]
 
-        await mock_service._handle_progress_resume("test.txt", chunks, True, "utf-8")
+        await mock_service.handle_progress_resume("test.txt", chunks, True, "utf-8")
 
         # 应该清除旧进度并创建新的
         mock_service.progress_service.clear_progress.assert_called_once()
 
     @pytest.mark.asyncio
-    async def test_handle_progress_resume_valid_progress(self, mock_service, sample_progress_data):
+    async def testhandle_progress_resume_valid_progress(self, mock_service, sample_progress_data):
         """测试有效的进度恢复"""
         mock_service.progress_service.load_progress.return_value = sample_progress_data
         mock_service.progress_service.is_progress_valid.return_value = True
@@ -919,9 +919,7 @@ class TestHandleProgressResume:
             TextChunk(id=2, content="test2", token_count=10, start_position=4, end_position=8),
         ]
 
-        progress_data = await mock_service._handle_progress_resume(
-            "test.txt", chunks, True, "utf-8"
-        )
+        progress_data = await mock_service.handle_progress_resume("test.txt", chunks, True, "utf-8")
 
         # 应该返回有效的进度数据
         assert progress_data is not None

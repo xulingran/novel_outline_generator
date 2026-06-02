@@ -4,7 +4,6 @@ LLM服务模块
 """
 
 import asyncio
-import inspect
 import logging
 import random
 from abc import ABC, abstractmethod
@@ -12,15 +11,15 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Any, cast
 
-import httpx
-
 from config import get_api_config, get_processing_config
 from exceptions import APIError, APIKeyError, RateLimitError
-from services.connection_pool import HTTPConnectionPool
+from services.connection_pool import HTTPConnectionPool, _httpx_proxy_kwargs
 
 logger = logging.getLogger(__name__)
 
 _LLM_PROVIDER_REGISTRY: dict[str, type["LLMService"]] = {}
+
+LLM_REQUEST_TIMEOUT = 60
 
 
 class ContentFilterError(APIError):
@@ -28,18 +27,6 @@ class ContentFilterError(APIError):
 
     def __init__(self, message: str):
         super().__init__(message, is_retryable=False)
-
-
-def _httpx_proxy_kwargs(
-    client_class: type[httpx.Client] | type[httpx.AsyncClient], proxy_url: str
-) -> dict[str, Any]:
-    """Support both proxy/proxies kwargs across httpx versions."""
-    params = inspect.signature(client_class.__init__).parameters
-    if "proxy" in params:
-        return {"proxy": proxy_url}
-    if "proxies" in params:
-        return {"proxies": proxy_url}
-    return {}
 
 
 @dataclass
@@ -253,7 +240,7 @@ class OpenAIService(LLMService):
             response = await self.client.chat.completions.create(
                 model=self.api_config.model_name,
                 messages=[{"role": "user", "content": prompt}],
-                timeout=60,
+                timeout=LLM_REQUEST_TIMEOUT,
                 **kwargs,
             )
 
@@ -267,12 +254,36 @@ class OpenAIService(LLMService):
         except Exception as e:
             error_str = str(e).lower()
 
-            # 检查特定错误类型
+            try:
+                from openai import (
+                    APIStatusError,
+                    AuthenticationError,
+                )
+                from openai import (
+                    RateLimitError as OpenAIRateLimitError,
+                )
+
+                if isinstance(e, AuthenticationError):
+                    raise APIKeyError("API密钥无效或已过期") from e
+                if isinstance(e, OpenAIRateLimitError):
+                    retry_after = None
+                    if hasattr(e, "response") and e.response:
+                        retry_after = e.response.headers.get("retry-after")
+                        if retry_after:
+                            retry_after = int(retry_after)
+                    raise RateLimitError("API速率限制", retry_after=retry_after) from e
+                if isinstance(e, APIStatusError):
+                    if e.status_code in (402, 403):
+                        raise APIError("API配额已用尽", is_retryable=False) from e
+                    if e.status_code == 421:
+                        raise ContentFilterError("内容被安全过滤器阻止") from e
+            except ImportError:
+                pass
+
             if "authentication" in error_str or "unauthorized" in error_str:
                 raise APIKeyError("API密钥无效或已过期") from e
 
             if "rate" in error_str and "limit" in error_str:
-                # 尝试从错误中提取重试时间
                 retry_after = None
                 if hasattr(e, "response") and e.response:
                     retry_after = e.response.headers.get("retry-after")
@@ -283,11 +294,9 @@ class OpenAIService(LLMService):
             if "quota" in error_str or "exceeded" in error_str:
                 raise APIError("API配额已用尽", is_retryable=False) from e
 
-            # 内容审查错误（不触发熔断器）
-            if "421" in str(e) or "content_filter" in error_str or "moderation block" in error_str:
+            if "content_filter" in error_str or "moderation block" in error_str:
                 raise ContentFilterError("内容被安全过滤器阻止") from e
 
-            # 其他错误
             raise APIError(f"OpenAI API错误: {str(e)}", is_retryable=True) from e
 
 
@@ -377,7 +386,23 @@ class GeminiService(LLMService):
         except Exception as e:
             error_str = str(e).lower()
 
-            # 检查特定错误类型
+            try:
+                from google.api_core.exceptions import (
+                    Forbidden,
+                    InvalidArgument,
+                    PermissionDenied,
+                    ResourceExhausted,
+                )
+
+                if isinstance(e, (PermissionDenied, Forbidden)):
+                    raise APIKeyError("API密钥无效或无权限") from e
+                if isinstance(e, ResourceExhausted):
+                    raise APIError("API配额已用尽", is_retryable=False) from e
+                if isinstance(e, InvalidArgument) and "safety" in error_str:
+                    raise APIError("内容被安全过滤器阻止", is_retryable=False) from e
+            except ImportError:
+                pass
+
             if "permission" in error_str or "forbidden" in error_str:
                 raise APIKeyError("API密钥无效或无权限") from e
 
@@ -453,27 +478,29 @@ class ZhipuService(LLMService):
         except Exception as e:
             error_str = str(e).lower()
 
-            # 检查特定错误类型
-            if "invalid_api_key" in error_str or "unauthorized" in error_str:
+            status_code = getattr(getattr(e, "response", None), "status_code", None)
+
+            if (
+                status_code in (401, 403)
+                or "invalid_api_key" in error_str
+                or "unauthorized" in error_str
+            ):
                 raise APIKeyError("API密钥无效或已过期") from e
 
-            if "rate" in error_str and "limit" in error_str:
-                # 尝试从错误中提取重试时间
+            if status_code == 429 or ("rate" in error_str and "limit" in error_str):
                 retry_after = None
-                # 智谱API可能会在响应中包含重试时间
                 if hasattr(e, "response") and e.response:
                     retry_after = e.response.headers.get("retry-after")
                     if retry_after:
                         retry_after = int(retry_after)
                 raise RateLimitError("API速率限制", retry_after=retry_after) from e
 
-            if "insufficient_quota" in error_str or "exceeded" in error_str:
+            if status_code == 402 or "insufficient_quota" in error_str or "exceeded" in error_str:
                 raise APIError("API配额已用尽", is_retryable=False) from e
 
             if "content_filter" in error_str or "sensitive" in error_str:
                 raise APIError("内容被安全过滤器阻止", is_retryable=False) from e
 
-            # 其他错误
             raise APIError(f"智谱API错误: {str(e)}", is_retryable=True) from e
 
 
@@ -520,7 +547,11 @@ class AiHubMixService(LLMService):
             raise APIKeyError(f"AiHubMix API配置失败: {str(e)}") from e
 
     async def _call_api(self, prompt: str, **kwargs) -> LLMResponse:
-        """调用AiHubMix API"""
+        """调用AiHubMix API
+
+        NOTE: 使用同步 requests 库并通过 run_in_executor 包装以避免阻塞事件循环。
+        AiHubMix SDK 不提供 async 客户端，且其 API 端点与 httpx 不完全兼容。
+        """
         import requests  # type: ignore[import-untyped]
 
         try:
@@ -546,7 +577,7 @@ class AiHubMixService(LLMService):
                     f"{self.base_url}/chat/completions",
                     headers=headers,
                     json=payload,
-                    timeout=60,
+                    timeout=LLM_REQUEST_TIMEOUT,
                 ),
             )
 

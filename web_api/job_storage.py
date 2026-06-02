@@ -4,87 +4,9 @@ import asyncio
 import logging
 import time
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
-if TYPE_CHECKING:
-    from services.job_manager import JobManager
-else:
-    try:
-        from services.job_manager import JobManager
-    except ModuleNotFoundError:
-        # 回退实现：防止部署遗漏模块时 API 因导入失败无法启动
-        class JobManager:
-            """内存任务管理器（回退实现）。"""
-
-            def __init__(self, max_jobs: int = 100, max_age_hours: int = 24) -> None:
-                self.max_jobs = max_jobs
-                self.max_age_hours = max_age_hours
-                self.jobs: dict[str, Any] = {}
-
-            def get(self, job_id: str) -> Any | None:
-                return self.jobs.get(job_id)
-
-            def set(self, job_id: str, job: Any) -> None:
-                self.jobs[job_id] = job
-
-            def values(self):
-                return self.jobs.values()
-
-            def cleanup_expired(self, now: float) -> int:
-                cutoff_time = now - self.max_age_hours * 3600
-                expired_ids = []
-                for job_id, job in self.jobs.items():
-                    # 安全地获取created_at，支持对象属性或字典访问
-                    created_at: float
-                    if isinstance(job, dict):
-                        created_at = job.get("created_at", 0.0)
-                    else:
-                        created_at = getattr(job, "created_at", 0.0)
-                    if created_at < cutoff_time:
-                        expired_ids.append(job_id)
-                for job_id in expired_ids:
-                    del self.jobs[job_id]
-                return len(expired_ids)
-
-            def cleanup_excess(self) -> int:
-                if len(self.jobs) <= self.max_jobs:
-                    return 0
-
-                over_limit = len(self.jobs) - self.max_jobs
-                removed = 0
-
-                def _by_age(statuses: tuple[str, ...]) -> list[tuple[str, Any]]:
-                    def _get_status(job: Any) -> str:
-                        if isinstance(job, dict):
-                            return job.get("status", "")
-                        return getattr(job, "status", "")
-
-                    def _get_created_at(job: Any) -> float:
-                        if isinstance(job, dict):
-                            return job.get("created_at", 0.0)
-                        return getattr(job, "created_at", 0.0)
-
-                    return sorted(
-                        (
-                            (job_id, job)
-                            for job_id, job in self.jobs.items()
-                            if _get_status(job) in statuses
-                        ),
-                        key=lambda item: _get_created_at(item[1]),
-                    )
-
-                for statuses in (("success", "error"), ("pending",), ("running",)):
-                    if over_limit <= 0:
-                        break
-                    for job_id, _ in _by_age(statuses):
-                        if over_limit <= 0:
-                            break
-                        del self.jobs[job_id]
-                        over_limit -= 1
-                        removed += 1
-
-                return removed
-
+from services.job_manager import JobManager
 
 logger = logging.getLogger(__name__)
 

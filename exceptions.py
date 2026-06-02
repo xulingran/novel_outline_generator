@@ -118,3 +118,7 @@ class EncodingError(NovelOutlineError):
     """文本编码错误"""
 
     pass
+
+
+class UserCancelledError(NovelOutlineError):
+    """用户主动取消操作"""

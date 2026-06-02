@@ -14,7 +14,7 @@ from config import (
     SUPPORTED_API_PROVIDERS,
     APIConfig,
     ProcessingConfig,
-    _clear_config_cache,
+    _refresh_config_cache,
     create_env_file,
     get_api_config,
     get_processing_config,
@@ -541,12 +541,12 @@ class TestLazyConfig:
 
     def setup_method(self):
         """每个测试方法前清除缓存"""
-        _clear_config_cache()
+        _refresh_config_cache()
 
     def test_lazy_config_api_key(self):
         """测试_LazyConfig延迟加载API_KEY"""
         with patch.dict(os.environ, {"API_PROVIDER": "openai", "OPENAI_API_KEY": "sk-test"}):
-            _clear_config_cache()
+            _refresh_config_cache()
             # 访问 API_KEY 时会触发延迟加载
             key = str(API_KEY)
             assert key == "sk-test"
@@ -630,32 +630,8 @@ class TestBackwardCompatibility:
         """测试API_KEY延迟加载"""
         # API_KEY 现在通过 _LazyConfig 延迟加载
         # 只要访问不抛出异常就说明延迟加载机制正常工作
-        _clear_config_cache()
+        _refresh_config_cache()
         with patch.dict(os.environ, {"API_PROVIDER": "openai", "OPENAI_API_KEY": "sk-test123"}):
-            _clear_config_cache()
+            _refresh_config_cache()
             key = str(API_KEY)
             assert "sk-test" in key
-
-    def test_get_txt_file(self):
-        """测试get_txt_file函数"""
-        from config import get_txt_file
-
-        assert get_txt_file() == get_processing_config().default_txt_file
-
-    def test_get_output_dir(self):
-        """测试get_output_dir函数"""
-        from config import get_output_dir
-
-        assert get_output_dir() == get_processing_config().output_dir
-
-    def test_get_progress_file(self):
-        """测试get_progress_file函数"""
-        from config import get_progress_file
-
-        assert get_progress_file() == get_processing_config().progress_file
-
-    def test_get_encodings(self):
-        """测试get_encodings函数"""
-        from config import get_encodings
-
-        assert get_encodings() == get_processing_config().encodings

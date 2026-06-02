@@ -39,28 +39,28 @@ async def test_resume_processes_remaining_chunks():
     service.progress_service.finalize_progress = MagicMock()
     service._progress_tracker.progress_service = service.progress_service
 
-    service._load_and_validate_file = AsyncMock(return_value=("content", "utf-8"))
-    service._split_text_into_chunks = MagicMock(return_value=chunks)
-    service._process_chunks = AsyncMock(
+    service.load_and_validate_file = AsyncMock(return_value=("content", "utf-8"))
+    service.split_text_into_chunks = MagicMock(return_value=chunks)
+    service.process_chunks = AsyncMock(
         return_value=[
             {"chunk_id": 2, "plot": ["new"]},
             {"chunk_id": 3, "plot": ["new"]},
         ]
     )
     service.merge_outlines_recursive = AsyncMock(return_value="merged")
-    service._save_results = AsyncMock()
+    service.save_results = AsyncMock()
     service.file_service = MagicMock()
     service.file_service.remove_backups.return_value = 0
     service.file_service.get_file_size.return_value = 0
-    service._cleanup_intermediate_outputs = MagicMock(return_value=[])
+    service.cleanup_intermediate_outputs = MagicMock(return_value=[])
 
     await service.process_novel("test.txt", resume=True)
 
-    assert service._process_chunks.call_count == 1
-    called_chunks = service._process_chunks.call_args.args[0]
+    assert service.process_chunks.call_count == 1
+    called_chunks = service.process_chunks.call_args.args[0]
     assert [chunk.id for chunk in called_chunks] == [2, 3]
-    assert service._process_chunks.call_args.kwargs["progress_data"] is progress_data
-    assert service._process_chunks.call_args.kwargs["total_chunks"] == 3
+    assert service.process_chunks.call_args.kwargs["progress_data"] is progress_data
+    assert service.process_chunks.call_args.kwargs["total_chunks"] == 3
 
     merged_outlines = service.merge_outlines_recursive.call_args.args[0]
     assert {item.get("chunk_id") for item in merged_outlines} == {1, 2, 3}

@@ -431,7 +431,7 @@ async def test_openai_call_api_content_filter_421(monkeypatch):
 
     class FakeCompletion:
         async def create(self, **kwargs):
-            raise RuntimeError("421 content blocked")
+            raise RuntimeError("content_filter triggered")
 
     class FakeChatClient:
         completions = FakeCompletion()
@@ -1197,18 +1197,21 @@ async def test_aihubmix_call_api_key_error(monkeypatch):
 
 def test_httpx_proxy_kwargs_with_proxy_param():
     """_httpx_proxy_kwargs 应返回 proxy 或 proxies 关键字"""
-    result = llm_service._httpx_proxy_kwargs(httpx.AsyncClient, "http://proxy:8080")
+    from services.connection_pool import _httpx_proxy_kwargs
+
+    result = _httpx_proxy_kwargs(httpx.AsyncClient, "http://proxy:8080")
     assert "proxy" in result or "proxies" in result
 
 
 def test_httpx_proxy_kwargs_unknown_class_returns_empty():
     """不支持代理参数的类应返回空字典"""
+    from services.connection_pool import _httpx_proxy_kwargs
 
     class NoProxyClass:
         def __init__(self):
             pass
 
-    result = llm_service._httpx_proxy_kwargs(NoProxyClass, "http://proxy:8080")
+    result = _httpx_proxy_kwargs(NoProxyClass, "http://proxy:8080")
     assert result == {}
 
 

@@ -5,8 +5,9 @@
 
 import logging
 import os
+import threading
 from dataclasses import dataclass, field
-from typing import Any, ClassVar
+from typing import TYPE_CHECKING, Any, ClassVar
 
 from exceptions import APIKeyError, ConfigurationError
 
@@ -266,21 +267,26 @@ class ProcessingConfig:
 # 创建全局配置实例
 _api_config = None
 _processing_config = None
+_config_lock = threading.Lock()
 
 
 def get_api_config() -> APIConfig:
-    """获取API配置单例"""
+    """获取API配置单例（线程安全）"""
     global _api_config
     if _api_config is None:
-        _api_config = APIConfig()
+        with _config_lock:
+            if _api_config is None:
+                _api_config = APIConfig()
     return _api_config
 
 
 def get_processing_config() -> ProcessingConfig:
-    """获取处理配置单例"""
+    """获取处理配置单例（线程安全）"""
     global _processing_config
     if _processing_config is None:
-        _processing_config = ProcessingConfig()
+        with _config_lock:
+            if _processing_config is None:
+                _processing_config = ProcessingConfig()
     return _processing_config
 
 
@@ -302,60 +308,9 @@ def reset_all_configs() -> None:
     reset_processing_config()
 
 
-# 为了向前兼容，保留一些常量
-# 以下函数已弃用，建议直接使用 get_processing_config()
-def get_txt_file() -> str:
-    """获取默认文本文件路径（已弃用）"""
-    import warnings
-
-    warnings.warn(
-        "get_txt_file() 已弃用，请使用 get_processing_config().default_txt_file",
-        DeprecationWarning,
-        stacklevel=2,
-    )
-    return get_processing_config().default_txt_file
-
-
-def get_output_dir() -> str:
-    """获取输出目录（已弃用）"""
-    import warnings
-
-    warnings.warn(
-        "get_output_dir() 已弃用，请使用 get_processing_config().output_dir",
-        DeprecationWarning,
-        stacklevel=2,
-    )
-    return get_processing_config().output_dir
-
-
-def get_progress_file() -> str:
-    """获取进度文件路径（已弃用）"""
-    import warnings
-
-    warnings.warn(
-        "get_progress_file() 已弃用，请使用 get_processing_config().progress_file",
-        DeprecationWarning,
-        stacklevel=2,
-    )
-    return get_processing_config().progress_file
-
-
-def get_encodings() -> list[str]:
-    """获取支持的编码列表（已弃用）"""
-    import warnings
-
-    warnings.warn(
-        "get_encodings() 已弃用，请使用 get_processing_config().encodings",
-        DeprecationWarning,
-        stacklevel=2,
-    )
-    return get_processing_config().encodings
-
-
-def _clear_config_cache() -> None:
-    """清除配置缓存（用于测试）"""
-    global _config_cache, _api_config, _processing_config
-    _config_cache.clear()
+def _refresh_config_cache() -> None:
+    """重置配置单例缓存，使下次访问时重新加载环境变量"""
+    global _api_config, _processing_config
     _api_config = None
     _processing_config = None
 
@@ -374,7 +329,6 @@ class _LazyAPIKey:
 
 
 # 模块级缓存变量（延迟初始化）
-_config_cache: dict[str, Any] = {}
 
 
 class _LazyConfig:
@@ -386,12 +340,7 @@ class _LazyConfig:
 
     def __getattr__(self, name: str) -> Any:
         """延迟加载配置值"""
-        if name in _config_cache:
-            return _config_cache[name]
-
-        # 处理各种配置常量
         value = self._resolve_config(name)
-        _config_cache[name] = value
         return value
 
     def _resolve_config(self, name: str) -> Any:
@@ -399,13 +348,13 @@ class _LazyConfig:
         match name:
             # 路径配置
             case "TXT_FILE":
-                return get_txt_file()
+                return get_processing_config().default_txt_file
             case "OUTPUT_DIR":
-                return get_output_dir()
+                return get_processing_config().output_dir
             case "PROGRESS_FILE":
-                return get_progress_file()
+                return get_processing_config().progress_file
             case "ENCODINGS":
-                return get_encodings()
+                return get_processing_config().encodings
 
             # API 配置（延迟验证，避免导入时触发）
             case "API_PROVIDER":
@@ -453,7 +402,7 @@ def __getattr__(name: str) -> Any:
 
 # 为了 IDE 和类型检查器能识别这些常量，我们声明它们的类型
 # 实际值通过 __getattr__ 延迟加载
-if False:  # noqa: F601
+if TYPE_CHECKING:
     # 路径配置
     TXT_FILE: str = ""
     OUTPUT_DIR: str = ""
@@ -529,13 +478,6 @@ PROXY_URL=http://127.0.0.1:7897
 """)
         print(f"✓ 已创建环境变量模板文件: {env_file}")
         print("  请编辑该文件并填入你的API密钥")
-
-
-def _refresh_config_cache() -> None:
-    """重置配置单例缓存，使下次访问时重新加载环境变量"""
-    global _api_config, _processing_config
-    _api_config = None
-    _processing_config = None
 
 
 def init_config(create_env_if_missing: bool = True):

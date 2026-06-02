@@ -9,6 +9,9 @@ from typing import Any
 from splitter import get_splitter
 from tokenizer import count_tokens
 
+CHUNK_RESPONSE_RATIO = 0.3
+MERGE_TOKEN_RATIO = 0.1
+
 
 def estimate_tokens(file_path: str) -> dict[str, Any]:
     """
@@ -29,8 +32,8 @@ def estimate_tokens(file_path: str) -> dict[str, Any]:
     total_tokens = count_tokens(text)
     chunks = splitter.split_text(text)
     chunk_tokens = sum(count_tokens(chunk) for chunk in chunks)
-    chunk_responses = int(chunk_tokens * 0.3)  # 估算响应
-    merge_tokens = int(total_tokens * 0.1)  # 估算合并消耗
+    chunk_responses = int(chunk_tokens * CHUNK_RESPONSE_RATIO)
+    merge_tokens = int(total_tokens * MERGE_TOKEN_RATIO)
 
     return {
         "total_tokens": total_tokens,

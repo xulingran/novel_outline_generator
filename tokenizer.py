@@ -4,12 +4,15 @@ Token计数器模块
 """
 
 import logging
+import threading
 from importlib import import_module
 from typing import Any, Protocol
 
 from exceptions import EncodingError
 
 logger = logging.getLogger(__name__)
+
+FALLBACK_CHARS_PER_TOKEN = 4
 
 try:
     tiktoken: Any | None = import_module("tiktoken")
@@ -37,22 +40,25 @@ class _FallbackEncoder:
 
 # 全局编码器实例
 _encoder: TokenEncoder | None = None
+_encoder_lock = threading.Lock()
 
 
 def get_encoder() -> TokenEncoder:
-    """获取编码器实例（单例模式）"""
+    """获取编码器实例（单例模式，线程安全）"""
     global _encoder
     if _encoder is None:
-        if tiktoken is None:
-            logger.warning("未安装 tiktoken，使用简化编码器")
-            _encoder = _FallbackEncoder()
-        else:
-            try:
-                _encoder = tiktoken.get_encoding("cl100k_base")
-                logger.debug("初始化tiktoken编码器: cl100k_base")
-            except Exception as e:
-                logger.warning(f"初始化编码器失败，使用简化编码器: {e}")
-                _encoder = _FallbackEncoder()
+        with _encoder_lock:
+            if _encoder is None:
+                if tiktoken is None:
+                    logger.warning("未安装 tiktoken，使用简化编码器")
+                    _encoder = _FallbackEncoder()
+                else:
+                    try:
+                        _encoder = tiktoken.get_encoding("cl100k_base")
+                        logger.debug("初始化tiktoken编码器: cl100k_base")
+                    except Exception as e:
+                        logger.warning(f"初始化编码器失败，使用简化编码器: {e}")
+                        _encoder = _FallbackEncoder()
     return _encoder
 
 
@@ -139,7 +145,7 @@ def truncate_by_tokens(text: str, max_tokens: int) -> str:
     except Exception as e:
         logger.error(f"截断文本失败: {e}")
         # 如果无法使用token截断，使用字符截断作为后备
-        avg_chars_per_token = 4  # 估算值
+        avg_chars_per_token = FALLBACK_CHARS_PER_TOKEN
         max_chars = max_tokens * avg_chars_per_token
         return text[:max_chars]
 
